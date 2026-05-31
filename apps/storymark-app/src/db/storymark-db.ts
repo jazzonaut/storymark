@@ -30,6 +30,21 @@ export type ReaderFontFamily = "serif" | "sans" | "mono";
 export type ReaderTheme = "light" | "sepia" | "dark";
 export type EntityHighlightMode = "off" | "subtle" | "always";
 
+/** The local copy of a bookmark plus its sync state. `synced=false` means there
+ * is a pending operation: a create (`deleted=false`) to POST, or a tombstone
+ * (`deleted=true`) to DELETE on the server, flushed on reconnect. */
+export interface StoredBookmark {
+  readonly id: string;
+  readonly bookId: string;
+  readonly sectionIndex: number;
+  readonly paragraphIndex: number;
+  readonly locationStart: number;
+  readonly label: string | null;
+  readonly createdAt: string;
+  readonly synced: boolean;
+  readonly deleted: boolean;
+}
+
 /** The local mirror of a book's reading position (one row per book). Doubles as
  * the offline-resume cache and the sync queue: `synced=false` means the position
  * has not yet been accepted by the backend and is flushed on reconnect. */
@@ -51,6 +66,7 @@ type StorymarkDb = Dexie & {
   sections: Table<CachedSection, [string, number]>;
   readerSettings: Table<StoredReaderSettings, string>;
   progress: Table<StoredProgress, string>;
+  bookmarks: Table<StoredBookmark, string>;
 };
 
 export const db = new Dexie("storymark") as StorymarkDb;
@@ -66,4 +82,10 @@ db.version(1).stores({
 // reconnect flush filters unsynced rows in memory.
 db.version(2).stores({
   progress: "bookId",
+});
+
+// v3 adds bookmarks, keyed by the client-owned id and indexed by bookId for
+// per-book listing.
+db.version(3).stores({
+  bookmarks: "id, bookId",
 });

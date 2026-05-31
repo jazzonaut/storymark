@@ -1,0 +1,34 @@
+namespace Storymark.Api.Services.Books;
+
+/// <summary>A bookmark to create or replace (<c>POST /api/books/{id}/bookmarks</c>).
+/// The client owns <see cref="Id"/> so the write is an idempotent upsert.</summary>
+internal sealed record SaveBookmarkInput
+{
+    public required Guid Id { get; init; }
+
+    public required int SectionIndex { get; init; }
+
+    public int? ParagraphIndex { get; init; }
+
+    public required int LocationStart { get; init; }
+
+    public string? Label { get; init; }
+
+    public required DateTimeOffset CreatedAt { get; init; }
+}
+
+/// <summary>A saved bookmark (<c>GET /api/books/{id}/bookmarks</c>).</summary>
+internal sealed record BookmarkView
+{
+    public required Guid Id { get; init; }
+
+    public required int SectionIndex { get; init; }
+
+    public int? ParagraphIndex { get; init; }
+
+    public required int LocationStart { get; init; }
+
+    public string? Label { get; init; }
+
+    public required DateTimeOffset CreatedAt { get; init; }
+}

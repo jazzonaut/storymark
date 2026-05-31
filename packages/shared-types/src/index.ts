@@ -54,6 +54,17 @@ export interface Section {
   readonly paragraphs: readonly Paragraph[];
 }
 
+/** A saved bookmark (`GET /api/books/{id}/bookmarks`). Mirrors BookmarkView.
+ * `id` is a client-supplied UUID so create/delete are idempotent offline. */
+export interface Bookmark {
+  readonly id: string;
+  readonly sectionIndex: number;
+  readonly paragraphIndex: number | null;
+  readonly locationStart: number;
+  readonly label: string | null;
+  readonly createdAt: string;
+}
+
 /** The canonical reading position for a book — the latest across all devices
  * (`GET /api/books/{id}/progress`). Mirrors ProgressView. */
 export interface ReadingProgress {

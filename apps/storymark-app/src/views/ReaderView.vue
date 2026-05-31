@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
+import BookmarksPanel from "@/components/reader/BookmarksPanel.vue";
 import PaginatedSection from "@/components/reader/PaginatedSection.vue";
 import ReaderSettingsDrawer from "@/components/reader/ReaderSettingsDrawer.vue";
 import ReaderToolbar from "@/components/reader/ReaderToolbar.vue";
 import { useBookCache } from "@/composables/use-book-cache";
+import { useBookmarks } from "@/composables/use-bookmarks";
 import { useBooks } from "@/composables/use-books";
 import { useOfflineSync } from "@/composables/use-offline-sync";
 import { useReader } from "@/composables/use-reader";
@@ -21,9 +23,11 @@ const { isOnline } = useOfflineSync();
 const { cssVars, load: loadSettings } = useReaderSettings();
 const { progress, ensureCached } = useBookCache();
 const {
+  manifest,
   currentSection,
   currentPosition,
   currentSectionIndex,
+  currentParagraphIndex,
   entryParagraph,
   sectionCount,
   currentSectionTitle,
@@ -31,13 +35,22 @@ const {
   prevSection,
   setParagraph,
   open,
+  goTo,
 } = useReader();
 const { record, resume, flush } = useReadingProgress();
+const { bookmarks, load: loadBookmarks, toggle, removeById, isBookmarked } = useBookmarks();
 
 const phase = ref<"loading" | "ready" | "error">("loading");
 const chromeVisible = ref(true);
 const settingsOpen = ref(false);
+const bookmarksOpen = ref(false);
 const pageInfo = ref<{ page: number; total: number }>({ page: 0, total: 1 });
+
+const isCurrentBookmarked = computed<boolean>(() =>
+  currentSectionIndex.value === null
+    ? false
+    : isBookmarked(currentSectionIndex.value, currentParagraphIndex.value),
+);
 
 const bookTitle = ref("");
 
@@ -58,7 +71,7 @@ function scheduleHide(): void {
     window.clearTimeout(idleTimer);
   }
   idleTimer = window.setTimeout(() => {
-    if (!settingsOpen.value) {
+    if (!settingsOpen.value && !bookmarksOpen.value) {
       chromeVisible.value = false;
     }
   }, CHROME_IDLE_MS);
@@ -83,6 +96,35 @@ function toggleChrome(): void {
 function openSettings(): void {
   settingsOpen.value = true;
   chromeVisible.value = true;
+}
+
+function openBookmarks(): void {
+  bookmarksOpen.value = true;
+  chromeVisible.value = true;
+}
+
+// Bookmark (or un-bookmark) the paragraph at the top of the current page, with a
+// short text preview as its label.
+async function toggleBookmark(): Promise<void> {
+  const sectionIndex = currentSectionIndex.value;
+  const paragraphIndex = currentParagraphIndex.value;
+  const paragraph = currentSection.value?.paragraphs.find(
+    (p) => p.paragraphIndex === paragraphIndex,
+  );
+  if (sectionIndex === null || !paragraph) {
+    return;
+  }
+  const label = paragraph.text.slice(0, 80).trim();
+  await toggle(
+    bookId,
+    { sectionIndex, paragraphIndex, locationStart: paragraph.locationStart },
+    label.length > 0 ? label : null,
+  );
+}
+
+async function jumpToBookmark(sectionIndex: number, paragraphIndex: number): Promise<void> {
+  bookmarksOpen.value = false;
+  await goTo(sectionIndex, paragraphIndex);
 }
 
 async function goNext(): Promise<void> {
@@ -141,6 +183,7 @@ onMounted(async () => {
     bookTitle.value = await resolveBookTitle();
     phase.value = "ready";
     revealChrome();
+    void loadBookmarks(bookId);
   } catch {
     phase.value = "error";
   }
@@ -184,7 +227,10 @@ onBeforeUnmount(() => {
         :position="positionLabel"
         :visible="chromeVisible"
         :offline="!isOnline"
+        :bookmarked="isCurrentBookmarked"
         @open-settings="openSettings"
+        @open-bookmarks="openBookmarks"
+        @toggle-bookmark="toggleBookmark"
       />
 
       <PaginatedSection
@@ -206,6 +252,15 @@ onBeforeUnmount(() => {
       </div>
 
       <ReaderSettingsDrawer :open="settingsOpen" @close="settingsOpen = false" />
+
+      <BookmarksPanel
+        :open="bookmarksOpen"
+        :bookmarks="bookmarks"
+        :manifest="manifest"
+        @close="bookmarksOpen = false"
+        @jump="(bookmark) => jumpToBookmark(bookmark.sectionIndex, bookmark.paragraphIndex)"
+        @remove="removeById"
+      />
     </template>
   </main>
 </template>

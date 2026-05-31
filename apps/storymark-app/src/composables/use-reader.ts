@@ -35,6 +35,7 @@ interface UseReader {
   readonly hasNextSection: ComputedRef<boolean>;
   readonly hasPrevSection: ComputedRef<boolean>;
   open: (id: string, initial?: InitialPosition) => Promise<readonly SectionSummary[]>;
+  goTo: (sectionIndex: number, paragraphIndex: number) => Promise<void>;
   nextSection: () => Promise<boolean>;
   prevSection: () => Promise<boolean>;
   setParagraph: (paragraphIndex: number) => void;
@@ -94,6 +95,17 @@ export function useReader(): UseReader {
     return manifest.value;
   }
 
+  // Jump to a position in the already-open book (e.g. tapping a bookmark).
+  async function goTo(sectionIndex: number, paragraphIndex: number): Promise<void> {
+    if (isLoadingSection.value) {
+      return;
+    }
+    const position = manifest.value.findIndex((s) => s.sectionIndex === sectionIndex);
+    if (position >= 0) {
+      await loadPosition(position, paragraphIndex);
+    }
+  }
+
   async function nextSection(): Promise<boolean> {
     // Ignore a fresh request while one is mid-flight: a fast double tap-edge
     // would otherwise read a stale currentPosition and double-advance / race.
@@ -129,6 +141,7 @@ export function useReader(): UseReader {
     hasNextSection,
     hasPrevSection,
     open,
+    goTo,
     nextSection,
     prevSection,
     setParagraph,

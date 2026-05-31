@@ -19,6 +19,8 @@ internal sealed class StorymarkDbContext(DbContextOptions<StorymarkDbContext> op
 
     public DbSet<ReadingProgress> ReadingProgress => Set<ReadingProgress>();
 
+    public DbSet<BookBookmark> BookBookmarks => Set<BookBookmark>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(StorymarkDbContext).Assembly);
