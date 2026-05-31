@@ -6,8 +6,20 @@ const routes: readonly RouteRecordRaw[] = [
   { path: "/", name: "library", component: LibraryView },
   {
     path: "/admin",
-    name: "admin",
     component: () => import("@/views/admin/AdminView.vue"),
+    children: [
+      { path: "", redirect: { name: "admin-settings" } },
+      {
+        path: "settings",
+        name: "admin-settings",
+        component: () => import("@/views/admin/AdminSettingsView.vue"),
+      },
+      {
+        path: "prompts",
+        name: "admin-prompts",
+        component: () => import("@/views/admin/AdminPromptsView.vue"),
+      },
+    ],
   },
 ];
 

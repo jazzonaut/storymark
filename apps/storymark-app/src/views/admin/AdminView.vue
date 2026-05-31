@@ -1,17 +1,92 @@
 <script setup lang="ts">
 import Button from "primevue/button";
+import Menubar from "primevue/menubar";
+import Password from "primevue/password";
+import Toast from "primevue/toast";
 import { ref } from "vue";
+import { useAdmin } from "@/composables/use-admin";
 
-const clicks = ref(0);
+const { hasToken, authenticate, signOut } = useAdmin();
 
-function handleClick(): void {
-  clicks.value += 1;
+const tokenInput = ref("");
+const authError = ref<string | null>(null);
+const isUnlocking = ref(false);
+
+async function unlock(): Promise<void> {
+  if (tokenInput.value.length === 0) {
+    return;
+  }
+
+  authError.value = null;
+  isUnlocking.value = true;
+  try {
+    const accepted = await authenticate(tokenInput.value);
+    if (accepted) {
+      tokenInput.value = "";
+    } else {
+      authError.value = "That token was rejected.";
+    }
+  } catch {
+    authError.value = "Could not reach the admin API.";
+  } finally {
+    isUnlocking.value = false;
+  }
 }
 </script>
 
 <template>
-  <main class="min-h-screen p-6">
-    <h1 class="mb-4 text-2xl font-semibold">Storymark Admin</h1>
-    <Button :label="`Clicked ${clicks} times`" @click="handleClick" />
-  </main>
+  <Toast />
+
+  <div v-if="!hasToken" class="flex min-h-screen items-center justify-center p-6">
+    <div class="w-full max-w-sm">
+      <h1 class="mb-1 text-xl font-semibold">Storymark Admin</h1>
+      <p class="mb-6 text-sm opacity-70">Enter the admin bearer token to continue.</p>
+      <Password
+        v-model="tokenInput"
+        :feedback="false"
+        toggle-mask
+        fluid
+        placeholder="Bearer token"
+        @keyup.enter="unlock"
+      />
+      <small v-if="authError" class="mt-2 block text-red-500">{{ authError }}</small>
+      <Button class="mt-4" label="Unlock" :loading="isUnlocking" fluid @click="unlock" />
+    </div>
+  </div>
+
+  <div v-else class="flex min-h-screen flex-col">
+    <Menubar :model="[]">
+      <template #start>
+        <span class="px-3 font-semibold">Storymark Admin</span>
+      </template>
+      <template #end>
+        <Button label="Sign out" text @click="signOut" />
+      </template>
+    </Menubar>
+
+    <div class="flex flex-1">
+      <nav
+        class="flex w-48 shrink-0 flex-col gap-1 border-r border-zinc-200 p-4 dark:border-zinc-800"
+      >
+        <RouterLink
+          :to="{ name: 'admin-settings' }"
+          class="rounded px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          active-class="bg-zinc-100 font-medium dark:bg-zinc-800"
+        >
+          Settings
+        </RouterLink>
+        <RouterLink
+          :to="{ name: 'admin-prompts' }"
+          class="rounded px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          active-class="bg-zinc-100 font-medium dark:bg-zinc-800"
+        >
+          Prompts
+        </RouterLink>
+      </nav>
+
+      <main class="flex-1 p-6">
+        <RouterView />
+      </main>
+    </div>
+  </div>
 </template>
