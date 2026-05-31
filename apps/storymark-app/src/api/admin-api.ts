@@ -1,4 +1,10 @@
-import type { PatchSettingBody, PromptItem, SettingItem } from "@/api/admin-types";
+import type {
+  CostSummary,
+  LlmCallItem,
+  PatchSettingBody,
+  PromptItem,
+  SettingItem,
+} from "@/api/admin-types";
 
 /** Thrown on any non-2xx admin response. <see cref="status"/> drives 401 handling. */
 export class AdminApiError extends Error {
@@ -40,4 +46,9 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify({ text }),
     }),
+
+  listLlmCalls: (token: string, limit: number): Promise<readonly LlmCallItem[]> =>
+    request(token, `llm-calls?limit=${limit}`),
+
+  getCostSummary: (token: string): Promise<CostSummary> => request(token, "llm-calls/cost-summary"),
 } as const;

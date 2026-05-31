@@ -1,0 +1,178 @@
+<script setup lang="ts">
+import Button from "primevue/button";
+import Column from "primevue/column";
+import DataTable from "primevue/datatable";
+import SelectButton from "primevue/selectbutton";
+import Tag from "primevue/tag";
+import ToggleButton from "primevue/togglebutton";
+import { computed, onMounted, ref, watch } from "vue";
+import type { LlmCallItem } from "@/api/admin-types";
+import { useAdmin } from "@/composables/use-admin";
+import { useAdminError } from "@/composables/use-admin-error";
+import { formatCost, formatTokens } from "@/utils/llm-format";
+
+const ALL_TASKS = "all";
+
+const { llmCalls, llmCallsWindow, isLoading, loadLlmCalls } = useAdmin();
+const { report } = useAdminError();
+
+const taskFilter = ref<string>(ALL_TASKS);
+const futureOnly = ref<boolean>(false);
+const expandedRows = ref<Record<string, boolean>>({});
+
+const distinctTasks = computed<readonly string[]>(() =>
+  [...llmCalls.value]
+    .filter((call, index, all) => all.findIndex((c) => c.task === call.task) === index)
+    .map((call) => call.task)
+    .sort((a, b) => a.localeCompare(b)),
+);
+
+const taskOptions = computed<readonly { label: string; value: string }[]>(() => [
+  { label: "All tasks", value: ALL_TASKS },
+  ...distinctTasks.value.map((task) => ({ label: task, value: task })),
+]);
+
+const filtered = computed<readonly LlmCallItem[]>(() =>
+  llmCalls.value.filter(
+    (call) =>
+      (taskFilter.value === ALL_TASKS || call.task === taskFilter.value) &&
+      (!futureOnly.value || call.usedFutureContent),
+  ),
+);
+
+const atWindow = computed<boolean>(() => llmCalls.value.length >= llmCallsWindow);
+
+// A task selected before a refresh may fall out of the loaded window; drop the
+// stale filter rather than silently showing an empty table.
+watch(distinctTasks, (tasks) => {
+  if (taskFilter.value !== ALL_TASKS && !tasks.includes(taskFilter.value)) {
+    taskFilter.value = ALL_TASKS;
+  }
+});
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleString();
+}
+
+function formatModel(call: LlmCallItem): string {
+  return `${call.provider}:${call.model}`;
+}
+
+function formatLatency(call: LlmCallItem): string {
+  return call.latencyMs === null ? "—" : `${call.latencyMs} ms`;
+}
+
+async function refresh(): Promise<void> {
+  try {
+    await loadLlmCalls();
+  } catch (error) {
+    report(error);
+  }
+}
+
+onMounted(refresh);
+</script>
+
+<template>
+  <section>
+    <div class="mb-4 flex items-center justify-between">
+      <h2 class="text-lg font-semibold">LLM Calls</h2>
+      <Button label="Refresh" size="small" outlined :loading="isLoading" @click="refresh" />
+    </div>
+
+    <div class="mb-4 flex flex-wrap items-center gap-3">
+      <SelectButton
+        v-model="taskFilter"
+        :options="[...taskOptions]"
+        option-label="label"
+        option-value="value"
+        :allow-empty="false"
+        size="small"
+      />
+      <ToggleButton
+        v-model="futureOnly"
+        on-label="Future content only"
+        off-label="Future content only"
+        size="small"
+      />
+    </div>
+
+    <DataTable
+      v-model:expanded-rows="expandedRows"
+      :value="[...filtered]"
+      :loading="isLoading"
+      data-key="id"
+      paginator
+      :rows="20"
+      :rows-per-page-options="[20, 50, 100]"
+      size="small"
+    >
+      <template #empty>
+        <span class="opacity-70">No LLM calls recorded yet.</span>
+      </template>
+
+      <Column expander style="width: 3rem" />
+
+      <Column header="Time">
+        <template #body="{ data }">
+          <span class="whitespace-nowrap">{{ formatTime((data as LlmCallItem).createdAt) }}</span>
+        </template>
+      </Column>
+
+      <Column field="task" header="Task">
+        <template #body="{ data }">
+          <Tag :value="(data as LlmCallItem).task" severity="secondary" />
+          <Tag
+            v-if="(data as LlmCallItem).usedFutureContent"
+            value="future"
+            severity="danger"
+            class="ml-1"
+          />
+        </template>
+      </Column>
+
+      <Column header="Model">
+        <template #body="{ data }">
+          <span class="font-mono text-xs">{{ formatModel(data as LlmCallItem) }}</span>
+        </template>
+      </Column>
+
+      <Column header="Latency">
+        <template #body="{ data }">{{ formatLatency(data as LlmCallItem) }}</template>
+      </Column>
+
+      <Column header="Tokens (in / out)">
+        <template #body="{ data }">
+          {{ formatTokens((data as LlmCallItem).tokensIn, (data as LlmCallItem).tokensOut) }}
+        </template>
+      </Column>
+
+      <Column header="Cost">
+        <template #body="{ data }">{{ formatCost((data as LlmCallItem).costEstimate) }}</template>
+      </Column>
+
+      <template #expansion="{ data }">
+        <div class="space-y-3 p-3">
+          <div>
+            <div class="mb-1 text-xs font-medium opacity-70">Prompt</div>
+            <pre
+              class="max-h-64 overflow-auto rounded bg-zinc-100 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-zinc-800"
+              >{{ (data as LlmCallItem).prompt }}</pre
+            >
+          </div>
+          <div>
+            <div class="mb-1 text-xs font-medium opacity-70">Response</div>
+            <pre
+              class="max-h-64 overflow-auto rounded bg-zinc-100 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-zinc-800"
+              >{{ (data as LlmCallItem).response ?? "—" }}</pre
+            >
+          </div>
+        </div>
+      </template>
+    </DataTable>
+
+    <p v-if="atWindow" class="mt-3 text-xs opacity-60">
+      Showing the latest {{ llmCallsWindow }} calls. Older calls are not loaded.
+    </p>
+  </section>
+</template>

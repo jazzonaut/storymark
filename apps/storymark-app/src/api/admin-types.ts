@@ -22,3 +22,38 @@ export interface PatchSettingBody {
   readonly value: string | number | boolean | object;
   readonly type: SettingValueType;
 }
+
+export interface LlmCallItem {
+  readonly id: string;
+  readonly task: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly prompt: string;
+  readonly response: string | null;
+  readonly tokensIn: number | null;
+  readonly tokensOut: number | null;
+  readonly latencyMs: number | null;
+  readonly costEstimate: number | null;
+  readonly bookId: string | null;
+  readonly sectionIndex: number | null;
+  readonly usedFutureContent: boolean;
+  readonly createdAt: string;
+}
+
+export interface TaskCostItem {
+  readonly task: string;
+  readonly callCount: number;
+  readonly tokensIn: number | null;
+  readonly tokensOut: number | null;
+  /** Null when no call in the task has a configured cost rate (e.g. local Ollama). */
+  readonly costEstimate: number | null;
+}
+
+export interface CostSummary {
+  readonly windowDays: number;
+  readonly callCount: number;
+  readonly tokensIn: number | null;
+  readonly tokensOut: number | null;
+  readonly costEstimate: number | null;
+  readonly tasks: readonly TaskCostItem[];
+}

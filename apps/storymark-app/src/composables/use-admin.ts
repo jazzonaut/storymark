@@ -1,19 +1,34 @@
 import { computed, ref, shallowRef } from "vue";
 import type { ComputedRef, ShallowRef } from "vue";
 import { adminApi, AdminApiError } from "@/api/admin-api";
-import type { PatchSettingBody, PromptItem, SettingItem } from "@/api/admin-types";
+import type {
+  CostSummary,
+  LlmCallItem,
+  PatchSettingBody,
+  PromptItem,
+  SettingItem,
+} from "@/api/admin-types";
 
 const TOKEN_STORAGE_KEY = "storymark.admin.token";
+
+/** Upper bound on rows the call-log view fetches in one go; the table paginates
+ * and filters this window client-side. Matches the server-side limit cap. */
+const LLM_CALLS_WINDOW = 200;
 
 const token = ref<string | null>(localStorage.getItem(TOKEN_STORAGE_KEY));
 const settings = shallowRef<readonly SettingItem[]>([]);
 const prompts = shallowRef<readonly PromptItem[]>([]);
+const llmCalls = shallowRef<readonly LlmCallItem[]>([]);
+const costSummary = shallowRef<CostSummary | null>(null);
 const isLoading = ref(false);
 
 interface UseAdmin {
   readonly hasToken: ComputedRef<boolean>;
   readonly settings: ShallowRef<readonly SettingItem[]>;
   readonly prompts: ShallowRef<readonly PromptItem[]>;
+  readonly llmCalls: ShallowRef<readonly LlmCallItem[]>;
+  readonly costSummary: ShallowRef<CostSummary | null>;
+  readonly llmCallsWindow: number;
   readonly isLoading: ShallowRef<boolean>;
   authenticate: (candidate: string) => Promise<boolean>;
   signOut: () => void;
@@ -25,6 +40,8 @@ interface UseAdmin {
   ) => Promise<void>;
   loadPrompts: () => Promise<void>;
   savePrompt: (key: string, text: string) => Promise<void>;
+  loadLlmCalls: () => Promise<void>;
+  loadCostSummary: () => Promise<void>;
 }
 
 export function useAdmin(): UseAdmin {
@@ -42,6 +59,8 @@ export function useAdmin(): UseAdmin {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     settings.value = [];
     prompts.value = [];
+    llmCalls.value = [];
+    costSummary.value = null;
   }
 
   async function authenticate(candidate: string): Promise<boolean> {
@@ -93,10 +112,31 @@ export function useAdmin(): UseAdmin {
     await loadPrompts();
   }
 
+  async function loadLlmCalls(): Promise<void> {
+    isLoading.value = true;
+    try {
+      llmCalls.value = await adminApi.listLlmCalls(requireToken(), LLM_CALLS_WINDOW);
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  async function loadCostSummary(): Promise<void> {
+    isLoading.value = true;
+    try {
+      costSummary.value = await adminApi.getCostSummary(requireToken());
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   return {
     hasToken,
     settings,
     prompts,
+    llmCalls,
+    costSummary,
+    llmCallsWindow: LLM_CALLS_WINDOW,
     isLoading,
     authenticate,
     signOut,
@@ -104,5 +144,7 @@ export function useAdmin(): UseAdmin {
     saveSetting,
     loadPrompts,
     savePrompt,
+    loadLlmCalls,
+    loadCostSummary,
   };
 }

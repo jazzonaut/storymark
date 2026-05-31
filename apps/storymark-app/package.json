@@ -12,8 +12,10 @@
   "dependencies": {
     "@primeuix/themes": "catalog:",
     "@storymark/shared-types": "workspace:*",
+    "echarts": "catalog:",
     "primevue": "catalog:",
     "vue": "catalog:",
+    "vue-echarts": "catalog:",
     "vue-router": "catalog:"
   },
   "devDependencies": {
