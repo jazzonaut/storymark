@@ -2,7 +2,7 @@
 
 A live pointer to where the project is right now. Keep it short. Move stable content into `docs/` and delete it from here.
 
-Last updated: S0.5.2 landed.
+Last updated: S0.5.3 landed.
 
 ## Status
 
@@ -14,11 +14,12 @@ Last updated: S0.5.2 landed.
 - **S0.5.1 done** — `settings` table (jsonb) + `settings_notify` trigger; `SettingsService` (singleton cache) hot-reloads via a `LISTEN settings_changed` BackgroundService, so even raw psql edits propagate (<1s, verified). AES-256-GCM encrypts `is_secret` values (`auth.bearerToken` ciphertext at rest, verified). Startup runs `MigrateAsync` then seeds missing keys (prompts from `Prompts/PromptDefaults.cs`, rest from the `SettingsDefaults` config section, `auth.bearerToken` from `Auth:BearerTokenSeed`). Env-gated `GET /api/_debug/setting?key=`.
 - CI dotnet job now reads the SDK from `apps/storymark-api/global.json`.
 - Note: as of S0.5.1 the API runs EF migrations on startup, so it now requires Postgres reachable at boot (the `/api/health` handler itself still doesn't touch the DB).
+- **S0.5.3 done** — Bearer-token auth + admin API. `/api/admin/*` is a FastEndpoints group (`Infrastructure/Auth/AdminGroup`) gated by `AdminAuthPreProcessor`: it constant-time-compares the `Authorization: Bearer` token against the live `auth.bearerToken` setting (fails closed — missing/empty token → 401, never a bypass), and stashes a SHA-256 token fingerprint that PATCH writes to `updated_by`. The group is `AllowAnonymous()` to ASP.NET (no auth middleware wired); the pre-processor is the gate. Endpoints: `GET/PATCH /api/admin/settings` (secrets masked; **type is immutable via the API** — only the value changes, validated against the stored type; secrecy preserved + re-encrypted), `GET/PATCH /api/admin/prompts[/{key}]`, `GET /api/admin/llm-calls?task=&limit=` (limit capped 1..200). `ISettingsService.UpdateAsync` is the write path (edits existing keys only; the seeder still owns key creation, type, and secrecy) and refreshes the cache immediately. Verified: 401 unauth / 200 auth; secret PATCH stays ciphertext at rest + masked; type-change rejected; prompt PATCH roundtrips and is live on the next read; `updated_by` = token fingerprint.
 - **S0.5.2 done** — `IChatModelClient` (`Infrastructure/Llm/`) with `OllamaClient` (`/api/chat` + `/api/embed`) and `OpenAiCompatibleClient` (custom base URL + secret API key, read live from settings). `ChatModelRouter` (`Services/Llm/`) resolves a task → `provider:model` from settings on every call (so model swaps apply without restart) and routes through `LlmCallRecorder` — the single persistence chokepoint that writes one `llm_calls` row per call (prompt, response, tokens, latency, cost estimate from `llm.costRates`). New `llm_calls` table + `llm_calls_task_time` index (plan §12.16). Env-gated `POST /api/_debug/chat?task=`. Verified: a chat call returns and adds exactly one row with non-null latency/tokens; swapping `llm.chat.taskMap.qa` via psql is reflected on the next call with no restart. Cost is null for local Ollama (no rate seeded).
 
 ## In flight
 
-Nothing. Next slice to grab is **S0.5.3** (Bearer-token auth + admin endpoints, incl. `GET /api/admin/llm-calls`). See `docs/issues.md`.
+Nothing. Next slice to grab is **S0.5.4** (Admin shell UI: settings + prompts editor — first frontend slice that consumes the S0.5.3 admin API). See `docs/issues.md`.
 
 ## Conventions snapshot
 
@@ -35,6 +36,8 @@ The full conventions live in `docs/conventions/`. The short version:
 
 - **Cost-rate setting shape (revisit in S0.5.5).** S0.5.2 stores rates as a single JSON setting `llm.costRates`, an object keyed by `"<provider>:<model>"` (e.g. `"openai_compatible:gpt-4o"`) → `{ inputPerMillion, outputPerMillion }`. The issue spec literally wrote per-key paths (`llm.costRates.openai.gpt-4o`), and note the provider segment is `openai_compatible` (the client's `ProviderName`), not `openai`. Default seed is `{}`, so cost is null until configured and the shape can change with no data migration. The cost-meter consumer (S0.5.5) and the per-key admin settings editor (S0.5.4) should settle whether to keep the JSON blob or move to flat per-rate keys to match the `llm.chat.taskMap.<task>` convention.
 - **Failed LLM calls aren't audited.** `LlmCallRecorder` writes a row only on a successful invocation; a thrown call (timeout, 5xx, empty body) propagates without a row. Auditing failed attempts (which may still have sent a prompt to an external provider) needs a status/error column on `llm_calls` — deferred to its own slice.
+- **"Chat uses the new prompt" (S0.5.3 acceptance) is verified in S4.1.** Nothing consumes `prompts.qa` yet — `_debug/chat` sends a raw prompt, and `prompts.*` templating lands with `AssistantService` (S4.1). S0.5.3 verified the PATCH→live-value half (GET + debug-setting reflect it immediately); the "next chat call uses it" half rides on S4.1's acceptance.
+- **`auth.bearerToken` is editable via the generic `PATCH /api/admin/settings`.** A holder of the current token can rotate the credential (or any secret) through the same masked endpoint — fine for a trusted single-operator panel and the only pre-UI rotation path, but worth a dedicated, audited token-rotation flow (and possibly excluding `auth.*` from the generic PATCH) when the admin UI lands (S0.5.4+).
 
 Resolved:
 - Branch renamed to `master` (matches conventions + CI triggers). Node engine widened to `>=22`; CI runs on Node 24 to match local dev.

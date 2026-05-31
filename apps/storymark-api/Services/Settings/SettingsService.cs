@@ -68,6 +68,23 @@ internal sealed class SettingsService(
     public bool TryGetSnapshot(string key, [NotNullWhen(true)] out SettingSnapshot? snapshot)
         => _cache.TryGetValue(key, out snapshot);
 
+    public IReadOnlyCollection<SettingSnapshot> GetAll() => _cache.Values.ToList();
+
+    public async Task UpdateAsync(string key, string jsonValue, string updatedBy, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<StorymarkDbContext>();
+        var row = await db.Settings.FirstOrDefaultAsync(s => s.Key == key, ct)
+            ?? throw new KeyNotFoundException($"Setting '{key}' does not exist.");
+
+        row.Value = row.IsSecret ? JsonSerializer.Serialize(encryptor.Encrypt(jsonValue)) : jsonValue;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        row.UpdatedBy = updatedBy;
+        await db.SaveChangesAsync(ct);
+
+        await RefreshKeyAsync(key, ct);
+    }
+
     private SettingSnapshot ToSnapshot(Setting row)
     {
         var value = row.IsSecret

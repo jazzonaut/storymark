@@ -2,6 +2,7 @@ using FastEndpoints;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Serilog.Formatting.Compact;
+using Storymark.Api.Infrastructure.Auth;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Infrastructure.Llm;
 using Storymark.Api.Infrastructure.Settings;
@@ -41,6 +42,9 @@ try
     builder.Services.AddTransient<IChatModelClient>(sp => sp.GetRequiredService<OpenAiCompatibleClient>());
     builder.Services.AddScoped<LlmCallRecorder>();
     builder.Services.AddScoped<ChatModelRouter>();
+    builder.Services.AddScoped<LlmCallLogService>();
+
+    builder.Services.AddSingleton<AdminAuthPreProcessor>();
 
     builder.Services.AddFastEndpoints();
 
