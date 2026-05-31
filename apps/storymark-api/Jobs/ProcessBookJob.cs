@@ -11,9 +11,8 @@ namespace Storymark.Api.Jobs;
 /// parse the EPUB, store the cover and per-section artifacts, persist
 /// <see cref="BookSection"/>/<see cref="BookParagraph"/> rows, then chunk every
 /// section into <see cref="BookChunk"/> rows. Drives <see cref="ProcessingStatus"/>
-/// <c>Uploaded → Parsing → Parsed → Chunking → Embedding</c>; it rests at
-/// <c>Embedding</c> because the embedding job that finishes the run (<c>Indexed</c>)
-/// is the next slice (S3.2).
+/// <c>Uploaded → Parsing → Parsed → Chunking → Embedding</c>, then enqueues
+/// <see cref="EmbeddingJob"/>, which embeds the chunks and finishes at <c>Indexed</c>.
 ///
 /// <para><see cref="AutomaticRetryAttribute"/> is set to zero: a parse failure is
 /// deterministic (a malformed file), so a retry would just fail again — it surfaces
@@ -25,6 +24,7 @@ internal sealed class ProcessBookJob(
     FileStorageService storage,
     IEnumerable<IBookImportHandler> handlers,
     ContentSanitizationService sanitizer,
+    IBackgroundJobClient jobs,
     ILogger<ProcessBookJob> logger)
 {
     [AutomaticRetry(Attempts = 0)]
@@ -115,9 +115,13 @@ internal sealed class ProcessBookJob(
 
         await db.SaveChangesAsync(ct);
 
-        // Embeddings land in S3.2; the book rests at Embedding until that job runs.
         await SetStatusAsync(book, ProcessingStatus.Embedding, ct);
         logger.LogInformation("Chunked book {BookId}: {ChunkCount} chunks", book.Id, chunkCount);
+
+        // EmbeddingJob fills the vectors and advances the book to Indexed. Enqueued
+        // here rather than run inline so chunking stays fast and embedding (slow,
+        // retryable) is its own unit of work.
+        jobs.Enqueue<EmbeddingJob>(j => j.RunAsync(book.Id, CancellationToken.None));
     }
 
     private async Task PersistSectionsAsync(Book book, BookContent content, CancellationToken ct)

@@ -65,6 +65,7 @@ try
     builder.Services.AddScoped<ReadingProgressService>();
     builder.Services.AddScoped<BookmarkService>();
     builder.Services.AddScoped<ProcessBookJob>();
+    builder.Services.AddScoped<EmbeddingJob>();
 
     builder.Services.AddHangfire(config => config
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)

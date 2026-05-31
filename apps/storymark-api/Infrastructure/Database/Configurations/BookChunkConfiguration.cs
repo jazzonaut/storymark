@@ -6,10 +6,6 @@ namespace Storymark.Api.Infrastructure.Database.Configurations;
 
 internal sealed class BookChunkConfiguration : IEntityTypeConfiguration<BookChunk>
 {
-    // nomic-embed-text dimensionality (docs/plan.md §12.4); the column is created
-    // now but stays null until the S3.2 embedding job. No HNSW/FTS index yet.
-    private const int EmbeddingDimensions = 768;
-
     public void Configure(EntityTypeBuilder<BookChunk> builder)
     {
         builder.ToTable("book_chunks");
@@ -23,7 +19,7 @@ internal sealed class BookChunkConfiguration : IEntityTypeConfiguration<BookChun
         builder.Property(c => c.LocationEnd).HasColumnName("location_end");
         builder.Property(c => c.Text).HasColumnName("text");
         builder.Property(c => c.TokenEstimate).HasColumnName("token_estimate");
-        builder.Property(c => c.Embedding).HasColumnName("embedding").HasColumnType($"vector({EmbeddingDimensions})");
+        builder.Property(c => c.Embedding).HasColumnName("embedding").HasColumnType($"vector({BookChunk.EmbeddingDimensions})");
         builder.Property(c => c.EmbeddingModelId).HasColumnName("embedding_model_id");
         builder.Property(c => c.EmbeddingModelVersion).HasColumnName("embedding_model_version");
         builder.Property(c => c.CreatedAt).HasColumnName("created_at");
@@ -44,5 +40,13 @@ internal sealed class BookChunkConfiguration : IEntityTypeConfiguration<BookChun
 
         builder.HasIndex(c => new { c.BookId, c.SectionIndex, c.LocationStart })
             .HasDatabaseName("book_chunks_pos");
+
+        // Approximate-NN index for cosine similarity (docs/plan.md §12.4, §13: the
+        // `embedding <=> query` operator). The GIN FTS index on to_tsvector('english',
+        // text) is an expression index EF can't model — added via raw SQL in the migration.
+        builder.HasIndex(c => c.Embedding)
+            .HasDatabaseName("book_chunks_hnsw")
+            .HasMethod("hnsw")
+            .HasOperators("vector_cosine_ops");
     }
 }

@@ -182,6 +182,12 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Embedding")
+                        .HasDatabaseName("book_chunks_hnsw");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
+
                     b.HasIndex("SectionId");
 
                     b.HasIndex("BookId", "SectionIndex", "ChunkIndex")
