@@ -10,3 +10,14 @@ dotnet_diagnostic.MA0004.severity = none
 # convention (docs/conventions/03-dotnet.md, FastEndpoints section), which the
 # one-type-per-file analyzer would otherwise fight.
 dotnet_diagnostic.MA0048.severity = none
+
+# LoggerMessage source-generated delegates (and their expensive-arg guard) are
+# overkill for this service's log volume; ILogger structured-logging extension
+# methods are fine here.
+dotnet_diagnostic.CA1848.severity = none
+dotnet_diagnostic.CA1873.severity = none
+
+# EF Core scaffolds migrations and the model snapshot; don't hold generated code
+# to the analyzer/formatter rules written for hand-authored source.
+[**/Migrations/*.cs]
+generated_code = true

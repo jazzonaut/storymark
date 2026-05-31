@@ -11,11 +11,13 @@ Last updated: S0.1 + S0.2 landed.
 - pnpm catalog locked to current published versions (verified via `pnpm view`). Note the majors: Vite 8, Vue Router 5, TypeScript 6.
 - `docs/plan.md` and `docs/issues.md` capture the full scope through Phase 6.
 - **S0.3 done** — `docker compose up` brings api + pgvector-postgres + ollama healthy. Local override (`docker-compose.override.yml`) builds the api image from source; postgres init script enables the `vector` extension (verified `vector 0.8.2`). `SELECT 1` and `ollama list` confirmed.
+- **S0.5.1 done** — `settings` table (jsonb) + `settings_notify` trigger; `SettingsService` (singleton cache) hot-reloads via a `LISTEN settings_changed` BackgroundService, so even raw psql edits propagate (<1s, verified). AES-256-GCM encrypts `is_secret` values (`auth.bearerToken` ciphertext at rest, verified). Startup runs `MigrateAsync` then seeds missing keys (prompts from `Prompts/PromptDefaults.cs`, rest from the `SettingsDefaults` config section, `auth.bearerToken` from `Auth:BearerTokenSeed`). Env-gated `GET /api/_debug/setting?key=`.
 - CI dotnet job now reads the SDK from `apps/storymark-api/global.json`.
+- Note: as of S0.5.1 the API runs EF migrations on startup, so it now requires Postgres reachable at boot (the `/api/health` handler itself still doesn't touch the DB).
 
 ## In flight
 
-Nothing. Next slice to grab is **S0.5.1** (Settings table + hot-reloaded SettingsService) — the start of the admin-foundations chain. See `docs/issues.md`.
+Nothing. Next slice to grab is **S0.5.2** (IChatModelClient + Ollama/OpenAI adapters + LlmCallRecorder). See `docs/issues.md`.
 
 ## Conventions snapshot
 

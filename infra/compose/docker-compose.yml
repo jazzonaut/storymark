@@ -35,6 +35,7 @@ services:
       Auth__BearerTokenSeed: ${STORYMARK_BEARER_TOKEN_SEED}
       Settings__EncryptionKey: ${STORYMARK_SETTINGS_ENCRYPTION_KEY}
       Storymark__PublicUrl: ${STORYMARK_PUBLIC_URL:-}
+      Storymark__DebugEndpointsEnabled: ${STORYMARK_DEBUG_ENDPOINTS:-false}
     volumes:
       - storymark_files:/data
     networks:
