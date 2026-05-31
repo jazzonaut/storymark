@@ -13,6 +13,17 @@ internal sealed class SettingsDefaultsOptions
     public bool RecapCardOnSectionEntry { get; init; } = true;
 
     public LlmSettingsDefaults Llm { get; init; } = new();
+
+    public SearchSettingsDefaults Search { get; init; } = new();
+}
+
+internal sealed class SearchSettingsDefaults
+{
+    /// <summary>Query-expansion groups (docs/plan.md §18.2): a category name to the
+    /// words that mutually expand each other. A question word matching any member
+    /// adds a retrieval query built from the whole group. Seeded from config so an
+    /// operator can grow the dictionary from the admin JSON editor.</summary>
+    public Dictionary<string, List<string>> Synonyms { get; init; } = new(StringComparer.Ordinal);
 }
 
 internal sealed class LlmSettingsDefaults

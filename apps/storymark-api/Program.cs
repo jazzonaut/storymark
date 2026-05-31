@@ -14,6 +14,7 @@ using Storymark.Api.Infrastructure.Llm;
 using Storymark.Api.Infrastructure.Settings;
 using Storymark.Api.Infrastructure.Storage;
 using Storymark.Api.Jobs;
+using Storymark.Api.Services.Assistant;
 using Storymark.Api.Services.Books;
 using Storymark.Api.Services.Llm;
 using Storymark.Api.Services.Retrieval;
@@ -68,6 +69,7 @@ try
     builder.Services.AddScoped<ProcessBookJob>();
     builder.Services.AddScoped<EmbeddingJob>();
     builder.Services.AddScoped<SpoilerSafeRetrievalService>();
+    builder.Services.AddScoped<AssistantService>();
 
     builder.Services.AddHangfire(config => config
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)

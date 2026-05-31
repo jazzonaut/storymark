@@ -23,6 +23,8 @@ internal sealed class StorymarkDbContext(DbContextOptions<StorymarkDbContext> op
 
     public DbSet<BookBookmark> BookBookmarks => Set<BookBookmark>();
 
+    public DbSet<QuestionAnswer> QuestionAnswers => Set<QuestionAnswer>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("vector");

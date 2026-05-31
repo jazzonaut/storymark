@@ -69,6 +69,7 @@ internal sealed class SettingsSeeder(
             Text("llm.embedding.modelId", options.Llm.EmbeddingModelId),
             Text("llm.openai.baseUrl", options.Llm.OpenAi.BaseUrl),
             Json("llm.costRates", options.Llm.CostRates),
+            Json("search.synonyms", options.Search.Synonyms),
             Text("prompts.qa", PromptDefaults.Qa),
             Text("prompts.sectionExtraction", PromptDefaults.SectionExtraction),
             Text("prompts.entitySummary", PromptDefaults.EntitySummary),
