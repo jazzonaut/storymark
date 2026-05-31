@@ -16,6 +16,7 @@ using Storymark.Api.Infrastructure.Storage;
 using Storymark.Api.Jobs;
 using Storymark.Api.Services.Books;
 using Storymark.Api.Services.Llm;
+using Storymark.Api.Services.Retrieval;
 using Storymark.Api.Services.Settings;
 
 Log.Logger = new LoggerConfiguration()
@@ -66,6 +67,7 @@ try
     builder.Services.AddScoped<BookmarkService>();
     builder.Services.AddScoped<ProcessBookJob>();
     builder.Services.AddScoped<EmbeddingJob>();
+    builder.Services.AddScoped<SpoilerSafeRetrievalService>();
 
     builder.Services.AddHangfire(config => config
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
