@@ -5,6 +5,11 @@ import LibraryView from "@/views/LibraryView.vue";
 const routes: readonly RouteRecordRaw[] = [
   { path: "/", name: "library", component: LibraryView },
   {
+    path: "/upload",
+    name: "upload",
+    component: () => import("@/views/BookUploadView.vue"),
+  },
+  {
     path: "/admin",
     component: () => import("@/views/admin/AdminView.vue"),
     children: [

@@ -1,4 +1,5 @@
 using FastEndpoints;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -6,6 +7,8 @@ using Storymark.Api.Infrastructure.Auth;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Infrastructure.Llm;
 using Storymark.Api.Infrastructure.Settings;
+using Storymark.Api.Infrastructure.Storage;
+using Storymark.Api.Services.Books;
 using Storymark.Api.Services.Llm;
 using Storymark.Api.Services.Settings;
 
@@ -43,6 +46,19 @@ try
     builder.Services.AddScoped<LlmCallRecorder>();
     builder.Services.AddScoped<ChatModelRouter>();
     builder.Services.AddScoped<LlmCallLogService>();
+
+    builder.Services.Configure<StorageOptions>(
+        builder.Configuration.GetSection(StorageOptions.SectionName));
+    builder.Services.AddSingleton<FileStorageService>();
+    builder.Services.AddSingleton<IBookImportHandler, EpubImportHandler>();
+    builder.Services.AddScoped<BookImportService>();
+    builder.Services.AddScoped<BookCatalogService>();
+
+    // Ceiling for the upload endpoint; the precise per-request cap is the live
+    // `upload.maxBytes` setting, enforced while streaming in FileStorageService.
+    const long uploadBodyCeiling = 256L * 1024 * 1024;
+    builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = uploadBodyCeiling);
+    builder.Services.Configure<FormOptions>(o => o.MultipartBodyLengthLimit = uploadBodyCeiling);
 
     builder.Services.AddSingleton<AdminAuthPreProcessor>();
 

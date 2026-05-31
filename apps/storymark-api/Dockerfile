@@ -22,5 +22,10 @@ RUN apt-get update \
 COPY --from=build /app ./
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
+# Book artifacts live under /data (a mounted volume). Own the mountpoint as the
+# non-root app user so it can create the storage tree; an empty named volume
+# inherits this ownership on first mount. A pre-existing root-owned volume must
+# be recreated or chowned (see docs/deployment).
+RUN mkdir -p /data && chown $APP_UID:$APP_UID /data
 USER $APP_UID
 ENTRYPOINT ["dotnet", "Storymark.Api.dll"]

@@ -22,6 +22,67 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Storymark.Api.Domain.Books.Book", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Author")
+                        .HasColumnType("text")
+                        .HasColumnName("author");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content_hash");
+
+                    b.Property<string>("CoverPath")
+                        .HasColumnType("text")
+                        .HasColumnName("cover_path");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("file_path");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("format");
+
+                    b.Property<string>("Language")
+                        .HasColumnType("text")
+                        .HasColumnName("language");
+
+                    b.Property<string>("ProcessingStatus")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("processing_status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContentHash")
+                        .IsUnique()
+                        .HasDatabaseName("books_content_hash");
+
+                    b.ToTable("books", (string)null);
+                });
+
             modelBuilder.Entity("Storymark.Api.Domain.LlmCalls.LlmCall", b =>
                 {
                     b.Property<Guid>("Id")
