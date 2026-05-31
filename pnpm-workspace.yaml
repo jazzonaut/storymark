@@ -1,0 +1,42 @@
+# Storymark — pnpm workspace.
+#
+# Versions are pinned exactly (no ^/~). Bumps are a deliberate edit, not a
+# range-match at install. Refresh with `pnpm view <pkg> version` at scaffold
+# time and replace the numbers below.
+#
+# Workspace packages reference the catalog as:
+#   "vue": "catalog:"
+# Internal cross-package deps use:
+#   "@storymark/shared-types": "workspace:*"
+
+packages:
+  - 'apps/storymark-app'
+  - 'packages/*'
+
+catalog:
+  # --- Phase 0 — verify with `pnpm view <pkg> version` before locking ---
+  vue: 3.5.13
+  vue-router: 4.5.0
+  '@vitejs/plugin-vue': 5.2.1
+  '@vue/tsconfig': 0.7.0
+  typescript: 5.7.3
+  vite: 6.0.7
+  primevue: 4.3.0
+  '@primeuix/themes': 1.0.0
+  tailwindcss: 4.0.0
+  '@tailwindcss/vite': 4.0.0
+  oxlint: 1.0.0
+  oxfmt: 0.1.0
+  vue-tsc: 2.2.0
+
+  # --- Phases 1+ — referenced as features land; verify again before use ---
+  dexie: 4.0.10
+  echarts: 5.6.0
+  vue-echarts: 7.0.3
+  vite-plugin-pwa: 1.0.0
+  workbox-window: 7.3.0
+
+onlyBuiltDependencies:
+  - esbuild
+  - '@parcel/watcher'
+  - sharp

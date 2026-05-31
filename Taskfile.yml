@@ -1,0 +1,61 @@
+# Storymark — task runner (go-task: https://taskfile.dev).
+#
+# Convenience layer over pnpm + dotnet. Every target is also runnable from
+# the underlying tools directly; nothing here is load-bearing for CI.
+
+version: '3'
+
+tasks:
+  dev:
+    desc: Run frontend dev server. Backend has its own loop (`task api`).
+    cmds:
+      - pnpm dev
+
+  api:
+    desc: Run backend with hot reload.
+    dir: apps/storymark-api
+    cmds:
+      - dotnet watch
+
+  build:
+    desc: Build every workspace + the .NET API.
+    cmds:
+      - pnpm build
+      - dotnet build apps/storymark-api -c Release -warnaserror
+
+  lint:
+    desc: Lint frontend (oxlint) and verify .NET formatting.
+    cmds:
+      - pnpm lint
+      - pnpm format:check
+      - dotnet format apps/storymark-api --verify-no-changes
+
+  typecheck:
+    desc: TypeScript typecheck across the workspace.
+    cmds:
+      - pnpm typecheck
+
+  ci:
+    desc: Run the same gates CI runs (lint + typecheck + build).
+    cmds:
+      - task: lint
+      - task: typecheck
+      - task: build
+
+  compose:up:
+    desc: Bring up the local compose stack (api, postgres, ollama).
+    dir: infra/compose
+    cmds:
+      - docker compose --env-file .env up -d
+
+  compose:down:
+    desc: Tear down the local compose stack.
+    dir: infra/compose
+    cmds:
+      - docker compose --env-file .env down
+
+  compose:logs:
+    desc: Tail logs for the local compose stack.
+    dir: infra/compose
+    cmds:
+      - docker compose --env-file .env logs -f --tail=200

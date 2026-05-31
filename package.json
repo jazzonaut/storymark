@@ -1,0 +1,24 @@
+{
+  "name": "storymark",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=22 <23",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "pnpm --filter @storymark/app dev",
+    "build": "pnpm -r --filter \"./apps/storymark-app\" --filter \"./packages/*\" run build",
+    "typecheck": "pnpm -r --filter \"./apps/storymark-app\" --filter \"./packages/*\" run typecheck",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
+  },
+  "devDependencies": {
+    "oxlint": "catalog:",
+    "oxfmt": "catalog:",
+    "typescript": "catalog:"
+  }
+}

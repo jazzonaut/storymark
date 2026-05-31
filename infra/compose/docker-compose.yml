@@ -1,0 +1,125 @@
+# Storymark — reference Compose stack.
+#
+# Deployed via Portainer Git stack OR `docker compose up -d` on any Compose
+# host. Reverse proxy and auth layers are pluggable — see docs/deployment/.
+#
+# Required env (provided by .env or Portainer stack env):
+#   POSTGRES_PASSWORD                  - Storymark Postgres password
+#   STORYMARK_BEARER_TOKEN_SEED        - initial admin bearer token; rotate from /admin
+#   STORYMARK_SETTINGS_ENCRYPTION_KEY  - base64 32-byte key for encrypting secret settings
+#
+# Optional env:
+#   STORYMARK_API_IMAGE                - full image ref without tag (defaults to local build)
+#   STORYMARK_API_TAG                  - image tag (default: latest; pin to SHA for rollback)
+#   STORYMARK_API_PUBLISHED_PORT       - host port for the API. Empty = unpublished (proxy-only)
+#   STORYMARK_PUBLIC_URL               - public URL Storymark is served from (used by SW scope)
+#   STORYMARK_PROXY_NETWORK            - external Docker network for reverse proxy. Empty = none
+#   STORYMARK_REVERSE_PROXY_LABELS_*   - labels merged onto the api service (see compose docs)
+#   OLLAMA_PUBLISHED_PORT              - host port for Ollama. Empty = unpublished
+#
+# Volumes are named (Docker-managed). Override with bind mounts if you prefer
+# explicit host paths (Portainer environment variables make this trivial).
+
+services:
+  api:
+    image: ${STORYMARK_API_IMAGE:-storymark-api}:${STORYMARK_API_TAG:-latest}
+    container_name: storymark-api
+    restart: unless-stopped
+    pull_policy: always
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=storymark;Username=storymark;Password=${POSTGRES_PASSWORD}
+      Ollama__Url: http://ollama:11434
+      Storage__RootPath: /data
+      Auth__BearerTokenSeed: ${STORYMARK_BEARER_TOKEN_SEED}
+      Settings__EncryptionKey: ${STORYMARK_SETTINGS_ENCRYPTION_KEY}
+      Storymark__PublicUrl: ${STORYMARK_PUBLIC_URL:-}
+    volumes:
+      - storymark_files:/data
+    networks:
+      - storymark-internal
+      # When STORYMARK_PROXY_NETWORK is set, the api also joins that external
+      # network. Compose syntax doesn't conditionally include networks, so the
+      # network must exist with this exact name to be joined. The simplest
+      # pattern is to set STORYMARK_PROXY_NETWORK to either the real proxy
+      # network or "storymark-internal" (which exists and is harmless to
+      # rejoin). The latter is the no-proxy default.
+      - ${STORYMARK_PROXY_NETWORK:-storymark-internal}
+    ports:
+      # Empty STORYMARK_API_PUBLISHED_PORT disables the host-side publish
+      # (typical when a reverse proxy on a shared network handles ingress).
+      # Set e.g. "8088" to publish on the host.
+      - ${STORYMARK_API_PUBLISHED_PORT:-127.0.0.1:8088}:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://localhost:8080/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    labels:
+      # Reverse-proxy labels are JSON-merged into the running container's
+      # labels via the env variable. See docs/deployment/03-reverse-proxy-options.md
+      # for caddy-docker-proxy / traefik examples.
+      #
+      # caddy-docker-proxy example (uncomment + set STORYMARK_PROXY_NETWORK=caddy):
+      # caddy: ${STORYMARK_PUBLIC_HOSTS:-storymark.example.com}
+      # caddy.reverse_proxy: "{{upstreams 8080}}"
+      org.storymark.role: api
+
+  postgres:
+    # pgvector pre-installed; matches the version used in CI.
+    image: pgvector/pgvector:pg16
+    container_name: storymark-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: storymark
+      POSTGRES_USER: storymark
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - storymark_postgres:/var/lib/postgresql/data
+    networks:
+      - storymark-internal
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "storymark", "-d", "storymark"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    labels:
+      org.storymark.role: postgres
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: storymark-ollama
+    restart: unless-stopped
+    volumes:
+      - storymark_ollama:/root/.ollama
+    networks:
+      - storymark-internal
+    ports:
+      # Set OLLAMA_PUBLISHED_PORT=11434 to expose for debugging or external
+      # access. Default is unpublished — only the api container reaches it.
+      - ${OLLAMA_PUBLISHED_PORT:-127.0.0.1:11434}:11434
+    labels:
+      org.storymark.role: ollama
+
+networks:
+  storymark-internal:
+    driver: bridge
+  # If you use a shared reverse-proxy network (e.g. "caddy", "traefik"),
+  # create it once on the host (`docker network create <name>`) and set
+  # STORYMARK_PROXY_NETWORK to its name. Compose will then attach the api
+  # service to it. Declare it as external below — uncomment and rename:
+  #
+  # caddy:
+  #   external: true
+
+volumes:
+  storymark_files:
+  storymark_postgres:
+  storymark_ollama:

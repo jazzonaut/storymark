@@ -1,0 +1,292 @@
+name: ci
+
+# Works on both GitHub Actions and Forgejo Actions. Forgejo's runner is
+# action-compatible at the expression and standard-action level. See
+# docs/deployment/01-ci-cd.md.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  changes:
+    # Per-target change detection. Classifies each changed file as either
+    # "dotnet", "web", or neither (docs-only). Anything unclassified defaults
+    # to both — shared root configs should re-validate both halves rather
+    # than silently skip one.
+    runs-on: ubuntu-latest
+    outputs:
+      dotnet: ${{ steps.detect.outputs.dotnet }}
+      web: ${{ steps.detect.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base=""
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PR_BASE_SHA" ]; then
+            base="$(git merge-base "$PR_BASE_SHA" HEAD 2>/dev/null || echo "")"
+          elif [ "$EVENT_NAME" = "push" ] \
+            && [ -n "$PUSH_BEFORE" ] \
+            && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ] \
+            && git cat-file -e "$PUSH_BEFORE" 2>/dev/null; then
+            base="$PUSH_BEFORE"
+          fi
+          if [ -z "$base" ]; then
+            printf 'dotnet=true\nweb=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          dotnet=false
+          web=false
+          while IFS= read -r path; do
+            [ -z "$path" ] && continue
+            case "$path" in
+              docs/*|*.md|CLAUDE.md|CONTEXT.md|LICENSE) ;;
+              apps/storymark-api/*|infra/compose/*) dotnet=true ;;
+              apps/storymark-app/*|pnpm-workspace.yaml|pnpm-lock.yaml|package.json|.oxlintrc.json) web=true ;;
+              packages/*) dotnet=true; web=true ;;
+              *) dotnet=true; web=true ;;
+            esac
+          done <<< "$(git diff --name-only "$base" HEAD)"
+          printf 'dotnet=%s\nweb=%s\n' "$dotnet" "$web" >> "$GITHUB_OUTPUT"
+
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Format check
+        run: pnpm format:check
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Build
+        run: pnpm build
+
+  dotnet:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/storymark-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          # Use the SDK version declared in apps/storymark-api/global.json
+          # once it exists; until then, fall back to the latest LTS.
+          dotnet-version: "8.0.x"
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('apps/storymark-api/Directory.Packages.props', 'apps/storymark-api/**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - name: Restore
+        run: dotnet restore
+      - name: Verify formatting
+        run: dotnet format --verify-no-changes
+      - name: Build
+        run: dotnet build --no-restore --configuration Release -warnaserror
+
+  image:
+    # Image carries the API. Builds only on push to master after both
+    # validation jobs succeed (or were skipped because nothing relevant changed).
+    needs: [dotnet, web, changes]
+    if: |
+      !cancelled() &&
+      (needs.dotnet.result == 'success' || needs.dotnet.result == 'skipped') &&
+      (needs.web.result == 'success' || needs.web.result == 'skipped') &&
+      github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+      (needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.web == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve registry settings
+        env:
+          SERVER_URL: ${{ github.server_url }}
+          REGISTRY_HOST_OVERRIDE: ${{ secrets.REGISTRY_HOST }}
+          REGISTRY_USER_OVERRIDE: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_IMAGE_OVERRIDE: ${{ secrets.REGISTRY_IMAGE }}
+        run: |
+          set -euo pipefail
+          registry_host="${REGISTRY_HOST_OVERRIDE:-}"
+          if [ -z "$registry_host" ]; then
+            registry_host="${GITHUB_SERVER_URL:-$SERVER_URL}"
+            registry_host="${registry_host#https://}"
+            registry_host="${registry_host#http://}"
+            registry_host="${registry_host%%/*}"
+          fi
+
+          registry_user="${REGISTRY_USER_OVERRIDE:-${GITHUB_REPOSITORY_OWNER:-}}"
+          if [ -z "$registry_user" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+            registry_user="${GITHUB_REPOSITORY%%/*}"
+          fi
+          if [ -z "$registry_user" ]; then
+            echo "REGISTRY_USER is not configured and GITHUB_REPOSITORY_OWNER is unavailable." >&2
+            exit 1
+          fi
+
+          registry_image="${REGISTRY_IMAGE_OVERRIDE:-$registry_host/$registry_user/storymark-api}"
+          {
+            echo "REGISTRY_HOST=$registry_host"
+            echo "REGISTRY_USER=$registry_user"
+            echo "REGISTRY_IMAGE=$registry_image"
+          } >> "$GITHUB_ENV"
+      - name: Log in to container registry
+        env:
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$REGISTRY_TOKEN" ]; then
+            echo "REGISTRY_TOKEN secret is not set." >&2
+            exit 1
+          fi
+          echo "$REGISTRY_TOKEN" | docker login "$REGISTRY_HOST" -u "$REGISTRY_USER" --password-stdin
+      - name: Build and push
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          set -euo pipefail
+          IMAGE="$REGISTRY_IMAGE"
+          docker pull "$IMAGE:latest" 2>/dev/null || true
+          docker build \
+            --cache-from "$IMAGE:latest" \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t "$IMAGE:latest" -t "$IMAGE:${{ github.sha }}" \
+            -f apps/storymark-api/Dockerfile .
+          docker push "$IMAGE:latest"
+          docker push "$IMAGE:${{ github.sha }}"
+
+  deploy:
+    # Optional. Skip if Portainer secrets aren't configured.
+    needs: [image, changes]
+    if: |
+      !cancelled() &&
+      needs.image.result == 'success' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip if Portainer is not configured
+        id: gate
+        env:
+          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+        run: |
+          if [ -z "$PORTAINER_URL" ]; then
+            echo "Portainer secrets not set — skipping deploy."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Resolve deployment settings
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          SERVER_URL: ${{ github.server_url }}
+          REGISTRY_HOST_OVERRIDE: ${{ secrets.REGISTRY_HOST }}
+          REGISTRY_USER_OVERRIDE: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_IMAGE_OVERRIDE: ${{ secrets.REGISTRY_IMAGE }}
+          STORYMARK_PUBLIC_URL: ${{ secrets.STORYMARK_PUBLIC_URL }}
+          STORYMARK_PROXY_NETWORK: ${{ secrets.STORYMARK_PROXY_NETWORK }}
+        run: |
+          set -euo pipefail
+          registry_host="${REGISTRY_HOST_OVERRIDE:-}"
+          if [ -z "$registry_host" ]; then
+            registry_host="${GITHUB_SERVER_URL:-$SERVER_URL}"
+            registry_host="${registry_host#https://}"
+            registry_host="${registry_host#http://}"
+            registry_host="${registry_host%%/*}"
+          fi
+
+          registry_user="${REGISTRY_USER_OVERRIDE:-${GITHUB_REPOSITORY_OWNER:-}}"
+          if [ -z "$registry_user" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+            registry_user="${GITHUB_REPOSITORY%%/*}"
+          fi
+
+          registry_image="${REGISTRY_IMAGE_OVERRIDE:-$registry_host/$registry_user/storymark-api}"
+
+          {
+            echo "STORYMARK_API_IMAGE=$registry_image"
+            echo "STORYMARK_PUBLIC_URL=${STORYMARK_PUBLIC_URL:-}"
+            echo "STORYMARK_PROXY_NETWORK=${STORYMARK_PROXY_NETWORK:-storymark-internal}"
+          } >> "$GITHUB_ENV"
+      - name: Redeploy Storymark stack on Portainer
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+          PORTAINER_STACK_ID: ${{ secrets.PORTAINER_STACK_ID }}
+          PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
+          PORTAINER_REPO_USER: ${{ secrets.PORTAINER_REPO_USER }}
+          PORTAINER_REPO_PASSWORD: ${{ secrets.PORTAINER_REPO_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${PORTAINER_API_KEY:?Set PORTAINER_API_KEY}"
+          : "${PORTAINER_STACK_ID:?Set PORTAINER_STACK_ID}"
+          : "${PORTAINER_ENDPOINT_ID:?Set PORTAINER_ENDPOINT_ID}"
+
+          # Preserve current stack env across redeploys — Portainer's
+          # /git/redeploy replaces the env array, so we read-modify-write.
+          current=$(curl -sSf \
+            -H "X-API-Key: ${PORTAINER_API_KEY}" \
+            "${PORTAINER_URL%/}/api/stacks/${PORTAINER_STACK_ID}")
+          env_array=$(echo "$current" | jq \
+            --arg image "$STORYMARK_API_IMAGE" \
+            --arg publicUrl "$STORYMARK_PUBLIC_URL" \
+            --arg proxyNet "$STORYMARK_PROXY_NETWORK" '
+              def upsert_env($name; $value):
+                if length == 0 or (.[0] | has("name")) then
+                  (map(if .name == $name then .value = $value else . end)
+                    + if any(.name == $name) then [] else [{name: $name, value: $value}] end)
+                else
+                  (map(if .Name == $name then .Value = $value else . end)
+                    + if any(.Name == $name) then [] else [{Name: $name, Value: $value}] end)
+                end;
+
+              (.Env // [])
+              | upsert_env("STORYMARK_API_IMAGE"; $image)
+              | upsert_env("STORYMARK_PUBLIC_URL"; $publicUrl)
+              | upsert_env("STORYMARK_PROXY_NETWORK"; $proxyNet)
+            ')
+
+          body=$(jq -n \
+            --arg user "${PORTAINER_REPO_USER:-}" \
+            --arg pass "${PORTAINER_REPO_PASSWORD:-}" \
+            --argjson env "$env_array" \
+            '{
+              RepositoryReferenceName: "refs/heads/master",
+              PullImage: true,
+              RepositoryAuthentication: ($user != "" and $pass != ""),
+              RepositoryUsername: $user,
+              RepositoryPassword: $pass,
+              Env: $env
+            }')
+
+          status=$(curl -sS -o /tmp/portainer-resp -w '%{http_code}' \
+            -X PUT \
+            -H "X-API-Key: ${PORTAINER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            "${PORTAINER_URL%/}/api/stacks/${PORTAINER_STACK_ID}/git/redeploy?endpointId=${PORTAINER_ENDPOINT_ID}" \
+            -d "$body")
+          if [ "$status" != "200" ] && [ "$status" != "204" ]; then
+            echo "Portainer redeploy failed: HTTP $status" >&2
+            cat /tmp/portainer-resp >&2 || true
+            exit 1
+          fi
