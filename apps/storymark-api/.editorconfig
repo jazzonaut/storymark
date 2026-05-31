@@ -1,0 +1,12 @@
+# Inherits the repo-root .editorconfig (root = true lives there). This file
+# only tunes .NET analyzer severities for apps/storymark-api.
+
+[*.cs]
+# ConfigureAwait(false) is intentionally not used — ASP.NET Core has no
+# captured synchronization context. See docs/conventions/03-dotnet.md.
+dotnet_diagnostic.MA0004.severity = none
+
+# Endpoint request/response DTOs are co-located in their endpoint file by
+# convention (docs/conventions/03-dotnet.md, FastEndpoints section), which the
+# one-type-per-file analyzer would otherwise fight.
+dotnet_diagnostic.MA0048.severity = none

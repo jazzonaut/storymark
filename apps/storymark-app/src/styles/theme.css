@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/* Reader theme tokens. Themes are swapped by the `data-theme` attribute on
+   <html> (see docs/conventions/02-vue.md), not by Tailwind variants. */
+:root,
+[data-theme="light"] {
+  --sm-bg: #ffffff;
+  --sm-surface: #f5f5f4;
+  --sm-fg: #1c1917;
+  --sm-muted: #57534e;
+  --sm-accent: #4f46e5;
+}
+
+[data-theme="sepia"] {
+  --sm-bg: #f4ecd8;
+  --sm-surface: #ece0c8;
+  --sm-fg: #4b3b2a;
+  --sm-muted: #6f5b43;
+  --sm-accent: #9a6b3f;
+}
+
+[data-theme="dark"] {
+  --sm-bg: #0c0a09;
+  --sm-surface: #1c1917;
+  --sm-fg: #e7e5e4;
+  --sm-muted: #a8a29e;
+  --sm-accent: #818cf8;
+}
+
+html {
+  background-color: var(--sm-bg);
+  color: var(--sm-fg);
+}

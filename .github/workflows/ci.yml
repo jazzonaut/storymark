@@ -91,9 +91,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          # Use the SDK version declared in apps/storymark-api/global.json
-          # once it exists; until then, fall back to the latest LTS.
-          dotnet-version: "8.0.x"
+          # SDK version is the single source of truth in global.json.
+          global-json-file: apps/storymark-api/global.json
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:

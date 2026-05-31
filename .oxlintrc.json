@@ -13,19 +13,13 @@
   "rules": {
     "no-console": "error",
     "no-debugger": "error",
-    "no-restricted-syntax": [
-      "error",
-      {
-        "selector": "TSAsExpression[typeAnnotation.typeName.name='any']",
-        "message": "`as any` is forbidden — model the type properly."
-      }
-    ],
     "typescript/no-explicit-any": "error",
     "typescript/no-non-null-assertion": "error",
     "typescript/consistent-type-imports": "error",
     "unicorn/filename-case": ["error", { "case": "kebabCase" }],
     "unicorn/no-null": "off",
     "import/no-duplicates": "error",
+    "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
     "import/no-default-export": "error",
     "promise/no-return-wrap": "error"
   },

@@ -2,18 +2,19 @@
 
 A live pointer to where the project is right now. Keep it short. Move stable content into `docs/` and delete it from here.
 
-Last updated: pre-Phase-0 scaffold.
+Last updated: S0.1 + S0.2 landed.
 
 ## Status
 
-- Repository initialised. No application code yet.
+- **S0.1 done** — Vue 3 + Vite + TS (strict) app boots; `/` Library placeholder, `/admin` PrimeVue shell (lazy). Tailwind v4 with light/sepia/dark tokens. `pnpm lint`, `format:check`, `typecheck`, `build` all pass. `packages/shared-types` wired as a source workspace package.
+- **S0.2 done** — `apps/storymark-api` on `net10.0`: FastEndpoints + EF Core (Npgsql, no migrations) + Serilog JSON. `GET /api/health` → `{ status, version }`, verified locally; multi-stage non-root Dockerfile (build context = repo root).
+- pnpm catalog locked to current published versions (verified via `pnpm view`). Note the majors: Vite 8, Vue Router 5, TypeScript 6.
 - `docs/plan.md` and `docs/issues.md` capture the full scope through Phase 6.
-- CI workflow scaffolded under `.github/workflows/ci.yml`; will be exercised once `apps/storymark-app` and `apps/storymark-api` are scaffolded by S0.1 / S0.2.
-- `infra/compose/docker-compose.yml` is the reference Compose stack. Reverse-proxy and auth layers are pluggable per `docs/deployment/`.
+- CI dotnet job now reads the SDK from `apps/storymark-api/global.json`.
 
 ## In flight
 
-Nothing. Next slice to grab is **S0.1** (`docs/issues.md`).
+Nothing. Next slice to grab is **S0.3** (Docker Compose stack lights up) — see `docs/issues.md`.
 
 ## Conventions snapshot
 
@@ -28,7 +29,8 @@ The full conventions live in `docs/conventions/`. The short version:
 
 ## Open questions
 
-None at the moment — every decision through the scaffold is captured in `docs/adr/`.
+- **Default branch name.** This repo's default branch is `main`, but `docs/conventions/05-commit-and-pr.md` and `.github/workflows/ci.yml` (push/PR triggers + image/deploy gates) all say `master`. As-is, CI never fires on `main`. Pick one: rename the branch to `master`, or switch the convention + CI triggers to `main`. Until resolved, CI is effectively dormant.
+- **Node engine range.** `package.json` pins `engines.node` to `>=22 <23`, but local dev is on Node 24 (LTS) and CI on Node 22, so `pnpm install` warns "Unsupported engine". Decide whether to widen the range (e.g. `>=22`) and align CI's `node-version`, or hold dev to Node 22.
 
 ## Recent decisions
 

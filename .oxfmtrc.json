@@ -1,0 +1,11 @@
+{
+  "ignorePatterns": [
+    "**/*.md",
+    "**/*.yml",
+    "**/*.yaml",
+    "**/*.json",
+    "docs/**",
+    "infra/**",
+    "apps/storymark-api/**"
+  ]
+}
