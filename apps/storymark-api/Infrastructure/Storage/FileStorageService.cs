@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Globalization;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
 
@@ -59,7 +60,7 @@ internal sealed class FileStorageService(IOptions<StorageOptions> options)
                 return BookStoreResult.Failure(outcome);
             }
 
-            var bookDir = Path.Combine(_root, "books", hash);
+            var bookDir = BookDir(hash);
             var finalPath = Path.Combine(bookDir, "original.epub");
 
             if (File.Exists(finalPath))
@@ -78,6 +79,80 @@ internal sealed class FileStorageService(IOptions<StorageOptions> options)
                 File.Delete(tmpPath);
             }
         }
+    }
+
+    /// <summary>Writes the extracted cover as <c>cover.{ext}</c> under the book
+    /// directory (docs/plan.md §14) and returns its absolute path.</summary>
+    public async Task<string> StoreCoverAsync(string hash, byte[] bytes, string extension, CancellationToken ct)
+    {
+        var dir = BookDir(hash);
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "cover" + extension);
+        await File.WriteAllBytesAsync(path, bytes, ct);
+        return path;
+    }
+
+    /// <summary>Writes a section's sanitised HTML and plain-text renderings as
+    /// <c>sections/NNNN.xhtml</c>/<c>NNNN.txt</c> (1-based, 4-digit) and returns
+    /// their absolute paths.</summary>
+    public async Task<(string HtmlPath, string TextPath)> StoreSectionAsync(
+        string hash, int index, string xhtml, string plainText, CancellationToken ct)
+    {
+        var dir = Path.Combine(BookDir(hash), "sections");
+        Directory.CreateDirectory(dir);
+        var name = index.ToString("D4", CultureInfo.InvariantCulture);
+        var htmlPath = Path.Combine(dir, name + ".xhtml");
+        var textPath = Path.Combine(dir, name + ".txt");
+        await File.WriteAllTextAsync(htmlPath, xhtml, ct);
+        await File.WriteAllTextAsync(textPath, plainText, ct);
+        return (htmlPath, textPath);
+    }
+
+    /// <summary>Writes an inline image resource under <c>resources/</c>, preserving
+    /// its archive-relative path. Traversal-guarded: a path escaping the resources
+    /// root is ignored rather than written.</summary>
+    public async Task StoreResourceAsync(string hash, string normalizedPath, byte[] bytes, CancellationToken ct)
+    {
+        var target = SafeResourcePath(hash, normalizedPath);
+        var parent = target is null ? null : Path.GetDirectoryName(target);
+        if (target is null || parent is null)
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(parent);
+        await File.WriteAllBytesAsync(target, bytes, ct);
+    }
+
+    /// <summary>Resolves a request path to a stored resource file, or <c>null</c>
+    /// if it escapes the resources root or does not exist.</summary>
+    public string? ResolveResourcePath(string hash, string requestPath)
+    {
+        var path = SafeResourcePath(hash, requestPath);
+        return path is not null && File.Exists(path) ? path : null;
+    }
+
+    /// <summary>Reads a stored text artifact (a section's HTML or plain text) by
+    /// absolute path, or <c>null</c> if it no longer exists.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Performance",
+        "CA1822:Mark members as static",
+        Justification = "Instance method by design: part of the FileStorageService disk-IO surface, injected and called through the service, not statically.")]
+    public async Task<string?> ReadTextAsync(string path, CancellationToken ct) =>
+        File.Exists(path) ? await File.ReadAllTextAsync(path, ct) : null;
+
+    private string BookDir(string hash) => Path.Combine(_root, "books", hash);
+
+    /// <summary>Maps a <c>/</c>-separated request path to an absolute path inside
+    /// the book's resources directory, returning <c>null</c> if normalisation
+    /// would escape that directory (path-traversal guard).</summary>
+    private string? SafeResourcePath(string hash, string requestPath)
+    {
+        var root = Path.GetFullPath(Path.Combine(BookDir(hash), "resources"));
+        var combined = Path.GetFullPath(
+            Path.Combine(root, requestPath.Replace('/', Path.DirectorySeparatorChar)));
+        var rootWithSeparator = root + Path.DirectorySeparatorChar;
+        return combined.StartsWith(rootWithSeparator, StringComparison.Ordinal) ? combined : null;
     }
 
     /// <summary>Streams <paramref name="source"/> to <paramref name="tmpPath"/>,

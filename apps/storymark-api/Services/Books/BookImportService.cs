@@ -1,7 +1,9 @@
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Storymark.Api.Domain.Books;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Infrastructure.Storage;
+using Storymark.Api.Jobs;
 using Storymark.Api.Services.Settings;
 
 namespace Storymark.Api.Services.Books;
@@ -36,7 +38,8 @@ internal sealed class BookImportService(
     StorymarkDbContext db,
     FileStorageService storage,
     IEnumerable<IBookImportHandler> handlers,
-    ISettingsService settings)
+    ISettingsService settings,
+    IBackgroundJobClient jobs)
 {
     private const string Format = "epub";
 
@@ -93,6 +96,10 @@ internal sealed class BookImportService(
 
         db.Books.Add(book);
         await db.SaveChangesAsync(ct);
+
+        // Only newly-created books are enqueued; the dedup path above returns the
+        // existing row (already processed or in flight) without re-queuing.
+        jobs.Enqueue<ProcessBookJob>(j => j.RunAsync(book.Id, CancellationToken.None));
         return BookImportOutcome.Ok(book);
     }
 }

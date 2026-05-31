@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using FastEndpoints;
+using Storymark.Api.Domain.Books;
 using Storymark.Api.Services.Books;
 
 namespace Storymark.Api.Endpoints.Books;
@@ -27,7 +28,9 @@ internal sealed class GetBookCoverEndpoint(BookCatalogService catalog) : Endpoin
 
         if (book.CoverPath is not null && File.Exists(book.CoverPath))
         {
-            await Send.FileAsync(new FileInfo(book.CoverPath), "image/jpeg", cancellation: ct);
+            var contentType = ImageContentTypes.ContentTypeForExtension(Path.GetExtension(book.CoverPath))
+                ?? "application/octet-stream";
+            await Send.FileAsync(new FileInfo(book.CoverPath), contentType, cancellation: ct);
             return;
         }
 

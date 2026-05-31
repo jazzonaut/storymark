@@ -83,6 +83,115 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                     b.ToTable("books", (string)null);
                 });
 
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookParagraph", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BookId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("book_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Html")
+                        .HasColumnType("text")
+                        .HasColumnName("html");
+
+                    b.Property<int>("LocationEnd")
+                        .HasColumnType("integer")
+                        .HasColumnName("location_end");
+
+                    b.Property<int>("LocationStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("location_start");
+
+                    b.Property<int>("ParagraphIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("paragraph_index");
+
+                    b.Property<string>("PlainText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("plain_text");
+
+                    b.Property<Guid>("SectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("section_id");
+
+                    b.Property<int>("SectionIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("section_index");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SectionId");
+
+                    b.HasIndex("BookId", "SectionIndex", "ParagraphIndex")
+                        .IsUnique()
+                        .HasDatabaseName("book_paragraphs_book_section_index");
+
+                    b.ToTable("book_paragraphs", (string)null);
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookSection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BookId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("book_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("HtmlPath")
+                        .HasColumnType("text")
+                        .HasColumnName("html_path");
+
+                    b.Property<int>("SectionIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("section_index");
+
+                    b.Property<string>("SourceHref")
+                        .HasColumnType("text")
+                        .HasColumnName("source_href");
+
+                    b.Property<string>("TextHash")
+                        .HasColumnType("text")
+                        .HasColumnName("text_hash");
+
+                    b.Property<string>("TextPath")
+                        .HasColumnType("text")
+                        .HasColumnName("text_path");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<int>("WordCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("word_count");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookId", "SectionIndex")
+                        .IsUnique()
+                        .HasDatabaseName("book_sections_book_index");
+
+                    b.ToTable("book_sections", (string)null);
+                });
+
             modelBuilder.Entity("Storymark.Api.Domain.LlmCalls.LlmCall", b =>
                 {
                     b.Property<Guid>("Id")
@@ -189,6 +298,24 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                     b.HasKey("Key");
 
                     b.ToTable("settings", (string)null);
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookParagraph", b =>
+                {
+                    b.HasOne("Storymark.Api.Domain.Books.BookSection", null)
+                        .WithMany()
+                        .HasForeignKey("SectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookSection", b =>
+                {
+                    b.HasOne("Storymark.Api.Domain.Books.Book", null)
+                        .WithMany()
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

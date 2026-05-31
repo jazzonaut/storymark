@@ -1,4 +1,7 @@
 using FastEndpoints;
+using Hangfire;
+using Hangfire.Dashboard;
+using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -8,6 +11,7 @@ using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Infrastructure.Llm;
 using Storymark.Api.Infrastructure.Settings;
 using Storymark.Api.Infrastructure.Storage;
+using Storymark.Api.Jobs;
 using Storymark.Api.Services.Books;
 using Storymark.Api.Services.Llm;
 using Storymark.Api.Services.Settings;
@@ -51,8 +55,18 @@ try
         builder.Configuration.GetSection(StorageOptions.SectionName));
     builder.Services.AddSingleton<FileStorageService>();
     builder.Services.AddSingleton<IBookImportHandler, EpubImportHandler>();
+    builder.Services.AddSingleton<ContentSanitizationService>();
     builder.Services.AddScoped<BookImportService>();
     builder.Services.AddScoped<BookCatalogService>();
+    builder.Services.AddScoped<BookSectionService>();
+    builder.Services.AddScoped<ProcessBookJob>();
+
+    builder.Services.AddHangfire(config => config
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UsePostgreSqlStorage(o => o.UseNpgsqlConnection(connectionString)));
+    builder.Services.AddHangfireServer();
 
     // Ceiling for the upload endpoint; the precise per-request cap is the live
     // `upload.maxBytes` setting, enforced while streaming in FileStorageService.
@@ -76,6 +90,13 @@ try
     await app.Services.GetRequiredService<ISettingsService>().LoadAllAsync(CancellationToken.None);
 
     app.UseSerilogRequestLogging();
+
+    var settingsService = app.Services.GetRequiredService<ISettingsService>();
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = [new HangfireDashboardAuthFilter(settingsService)],
+    });
+
     app.UseFastEndpoints(c => c.Endpoints.RoutePrefix = "api");
 
     await app.RunAsync();

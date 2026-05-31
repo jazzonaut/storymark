@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using FastEndpoints;
 using Storymark.Api.Services.Settings;
 
@@ -21,14 +18,9 @@ internal sealed class AdminAuthPreProcessor(ISettingsService settings) : IGlobal
     {
         var presented = ExtractToken(context.HttpContext.Request.Headers.Authorization.ToString());
 
-        // Fail closed: a missing token setting means no one can authenticate (401,
-        // not a 500), and an empty configured token must never match (otherwise a
-        // bare "Authorization: Bearer " header would authenticate as the empty secret).
-        var expected = settings.TryGetSnapshot("auth.bearerToken", out var snapshot)
-            ? JsonSerializer.Deserialize<string>(snapshot.Value) ?? string.Empty
-            : string.Empty;
-
-        if (expected.Length == 0 || string.IsNullOrEmpty(presented) || !FixedTimeEquals(presented, expected))
+        // Fail closed (see AdminToken): a missing/empty configured token matches
+        // nothing, so no header can authenticate as an unset secret.
+        if (presented is null || !AdminToken.Matches(presented, AdminToken.Current(settings)))
         {
             await context.HttpContext.Response.SendUnauthorizedAsync(ct);
             return;
@@ -39,7 +31,4 @@ internal sealed class AdminAuthPreProcessor(ISettingsService settings) : IGlobal
 
     private static string? ExtractToken(string header) =>
         header.StartsWith(Scheme, StringComparison.Ordinal) ? header[Scheme.Length..] : null;
-
-    private static bool FixedTimeEquals(string a, string b) =>
-        CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(a), Encoding.UTF8.GetBytes(b));
 }

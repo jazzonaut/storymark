@@ -13,6 +13,10 @@ internal sealed class StorymarkDbContext(DbContextOptions<StorymarkDbContext> op
 
     public DbSet<Book> Books => Set<Book>();
 
+    public DbSet<BookSection> BookSections => Set<BookSection>();
+
+    public DbSet<BookParagraph> BookParagraphs => Set<BookParagraph>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(StorymarkDbContext).Assembly);
