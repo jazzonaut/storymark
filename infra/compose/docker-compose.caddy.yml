@@ -1,0 +1,113 @@
+# Storymark — production stack for a caddy-docker-proxy host (Portainer Git stack).
+#
+# Portainer CE Git stacks deploy a SINGLE compose file, so the generic
+# docker-compose.yml + docker-compose.proxy.yml overlay can't be merged there
+# (see docs/deployment/02-portainer-gitops.md). This is the sanctioned
+# "combined file": the same three services, but wired for the shared `caddy`
+# network instead of a published host port, and using host bind mounts.
+#
+# Point the Portainer stack's "Compose path" at this file.
+#
+# Required stack env (Portainer → stack → Environment variables):
+#   POSTGRES_PASSWORD                  - Storymark Postgres password
+#   STORYMARK_BEARER_TOKEN_SEED        - initial admin bearer token; rotate from /admin
+#   STORYMARK_SETTINGS_ENCRYPTION_KEY  - base64 32-byte key for encrypting secret settings
+#   STORYMARK_API_IMAGE                - full image ref without tag (CI upserts this on redeploy)
+#   STORYMARK_DATA_ROOT                - host dir for Postgres + book-file bind mounts, e.g. /opt/docker/storymark
+#                                        (Ollama models stay on a named volume, see below)
+#   STORYMARK_PUBLIC_HOSTS             - public host(s) for the caddy routing label, no scheme
+#
+# Optional stack env:
+#   STORYMARK_API_TAG                  - image tag (default: latest; pin to a SHA for rollback)
+#   STORYMARK_PUBLIC_URL               - public URL the SPA is served from (SW scope / deep links)
+#   STORYMARK_DEBUG_ENDPOINTS          - expose /api/_debug/* (default false; keep false in prod)
+#
+# The `caddy` network is external and must already exist on the host
+# (`docker network create caddy`) — it's the network your caddy-docker-proxy
+# container watches. Authelia / access-control import snippets are intentionally
+# omitted; add them here when SSO lands.
+
+services:
+  api:
+    image: ${STORYMARK_API_IMAGE:?set STORYMARK_API_IMAGE}:${STORYMARK_API_TAG:-latest}
+    container_name: storymark-api
+    restart: unless-stopped
+    pull_policy: always
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=storymark;Username=storymark;Password=${POSTGRES_PASSWORD}
+      Ollama__Url: http://ollama:11434
+      Storage__RootPath: /data
+      Auth__BearerTokenSeed: ${STORYMARK_BEARER_TOKEN_SEED}
+      Settings__EncryptionKey: ${STORYMARK_SETTINGS_ENCRYPTION_KEY}
+      Storymark__PublicUrl: ${STORYMARK_PUBLIC_URL:-}
+      Storymark__DebugEndpointsEnabled: ${STORYMARK_DEBUG_ENDPOINTS:-false}
+    volumes:
+      - ${STORYMARK_DATA_ROOT:?set STORYMARK_DATA_ROOT}/data:/data
+    networks:
+      - storymark-internal
+      - caddy
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://localhost:8080/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    labels:
+      org.storymark.role: api
+      caddy: ${STORYMARK_PUBLIC_HOSTS:?set STORYMARK_PUBLIC_HOSTS}
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: storymark-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: storymark
+      POSTGRES_USER: storymark
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ${STORYMARK_DATA_ROOT:?set STORYMARK_DATA_ROOT}/postgres:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - storymark-internal
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "storymark", "-d", "storymark"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    labels:
+      org.storymark.role: postgres
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: storymark-ollama
+    restart: unless-stopped
+    volumes:
+      # Models stay on a Docker named volume, NOT a bind mount under
+      # STORYMARK_DATA_ROOT — they are large and re-pullable, so a host-path
+      # backup tool watching /opt/docker shouldn't sweep them. Keep this volume
+      # key (and the Portainer stack name) unchanged to reuse already-pulled models.
+      - storymark_ollama:/root/.ollama
+    networks:
+      - storymark-internal
+    labels:
+      org.storymark.role: ollama
+
+networks:
+  storymark-internal:
+    driver: bridge
+  caddy:
+    external: true
+
+volumes:
+  # Postgres data and book files live in host bind mounts under
+  # STORYMARK_DATA_ROOT (backed up); only the Ollama model cache is a
+  # Docker-managed named volume (excluded from host-path backups).
+  storymark_ollama:
