@@ -67,8 +67,8 @@ services:
       # docker-compose.proxy.yml — see docs/deployment/03-reverse-proxy-options.md.
 
   postgres:
-    # pgvector pre-installed; matches the version used in CI.
-    image: pgvector/pgvector:pg16
+    # pgvector pre-installed; the vector extension is enabled by postgres-init.
+    image: pgvector/pgvector:0.8.2-pg18
     container_name: storymark-postgres
     restart: unless-stopped
     environment:
@@ -90,7 +90,7 @@ services:
       org.storymark.role: postgres
 
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.24.0
     container_name: storymark-ollama
     restart: unless-stopped
     volumes:

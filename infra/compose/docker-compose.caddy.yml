@@ -67,7 +67,7 @@ services:
       caddy.reverse_proxy: "{{upstreams 8080}}"
 
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:0.8.2-pg18
     container_name: storymark-postgres
     restart: unless-stopped
     environment:
@@ -88,7 +88,7 @@ services:
       org.storymark.role: postgres
 
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.24.0
     container_name: storymark-ollama
     restart: unless-stopped
     volumes:
