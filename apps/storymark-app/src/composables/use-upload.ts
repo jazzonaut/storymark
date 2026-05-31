@@ -1,7 +1,8 @@
 import { ref } from "vue";
 import type { Ref } from "vue";
 import type { BookSummary } from "@storymark/shared-types";
-import { booksApi, BooksApiError } from "@/api/books-api";
+import { ApiError } from "@/api/api-error";
+import { booksApi } from "@/api/books-api";
 
 interface UseUpload {
   readonly isUploading: Ref<boolean>;
@@ -21,7 +22,7 @@ export function useUpload(): UseUpload {
     try {
       return await booksApi.upload(file);
     } catch (caught) {
-      error.value = caught instanceof BooksApiError ? caught.message : "Upload failed.";
+      error.value = caught instanceof ApiError ? caught.message : "Upload failed.";
       return null;
     } finally {
       isUploading.value = false;

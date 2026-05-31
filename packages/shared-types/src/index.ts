@@ -23,3 +23,33 @@ export interface BookSummary {
   readonly lastReadSection: number | null;
   readonly lastOpenedAt: string | null;
 }
+
+/** One entry in the section manifest (`GET /api/books/{id}/sections`).
+ * Mirrors SectionSummaryView in apps/storymark-api/Services/Books/SectionViews.cs. */
+export interface SectionSummary {
+  readonly sectionIndex: number;
+  readonly title: string | null;
+  readonly wordCount: number;
+  readonly paragraphCount: number;
+}
+
+/** A paragraph within a section. `locationStart`/`locationEnd` are half-open
+ * character offsets into the section's plain-text rendering — the shared
+ * coordinate space for position tracking, chunking, and retrieval.
+ * Mirrors ParagraphView. */
+export interface Paragraph {
+  readonly paragraphIndex: number;
+  readonly locationStart: number;
+  readonly locationEnd: number;
+  readonly html: string | null;
+  readonly text: string;
+}
+
+/** Full section content (`GET /api/books/{id}/sections/{idx}`): sanitised HTML
+ * plus paragraph offsets. Mirrors SectionContentView. */
+export interface Section {
+  readonly sectionIndex: number;
+  readonly title: string | null;
+  readonly html: string;
+  readonly paragraphs: readonly Paragraph[];
+}

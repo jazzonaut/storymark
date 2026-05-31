@@ -180,14 +180,15 @@ Estimates are rough T-shirt sizes: **S** ≈ ½ day, **M** ≈ 1–2 days, **L**
 **Acceptance:** open the EPUB from S2.1; swipe through pages; change font size → page reflows without losing position; theme switch is instant.
 **Depends on:** S2.1
 
-### S2.3 — Whole-book offline cache via Dexie — **L**
-**Goal:** First time I open a book online, the whole book is downloaded into IndexedDB; subsequent opens work fully offline (airplane mode).
+### S2.3 — PWA service worker + offline state — **M**
+**Goal:** The reader works fully offline (airplane mode) and is installable as a PWA.
+
+> **Scope note (S2.2):** The Dexie cache foundation moved into S2.2, which already ships: the `src/db/storymark-db.ts` schema (`manifests`, `sections`, `readerSettings`), the whole-book prefetch in parallel batches of 4 with a "Caching N/M" progress UI, and the read-through `readerApi` (IndexedDB-first, API fallback, write-back). S2.3 is the remaining PWA/offline layer on top of that.
+
 **Frontend:**
-- Dexie schema in `src/db/storymarkDb.ts` covering `books`, `sections`, `paragraphs`, `bookmarks`, `pendingProgress`
-- On first open: fetch `/api/books/{id}/sections` (manifest), then download every section in parallel batches of 4, write to Dexie; progress UI ("Caching 7/24")
-- `readerApi` always reads-through Dexie: hit IndexedDB first, fall back to API, then write-back
 - `useOfflineSync.ts` exposes online/offline state
 - Service worker (`vite-plugin-pwa`): app shell precache; runtime cache for `/api/books/.../cover`
+- Extend the Dexie schema with `bookmarks` / `pendingProgress` stores as S2.4/S2.5 need them
 - "Installed app" check (BeforeInstallPromptEvent) and install button in toolbar
 **Acceptance:** open a book online → see caching progress → kill the dev server → reload PWA in airplane mode → can still read the whole book and swipe pages.
 **Depends on:** S2.2

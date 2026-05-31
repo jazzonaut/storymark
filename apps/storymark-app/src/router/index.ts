@@ -10,6 +10,11 @@ const routes: readonly RouteRecordRaw[] = [
     component: () => import("@/views/BookUploadView.vue"),
   },
   {
+    path: "/books/:id/read",
+    name: "reader",
+    component: () => import("@/views/ReaderView.vue"),
+  },
+  {
     path: "/admin",
     component: () => import("@/views/admin/AdminView.vue"),
     children: [

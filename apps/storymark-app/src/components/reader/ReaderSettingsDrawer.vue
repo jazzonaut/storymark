@@ -1,0 +1,131 @@
+<script setup lang="ts">
+import RangeControl from "@/components/reader/RangeControl.vue";
+import SegmentedControl from "@/components/reader/SegmentedControl.vue";
+import { useReaderSettings } from "@/composables/use-reader-settings";
+import type { EntityHighlightMode, ReaderFontFamily, ReaderTheme } from "@/db/storymark-db";
+
+defineProps<{ open: boolean }>();
+
+defineEmits<{ (e: "close"): void }>();
+
+const { settings, update, reset } = useReaderSettings();
+
+const THEMES: readonly { value: ReaderTheme; label: string }[] = [
+  { value: "light", label: "Light" },
+  { value: "sepia", label: "Sepia" },
+  { value: "dark", label: "Dark" },
+];
+
+const FONTS: readonly { value: ReaderFontFamily; label: string }[] = [
+  { value: "serif", label: "Serif" },
+  { value: "sans", label: "Sans" },
+  { value: "mono", label: "Mono" },
+];
+
+const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "subtle", label: "Subtle" },
+  { value: "always", label: "Always" },
+];
+</script>
+
+<template>
+  <div v-if="open" class="absolute inset-0 z-30" @click.self="$emit('close')">
+    <div class="absolute inset-0 bg-black/30"></div>
+    <section
+      class="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-[var(--sm-bg)] p-5 shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:w-80 sm:max-h-none sm:rounded-none"
+    >
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-base font-semibold">Reader settings</h2>
+        <button
+          type="button"
+          class="rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
+          @click="$emit('close')"
+        >
+          Done
+        </button>
+      </div>
+
+      <div class="space-y-5">
+        <div>
+          <p class="mb-1 text-sm font-medium">Theme</p>
+          <SegmentedControl
+            :model-value="settings.theme"
+            :options="THEMES"
+            @update:model-value="(value) => update('theme', value)"
+          />
+        </div>
+
+        <div>
+          <p class="mb-1 text-sm font-medium">Font</p>
+          <SegmentedControl
+            :model-value="settings.fontFamily"
+            :options="FONTS"
+            @update:model-value="(value) => update('fontFamily', value)"
+          />
+        </div>
+
+        <RangeControl
+          label="Font size"
+          :model-value="settings.fontSizePx"
+          :min="14"
+          :max="28"
+          :step="1"
+          unit="px"
+          @update:model-value="(value) => update('fontSizePx', value)"
+        />
+
+        <RangeControl
+          label="Line height"
+          :model-value="settings.lineHeight"
+          :min="1.2"
+          :max="2.2"
+          :step="0.05"
+          :fraction-digits="2"
+          @update:model-value="(value) => update('lineHeight', value)"
+        />
+
+        <RangeControl
+          label="Paragraph spacing"
+          :model-value="settings.paragraphSpacingEm"
+          :min="0"
+          :max="2"
+          :step="0.1"
+          unit="em"
+          :fraction-digits="1"
+          @update:model-value="(value) => update('paragraphSpacingEm', value)"
+        />
+
+        <RangeControl
+          label="Content width"
+          :model-value="settings.contentWidthPx"
+          :min="480"
+          :max="960"
+          :step="20"
+          unit="px"
+          @update:model-value="(value) => update('contentWidthPx', value)"
+        />
+
+        <div>
+          <p class="mb-1 text-sm font-medium">
+            Entity highlight
+            <span class="ml-1 text-xs font-normal text-[var(--sm-muted)]">(active in Phase 6)</span>
+          </p>
+          <SegmentedControl
+            :model-value="settings.entityHighlight"
+            :options="HIGHLIGHTS"
+            @update:model-value="(value) => update('entityHighlight', value)"
+          />
+        </div>
+
+        <button
+          type="button"
+          class="text-sm text-[var(--sm-accent)] hover:underline"
+          @click="reset"
+        >
+          Reset to defaults
+        </button>
+      </div>
+    </section>
+  </div>
+</template>

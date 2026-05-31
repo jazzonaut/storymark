@@ -1,8 +1,22 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { RouterLink } from "vue-router";
 import type { BookSummary, ProcessingStatus } from "@storymark/shared-types";
 
 const props = defineProps<{ book: BookSummary }>();
+
+// Sections exist from Parsed onward (S2.1); only then can the reader open.
+const READABLE: ReadonlySet<ProcessingStatus> = new Set<ProcessingStatus>([
+  "Parsed",
+  "Chunking",
+  "DetectingEntities",
+  "ExtractingPerSection",
+  "Embedding",
+  "BuildingMemorySnapshots",
+  "Indexed",
+]);
+
+const isReadable = computed<boolean>(() => READABLE.has(props.book.processingStatus));
 
 const STATUS_STYLES: Record<ProcessingStatus, string> = {
   Uploaded: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
@@ -23,9 +37,14 @@ const coverFailed = ref(false);
 </script>
 
 <template>
-  <article class="flex flex-col">
+  <component
+    :is="isReadable ? RouterLink : 'article'"
+    v-bind="isReadable ? { to: { name: 'reader', params: { id: book.bookId } } } : {}"
+    class="flex flex-col"
+    :class="isReadable ? 'group cursor-pointer' : ''"
+  >
     <div
-      class="flex aspect-[2/3] items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800"
+      class="flex aspect-[2/3] items-center justify-center overflow-hidden rounded-lg bg-zinc-100 transition group-hover:opacity-90 dark:bg-zinc-800"
     >
       <img
         v-if="!coverFailed"
@@ -44,5 +63,5 @@ const coverFailed = ref(false);
     >
       {{ book.processingStatus }}
     </span>
-  </article>
+  </component>
 </template>

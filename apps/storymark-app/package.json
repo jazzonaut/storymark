@@ -12,6 +12,7 @@
   "dependencies": {
     "@primeuix/themes": "catalog:",
     "@storymark/shared-types": "workspace:*",
+    "dexie": "catalog:",
     "echarts": "catalog:",
     "primevue": "catalog:",
     "vue": "catalog:",
