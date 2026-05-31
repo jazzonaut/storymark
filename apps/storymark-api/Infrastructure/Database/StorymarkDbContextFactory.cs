@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
+using Pgvector.EntityFrameworkCore;
 
 namespace Storymark.Api.Infrastructure.Database;
 
@@ -20,7 +21,7 @@ internal sealed class StorymarkDbContextFactory : IDesignTimeDbContextFactory<St
             ?? "Host=localhost;Port=5432;Database=storymark;Username=storymark;Password=storymark";
 
         var options = new DbContextOptionsBuilder<StorymarkDbContext>()
-            .UseNpgsql(connectionString)
+            .UseNpgsql(connectionString, npgsql => npgsql.UseVector())
             .Options;
 
         return new StorymarkDbContext(options);

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using Pgvector;
 using Storymark.Api.Infrastructure.Database;
 
 #nullable disable
@@ -20,6 +21,7 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                 .HasAnnotation("ProductVersion", "10.0.4")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("Storymark.Api.Domain.Books.Book", b =>
@@ -120,6 +122,76 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasDatabaseName("book_bookmarks_book");
 
                     b.ToTable("book_bookmarks", (string)null);
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookChunk", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BookId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("book_id");
+
+                    b.Property<int>("ChunkIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("chunk_index");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Vector>("Embedding")
+                        .HasColumnType("vector(768)")
+                        .HasColumnName("embedding");
+
+                    b.Property<string>("EmbeddingModelId")
+                        .HasColumnType("text")
+                        .HasColumnName("embedding_model_id");
+
+                    b.Property<string>("EmbeddingModelVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("embedding_model_version");
+
+                    b.Property<int>("LocationEnd")
+                        .HasColumnType("integer")
+                        .HasColumnName("location_end");
+
+                    b.Property<int>("LocationStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("location_start");
+
+                    b.Property<Guid>("SectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("section_id");
+
+                    b.Property<int>("SectionIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("section_index");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.Property<int>("TokenEstimate")
+                        .HasColumnType("integer")
+                        .HasColumnName("token_estimate");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SectionId");
+
+                    b.HasIndex("BookId", "SectionIndex", "ChunkIndex")
+                        .IsUnique()
+                        .HasDatabaseName("book_chunks_book_section_chunk");
+
+                    b.HasIndex("BookId", "SectionIndex", "LocationStart")
+                        .HasDatabaseName("book_chunks_pos");
+
+                    b.ToTable("book_chunks", (string)null);
                 });
 
             modelBuilder.Entity("Storymark.Api.Domain.Books.BookParagraph", b =>
@@ -393,6 +465,21 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                     b.HasOne("Storymark.Api.Domain.Books.Book", null)
                         .WithMany()
                         .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookChunk", b =>
+                {
+                    b.HasOne("Storymark.Api.Domain.Books.Book", null)
+                        .WithMany()
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Storymark.Api.Domain.Books.BookSection", null)
+                        .WithMany()
+                        .HasForeignKey("SectionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

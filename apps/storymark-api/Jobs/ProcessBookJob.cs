@@ -8,15 +8,18 @@ using Storymark.Api.Services.Books;
 namespace Storymark.Api.Jobs;
 
 /// <summary>Background processing for an uploaded book (docs/plan.md §15.2):
-/// parse the EPUB, store the cover and per-section artifacts, and persist
-/// <see cref="BookSection"/>/<see cref="BookParagraph"/> rows, driving
-/// <see cref="ProcessingStatus"/> from <c>Uploaded</c> through <c>Parsing</c> to
-/// <c>Parsed</c>. Chunking, embedding, and extraction are later slices.
+/// parse the EPUB, store the cover and per-section artifacts, persist
+/// <see cref="BookSection"/>/<see cref="BookParagraph"/> rows, then chunk every
+/// section into <see cref="BookChunk"/> rows. Drives <see cref="ProcessingStatus"/>
+/// <c>Uploaded → Parsing → Parsed → Chunking → Embedding</c>; it rests at
+/// <c>Embedding</c> because the embedding job that finishes the run (<c>Indexed</c>)
+/// is the next slice (S3.2).
 ///
 /// <para><see cref="AutomaticRetryAttribute"/> is set to zero: a parse failure is
 /// deterministic (a malformed file), so a retry would just fail again — it surfaces
 /// as Failed in the dashboard instead. Re-running (e.g. a manual requeue) is safe:
-/// existing sections are cleared first.</para></summary>
+/// existing sections are cleared first, which cascade-deletes their paragraphs and
+/// chunks.</para></summary>
 internal sealed class ProcessBookJob(
     StorymarkDbContext db,
     FileStorageService storage,
@@ -51,6 +54,8 @@ internal sealed class ProcessBookJob(
             await SetStatusAsync(book, ProcessingStatus.Parsed, ct);
             logger.LogInformation(
                 "Parsed book {BookId}: {SectionCount} sections", bookId, content.Sections.Count);
+
+            await ChunkBookAsync(book, ct);
         }
         catch (Exception ex)
         {
@@ -58,6 +63,61 @@ internal sealed class ProcessBookJob(
             await SetStatusAsync(book, ProcessingStatus.Failed, ct);
             throw;
         }
+    }
+
+    private async Task ChunkBookAsync(Book book, CancellationToken ct)
+    {
+        await SetStatusAsync(book, ProcessingStatus.Chunking, ct);
+
+        var sections = await db.BookSections
+            .Where(s => s.BookId == book.Id)
+            .OrderBy(s => s.SectionIndex)
+            .ToListAsync(ct);
+
+        var paragraphsBySection = (await db.BookParagraphs
+                .Where(p => p.BookId == book.Id)
+                .OrderBy(p => p.SectionIndex)
+                .ThenBy(p => p.ParagraphIndex)
+                .ToListAsync(ct))
+            .GroupBy(p => p.SectionId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<BookParagraph>)[.. g]);
+
+        var now = DateTimeOffset.UtcNow;
+        var chunkCount = 0;
+
+        foreach (var section in sections)
+        {
+            if (!paragraphsBySection.TryGetValue(section.Id, out var paragraphs))
+            {
+                continue;
+            }
+
+            var drafts = SectionChunkingService.Chunk(paragraphs);
+            for (var chunkIndex = 0; chunkIndex < drafts.Count; chunkIndex++)
+            {
+                var draft = drafts[chunkIndex];
+                db.BookChunks.Add(new BookChunk
+                {
+                    Id = Guid.NewGuid(),
+                    BookId = book.Id,
+                    SectionId = section.Id,
+                    SectionIndex = section.SectionIndex,
+                    ChunkIndex = chunkIndex,
+                    LocationStart = draft.LocationStart,
+                    LocationEnd = draft.LocationEnd,
+                    Text = draft.Text,
+                    TokenEstimate = draft.TokenEstimate,
+                    CreatedAt = now,
+                });
+                chunkCount++;
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        // Embeddings land in S3.2; the book rests at Embedding until that job runs.
+        await SetStatusAsync(book, ProcessingStatus.Embedding, ct);
+        logger.LogInformation("Chunked book {BookId}: {ChunkCount} chunks", book.Id, chunkCount);
     }
 
     private async Task PersistSectionsAsync(Book book, BookContent content, CancellationToken ct)

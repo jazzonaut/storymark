@@ -17,12 +17,15 @@ internal sealed class StorymarkDbContext(DbContextOptions<StorymarkDbContext> op
 
     public DbSet<BookParagraph> BookParagraphs => Set<BookParagraph>();
 
+    public DbSet<BookChunk> BookChunks => Set<BookChunk>();
+
     public DbSet<ReadingProgress> ReadingProgress => Set<ReadingProgress>();
 
     public DbSet<BookBookmark> BookBookmarks => Set<BookBookmark>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasPostgresExtension("vector");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(StorymarkDbContext).Assembly);
     }
 }

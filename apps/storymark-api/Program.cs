@@ -5,6 +5,7 @@ using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
+using Pgvector.EntityFrameworkCore;
 using Serilog;
 using Serilog.Formatting.Compact;
 using Storymark.Api.Infrastructure.Auth;
@@ -33,7 +34,8 @@ try
     var connectionString = builder.Configuration.GetConnectionString("Postgres")
         ?? throw new InvalidOperationException("ConnectionStrings:Postgres is not configured.");
 
-    builder.Services.AddDbContext<StorymarkDbContext>(options => options.UseNpgsql(connectionString));
+    builder.Services.AddDbContext<StorymarkDbContext>(
+        options => options.UseNpgsql(connectionString, npgsql => npgsql.UseVector()));
     builder.Services.Configure<SettingsDefaultsOptions>(
         builder.Configuration.GetSection(SettingsDefaultsOptions.SectionName));
     builder.Services.AddSingleton<ISettingsEncryptor, AesGcmSettingsEncryptor>();
