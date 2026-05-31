@@ -3,6 +3,7 @@ using Hangfire;
 using Hangfire.Dashboard;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -93,6 +94,14 @@ try
 
     app.UseSerilogRequestLogging();
 
+    // The built SPA ships in wwwroot (ADR-0013) and is served on the same origin
+    // as the API. .webmanifest isn't in the default content-type map; without it
+    // browsers reject the PWA manifest.
+    var staticContentTypes = new FileExtensionContentTypeProvider();
+    staticContentTypes.Mappings[".webmanifest"] = "application/manifest+json";
+    app.UseDefaultFiles();
+    app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = staticContentTypes });
+
     var settingsService = app.Services.GetRequiredService<ISettingsService>();
     app.UseHangfireDashboard("/hangfire", new DashboardOptions
     {
@@ -100,6 +109,24 @@ try
     });
 
     app.UseFastEndpoints(c => c.Endpoints.RoutePrefix = "api");
+
+    // SPA deep links (e.g. /books/{id}/read) fall back to the app shell, but an
+    // unknown /api or /hangfire path must still 404 rather than return HTML.
+    var webRoot = app.Environment.WebRootPath;
+    app.MapFallback(async context =>
+    {
+        var indexHtml = Path.Combine(webRoot ?? string.Empty, "index.html");
+        if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)
+            || context.Request.Path.StartsWithSegments("/hangfire", StringComparison.OrdinalIgnoreCase)
+            || !File.Exists(indexHtml))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        context.Response.ContentType = "text/html; charset=utf-8";
+        await context.Response.SendFileAsync(indexHtml);
+    });
 
     await app.RunAsync();
 }

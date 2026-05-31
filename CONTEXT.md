@@ -64,6 +64,7 @@ Resolved:
 
 Newest first. Full record in `docs/adr/`.
 
+- ADR-0013 — SPA served by the API as static files (same-origin, single image); the API image now carries the built Vue app in `wwwroot`.
 - ADR-0012 — Automated tests deferred until after Phase 6.
 - ADR-0011 — LLM call log + cost meter as core admin surfaces.
 - ADR-0010 — pgvector with version-tagged embeddings (not Qdrant).

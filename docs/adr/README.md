@@ -20,6 +20,7 @@ If a decision is small enough that "look at the code" answers it, it's not an AD
 | 0010 | [Version-tagged embeddings + warn-reindex flow](0010-version-tagged-embeddings.md) | accepted |
 | 0011 | [LLM call log + cost meter](0011-llm-call-log.md)              | accepted |
 | 0012 | [Tests deferred until after Phase 6](0012-tests-deferred.md)   | accepted |
+| 0013 | [SPA served by the API (same-origin, single image)](0013-spa-served-by-api.md) | accepted |
 
 ## When to write one
 
