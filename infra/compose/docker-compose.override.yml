@@ -1,0 +1,15 @@
+# Local development override — auto-merged by `docker compose` when run from
+# this directory. It builds the api image from source instead of pulling a
+# published one, so `docker compose up` works on a clean machine.
+#
+# Production (Portainer Git deploy) uses docker-compose.yml ONLY and never sees
+# this file, so the prod stack stays image-based. See infra/compose/README.md.
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/storymark-api/Dockerfile
+    image: storymark-api:latest
+    # Build locally rather than pulling (base compose sets pull_policy: always).
+    pull_policy: build

@@ -39,13 +39,11 @@ services:
       - storymark_files:/data
     networks:
       - storymark-internal
-      # When STORYMARK_PROXY_NETWORK is set, the api also joins that external
-      # network. Compose syntax doesn't conditionally include networks, so the
-      # network must exist with this exact name to be joined. The simplest
-      # pattern is to set STORYMARK_PROXY_NETWORK to either the real proxy
-      # network or "storymark-internal" (which exists and is harmless to
-      # rejoin). The latter is the no-proxy default.
-      - ${STORYMARK_PROXY_NETWORK:-storymark-internal}
+      # Attaching the api to an external reverse-proxy network is done with a
+      # proxy override file, not an env-substituted list item here: Compose v2
+      # can't express "internal + optional external" that way, and rejects the
+      # duplicate when the proxy var falls back to storymark-internal. See the
+      # proxy redesign noted in CONTEXT.md / docs/deployment/03-reverse-proxy-options.md.
     ports:
       # Empty STORYMARK_API_PUBLISHED_PORT disables the host-side publish
       # (typical when a reverse proxy on a shared network handles ingress).
@@ -63,14 +61,9 @@ services:
       retries: 5
       start_period: 60s
     labels:
-      # Reverse-proxy labels are JSON-merged into the running container's
-      # labels via the env variable. See docs/deployment/03-reverse-proxy-options.md
-      # for caddy-docker-proxy / traefik examples.
-      #
-      # caddy-docker-proxy example (uncomment + set STORYMARK_PROXY_NETWORK=caddy):
-      # caddy: ${STORYMARK_PUBLIC_HOSTS:-storymark.example.com}
-      # caddy.reverse_proxy: "{{upstreams 8080}}"
       org.storymark.role: api
+      # Reverse-proxy labels (caddy-docker-proxy / Traefik) live in
+      # docker-compose.proxy.yml — see docs/deployment/03-reverse-proxy-options.md.
 
   postgres:
     # pgvector pre-installed; matches the version used in CI.
@@ -83,6 +76,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - storymark_postgres:/var/lib/postgresql/data
+      # Runs *.sql once on first init (empty data dir) — enables pgvector.
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     networks:
       - storymark-internal
     healthcheck:

@@ -4,10 +4,24 @@ Reference Docker Compose stack for Storymark. Three services: `api`, `postgres` 
 
 ## Local one-off
 
+`docker-compose.override.yml` is auto-merged locally and builds the `api` image
+from source (context = repo root), so no registry is needed.
+
 ```bash
 cp .env.example .env       # edit before first up
-docker compose up -d
+docker compose up -d --build
 docker compose logs -f api
+```
+
+Verify the stack is healthy (S0.3 acceptance):
+
+```bash
+docker compose ps                                    # api + postgres show healthy
+curl -fsS http://localhost:8088/api/health           # {"status":"ok",...}
+docker compose exec postgres psql -U storymark -d storymark -c 'SELECT 1;'
+docker compose exec postgres psql -U storymark -d storymark \
+  -c "SELECT extname FROM pg_extension WHERE extname = 'vector';"   # -> vector
+docker compose exec ollama ollama list               # lists models (empty until pulled)
 ```
 
 ## Production via Portainer
