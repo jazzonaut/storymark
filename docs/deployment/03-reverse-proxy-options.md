@@ -1,62 +1,79 @@
 # Reverse Proxy Options
 
-Storymark's API exposes plain HTTP on port `8080` inside the container. The reference Compose file publishes that on a configurable host port; everything else is up to your reverse-proxy choice.
+Storymark's API exposes plain HTTP on port `8080` inside the container. There are two integration shapes, and the Compose files mirror them:
 
-The compose file accepts two relevant env vars:
+- **Standalone (base file only).** `docker-compose.yml` publishes the API on a configurable host port (`STORYMARK_API_PUBLISHED_PORT`, default `127.0.0.1:8088`). Front it with a host-level proxy pointed at that port, or reach it directly on a LAN/Tailscale. This is Options C and D below, and it's what Portainer's single-file Git stack deploys.
+- **Shared Docker network (base + proxy overlay).** For label-driven proxies that watch the Docker socket (caddy-docker-proxy, Traefik), add `docker-compose.proxy.yml`. It joins the `api` service to your existing external proxy network and applies routing labels. This is Options A and B.
 
-| Variable                          | Purpose                                                              |
-| --------------------------------- | -------------------------------------------------------------------- |
-| `STORYMARK_PROXY_NETWORK`         | External Docker network to attach the API to. Empty = no proxy.     |
-| `STORYMARK_REVERSE_PROXY_LABELS`  | JSON object of additional labels merged onto the API service.        |
+```bash
+# Shared-network proxy:
+docker network create "$STORYMARK_PROXY_NETWORK"   # once, if it doesn't exist
+docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+```
 
-This pattern lets the same compose file serve every option below without conditional rendering.
+Relevant env vars:
+
+| Variable                      | Used by            | Purpose                                                        |
+| ----------------------------- | ------------------ | -------------------------------------------------------------- |
+| `STORYMARK_API_PUBLISHED_PORT`| base file          | Host port to publish the API on (standalone / host-proxy).     |
+| `STORYMARK_PROXY_NETWORK`     | proxy overlay      | Existing external Docker network to attach the API to.         |
+| `STORYMARK_PUBLIC_HOSTS`      | proxy overlay      | Public host(s) for the routing label, no scheme.               |
+
+> Why an overlay and not one env-switched file: Compose can't conditionally add a single network membership or merge an arbitrary set of labels from an env var. "Internal network plus an optional external one" is two files, not one substitution.
 
 ---
 
 ## Option A — caddy-docker-proxy
 
-[caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy) watches the Docker socket for labels and generates a Caddyfile on the fly. ACME / HTTPS is automatic.
+[caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy) watches the Docker socket for labels and generates a Caddyfile on the fly. ACME / HTTPS is automatic. This is what `docker-compose.proxy.yml` ships by default.
 
-Compose env:
+`.env`:
 
 ```env
 STORYMARK_PROXY_NETWORK=caddy
-STORYMARK_REVERSE_PROXY_LABELS={"caddy":"storymark.example.com","caddy.reverse_proxy":"{{upstreams 8080}}"}
+STORYMARK_PUBLIC_HOSTS=storymark.example.com
+```
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
 ```
 
 What you get:
 
 - `https://storymark.example.com` proxied to `api:8080`.
 - ACME cert issued + renewed automatically by Caddy.
-- No published host port required on the API service — proxy and API talk over the `caddy` network.
+- Proxy and API talk over the `caddy` network; no published host port is required (the base file's `127.0.0.1` publish is harmless and can be dropped).
 
-If you want auth, see [`04-auth-options.md`](04-auth-options.md) — the Authelia + Caddy pattern adds two more labels.
+If you want auth, see [`04-auth-options.md`](04-auth-options.md) — the Authelia + Caddy pattern adds two more labels to the overlay.
 
 ---
 
 ## Option B — Traefik
 
-[Traefik](https://traefik.io/) follows the same Docker-labels-as-config idea.
+[Traefik](https://traefik.io/) follows the same Docker-labels-as-config idea. Use the same overlay, but replace its `labels:` block with the Traefik set:
 
-```env
-STORYMARK_PROXY_NETWORK=traefik
-STORYMARK_REVERSE_PROXY_LABELS={"traefik.enable":"true","traefik.http.routers.storymark.rule":"Host(`storymark.example.com`)","traefik.http.routers.storymark.entrypoints":"websecure","traefik.http.routers.storymark.tls.certresolver":"letsencrypt","traefik.http.services.storymark.loadbalancer.server.port":"8080"}
+```yaml
+# docker-compose.proxy.yml -> services.api.labels
+labels:
+  traefik.enable: "true"
+  traefik.http.routers.storymark.rule: Host(`${STORYMARK_PUBLIC_HOSTS}`)
+  traefik.http.routers.storymark.entrypoints: websecure
+  traefik.http.routers.storymark.tls.certresolver: letsencrypt
+  traefik.http.services.storymark.loadbalancer.server.port: "8080"
 ```
 
-Adapt entrypoint, certresolver, and middleware names to your Traefik install.
+Adapt entrypoint, certresolver, and middleware names to your Traefik install, and set `STORYMARK_PROXY_NETWORK=traefik`.
 
 ---
 
-## Option C — Nginx (or any classic reverse proxy)
+## Option C — Nginx (or any host-level reverse proxy)
 
-Run Nginx outside Compose (or in a separate stack) and point it at the API's published port.
+Run Nginx outside Compose (or in a separate stack) and point it at the API's published port. Base file only — no overlay.
 
 In `.env`:
 
 ```env
-STORYMARK_API_PUBLISHED_PORT=8088
-STORYMARK_PROXY_NETWORK=
-STORYMARK_REVERSE_PROXY_LABELS={}
+STORYMARK_API_PUBLISHED_PORT=127.0.0.1:8088
 ```
 
 In your Nginx config:
@@ -85,12 +102,10 @@ server {
 
 ## Option D — No reverse proxy
 
-Useful for LAN-only or Tailscale-only deployments where TLS isn't required and there's no shared proxy.
+Useful for LAN-only or Tailscale-only deployments where TLS isn't required and there's no shared proxy. Base file only.
 
 ```env
 STORYMARK_API_PUBLISHED_PORT=8088
-STORYMARK_PROXY_NETWORK=
-STORYMARK_REVERSE_PROXY_LABELS={}
 ```
 
 Access via `http://<host>:8088`. Tailscale users get a stable `https://<host>.<tailnet>.ts.net` URL with automatic TLS via Tailscale's MagicDNS / cert provisioning if you turn that on.
@@ -99,6 +114,6 @@ Access via `http://<host>:8088`. Tailscale users get a stable `https://<host>.<t
 
 ## Picking a default
 
-If you have no preference, **start with caddy-docker-proxy + Authelia forward-auth** ([`04-auth-options.md`](04-auth-options.md)). It's the lowest-friction homelab path: certificates handled, auth handled, configuration via labels colocated with the service.
+If you have no preference, **start with caddy-docker-proxy + Authelia forward-auth** ([`04-auth-options.md`](04-auth-options.md)) using the proxy overlay. It's the lowest-friction homelab path: certificates handled, auth handled, configuration via labels colocated with the service.
 
-The reference compose file's labels are commented examples — uncomment what you use, leave the rest.
+In Portainer (single-file Git stacks), the overlay isn't auto-merged — see [`02-portainer-gitops.md`](02-portainer-gitops.md) for the options there.

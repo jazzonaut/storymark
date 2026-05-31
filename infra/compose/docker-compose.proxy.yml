@@ -1,0 +1,26 @@
+# Reverse-proxy overlay — for shared-network proxies (caddy-docker-proxy,
+# Traefik). The base docker-compose.yml is standalone and publishes a host
+# port; this overlay instead joins the api to an existing external proxy
+# network and applies routing labels. Use both files together:
+#
+#   docker network create "$STORYMARK_PROXY_NETWORK"   # once, if it doesn't exist
+#   docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+#
+# Requires STORYMARK_PROXY_NETWORK and STORYMARK_PUBLIC_HOSTS in the environment.
+# Traefik users: swap the caddy labels below for the Traefik set in
+# docs/deployment/03-reverse-proxy-options.md (Option B).
+
+services:
+  api:
+    networks:
+      - proxy
+    labels:
+      # caddy-docker-proxy: serve STORYMARK_PUBLIC_HOSTS over auto-TLS, proxied
+      # to the api container on 8080.
+      caddy: ${STORYMARK_PUBLIC_HOSTS:?set STORYMARK_PUBLIC_HOSTS for proxy mode}
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+
+networks:
+  proxy:
+    external: true
+    name: ${STORYMARK_PROXY_NETWORK:?set STORYMARK_PROXY_NETWORK for proxy mode}

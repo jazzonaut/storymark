@@ -10,11 +10,12 @@ Last updated: S0.1 + S0.2 landed.
 - **S0.2 done** — `apps/storymark-api` on `net10.0`: FastEndpoints + EF Core (Npgsql, no migrations) + Serilog JSON. `GET /api/health` → `{ status, version }`, verified locally; multi-stage non-root Dockerfile (build context = repo root).
 - pnpm catalog locked to current published versions (verified via `pnpm view`). Note the majors: Vite 8, Vue Router 5, TypeScript 6.
 - `docs/plan.md` and `docs/issues.md` capture the full scope through Phase 6.
+- **S0.3 done** — `docker compose up` brings api + pgvector-postgres + ollama healthy. Local override (`docker-compose.override.yml`) builds the api image from source; postgres init script enables the `vector` extension (verified `vector 0.8.2`). `SELECT 1` and `ollama list` confirmed.
 - CI dotnet job now reads the SDK from `apps/storymark-api/global.json`.
 
 ## In flight
 
-Nothing. Next slice to grab is **S0.3** (Docker Compose stack lights up) — see `docs/issues.md`.
+Nothing. Next slice to grab is **S0.5.1** (Settings table + hot-reloaded SettingsService) — the start of the admin-foundations chain. See `docs/issues.md`.
 
 ## Conventions snapshot
 
@@ -29,8 +30,11 @@ The full conventions live in `docs/conventions/`. The short version:
 
 ## Open questions
 
-- **Default branch name.** This repo's default branch is `main`, but `docs/conventions/05-commit-and-pr.md` and `.github/workflows/ci.yml` (push/PR triggers + image/deploy gates) all say `master`. As-is, CI never fires on `main`. Pick one: rename the branch to `master`, or switch the convention + CI triggers to `main`. Until resolved, CI is effectively dormant.
-- **Node engine range.** `package.json` pins `engines.node` to `>=22 <23`, but local dev is on Node 24 (LTS) and CI on Node 22, so `pnpm install` warns "Unsupported engine". Decide whether to widen the range (e.g. `>=22`) and align CI's `node-version`, or hold dev to Node 22.
+None at the moment.
+
+Resolved:
+- Branch renamed to `master` (matches conventions + CI triggers). Node engine widened to `>=22`; CI runs on Node 24 to match local dev.
+- Reverse-proxy wiring: base compose is standalone (publishes a host port); a new `docker-compose.proxy.yml` overlay handles shared-network proxies (caddy/Traefik). Removed two mechanisms `docs/deployment/03` documented that Compose can't do (env-switched network membership, JSON-merged labels). `STORYMARK_PROXY_NETWORK` / `STORYMARK_PUBLIC_HOSTS` are now consumed by the overlay; docs 02/03 + `.env.example` reconciled.
 
 ## Recent decisions
 

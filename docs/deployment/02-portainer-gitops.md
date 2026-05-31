@@ -15,6 +15,13 @@ This document describes the Portainer-specific bits. The Compose file itself is 
 3. **Enable webhook redeploy** (optional). Portainer exposes a webhook URL that triggers a redeploy. Wire it as the final step of your CI workflow if you don't use the `/git/redeploy` API path.
 4. **First deploy**: click "Deploy the stack." Portainer pulls the repo, reads the Compose file, and brings the services up.
 
+## Reverse proxy
+
+Portainer CE Git stacks deploy a **single** Compose file (the "Compose path" above), so the `docker-compose.proxy.yml` overlay isn't auto-merged. Two ways to front the stack:
+
+- **Host-level proxy (simplest).** Keep the base file; publish the API on `STORYMARK_API_PUBLISHED_PORT` and point a host-level Nginx/Caddy at it (`docs/deployment/03`, Option C/D). Nothing Portainer-specific.
+- **Shared-network proxy (caddy-docker-proxy / Traefik).** Point the stack's Compose path at a file that includes the proxy network + labels — either commit a combined file or paste the overlay's `api.networks` + `labels` into your stack. The `STORYMARK_PROXY_NETWORK` / `STORYMARK_PUBLIC_HOSTS` stack env vars feed it.
+
 ## Update flow
 
 The reference flow is:
