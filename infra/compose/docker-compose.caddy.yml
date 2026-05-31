@@ -75,7 +75,9 @@ services:
       POSTGRES_USER: storymark
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - ${STORYMARK_DATA_ROOT:?set STORYMARK_DATA_ROOT}/postgres:/var/lib/postgresql/data
+      # Postgres 18+ stores data in a major-version subdir, so the mount is
+      # /var/lib/postgresql (not .../data) — see docker-library/postgres#1259.
+      - ${STORYMARK_DATA_ROOT:?set STORYMARK_DATA_ROOT}/postgres:/var/lib/postgresql
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     networks:
       - storymark-internal

@@ -76,7 +76,9 @@ services:
       POSTGRES_USER: storymark
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - storymark_postgres:/var/lib/postgresql/data
+      # Postgres 18+ images store data in a major-version subdir, so the mount
+      # is /var/lib/postgresql (not .../data) — see docker-library/postgres#1259.
+      - storymark_postgres:/var/lib/postgresql
       # Runs *.sql once on first init (empty data dir) — enables pgvector.
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     networks:
