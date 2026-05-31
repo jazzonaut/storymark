@@ -30,6 +30,19 @@ export type ReaderFontFamily = "serif" | "sans" | "mono";
 export type ReaderTheme = "light" | "sepia" | "dark";
 export type EntityHighlightMode = "off" | "subtle" | "always";
 
+/** The local mirror of a book's reading position (one row per book). Doubles as
+ * the offline-resume cache and the sync queue: `synced=false` means the position
+ * has not yet been accepted by the backend and is flushed on reconnect. */
+export interface StoredProgress {
+  readonly bookId: string;
+  readonly sectionIndex: number;
+  readonly paragraphIndex: number;
+  readonly locationStart: number;
+  readonly locationEnd: number;
+  readonly clientTimestamp: string;
+  readonly synced: boolean;
+}
+
 // The `as Dexie & { … }` pattern types the tables without subclassing Dexie,
 // which would force definite-assignment (`!`) fields the no-non-null-assertion
 // rule forbids. The schema string below is the source of truth for indexes.
@@ -37,6 +50,7 @@ type StorymarkDb = Dexie & {
   manifests: Table<CachedManifest, string>;
   sections: Table<CachedSection, [string, number]>;
   readerSettings: Table<StoredReaderSettings, string>;
+  progress: Table<StoredProgress, string>;
 };
 
 export const db = new Dexie("storymark") as StorymarkDb;
@@ -45,4 +59,11 @@ db.version(1).stores({
   manifests: "bookId",
   sections: "[bookId+sectionIndex]",
   readerSettings: "id",
+});
+
+// v2 adds the reading-progress mirror. Keyed by bookId only — `synced` is a
+// boolean (not an indexable IndexedDB key type), and with a handful of books the
+// reconnect flush filters unsynced rows in memory.
+db.version(2).stores({
+  progress: "bookId",
 });

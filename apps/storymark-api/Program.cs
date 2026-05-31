@@ -59,6 +59,7 @@ try
     builder.Services.AddScoped<BookImportService>();
     builder.Services.AddScoped<BookCatalogService>();
     builder.Services.AddScoped<BookSectionService>();
+    builder.Services.AddScoped<ReadingProgressService>();
     builder.Services.AddScoped<ProcessBookJob>();
 
     builder.Services.AddHangfire(config => config

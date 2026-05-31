@@ -3,16 +3,23 @@ import type { ComputedRef, Ref, ShallowRef } from "vue";
 import type { Section, SectionSummary } from "@storymark/shared-types";
 import { readerApi } from "@/api/reader-api";
 
-/** Which edge of a freshly-loaded section the reader should land on: the start
- * when moving forward or opening, the end when paging backward into it. */
-export type SectionEntry = "start" | "end";
+/** Where to land when a section first appears: 0 (start) when moving forward or
+ * opening, the last paragraph (end) when paging backward, or a specific index
+ * when resuming a saved position. */
+type SectionEntry = "start" | "end" | number;
+
+/** A position to open a book at (a resumed reading position). */
+export interface InitialPosition {
+  readonly sectionIndex: number;
+  readonly paragraphIndex: number;
+}
 
 const bookId = ref<string | null>(null);
 const manifest = shallowRef<readonly SectionSummary[]>([]);
 const currentPosition = ref(0);
 const currentSection = shallowRef<Section | null>(null);
 const currentParagraphIndex = ref(0);
-const sectionEntry = ref<SectionEntry>("start");
+const entryParagraph = ref(0);
 const isLoadingSection = ref(false);
 
 interface UseReader {
@@ -20,13 +27,14 @@ interface UseReader {
   readonly currentSection: ShallowRef<Section | null>;
   readonly currentPosition: Ref<number>;
   readonly currentParagraphIndex: Ref<number>;
-  readonly sectionEntry: Ref<SectionEntry>;
+  readonly entryParagraph: Ref<number>;
   readonly isLoadingSection: Ref<boolean>;
   readonly sectionCount: ComputedRef<number>;
   readonly currentSectionTitle: ComputedRef<string | null>;
+  readonly currentSectionIndex: ComputedRef<number | null>;
   readonly hasNextSection: ComputedRef<boolean>;
   readonly hasPrevSection: ComputedRef<boolean>;
-  open: (id: string) => Promise<readonly SectionSummary[]>;
+  open: (id: string, initial?: InitialPosition) => Promise<readonly SectionSummary[]>;
   nextSection: () => Promise<boolean>;
   prevSection: () => Promise<boolean>;
   setParagraph: (paragraphIndex: number) => void;
@@ -35,6 +43,9 @@ interface UseReader {
 const sectionCount = computed<number>(() => manifest.value.length);
 const currentSectionTitle = computed<string | null>(
   () => manifest.value[currentPosition.value]?.title ?? null,
+);
+const currentSectionIndex = computed<number | null>(
+  () => manifest.value[currentPosition.value]?.sectionIndex ?? null,
 );
 const hasNextSection = computed<boolean>(() => currentPosition.value < manifest.value.length - 1);
 const hasPrevSection = computed<boolean>(() => currentPosition.value > 0);
@@ -49,23 +60,37 @@ export function useReader(): UseReader {
     isLoadingSection.value = true;
     try {
       const section = await readerApi.getSection(id, summary.sectionIndex);
+      const lastIndex = Math.max(section.paragraphs.length - 1, 0);
+      const landing =
+        entry === "start"
+          ? 0
+          : entry === "end"
+            ? lastIndex
+            : Math.min(Math.max(entry, 0), lastIndex);
       currentPosition.value = position;
-      sectionEntry.value = entry;
-      currentParagraphIndex.value =
-        entry === "end" ? Math.max(section.paragraphs.length - 1, 0) : 0;
+      entryParagraph.value = landing;
+      currentParagraphIndex.value = landing;
       currentSection.value = section;
     } finally {
       isLoadingSection.value = false;
     }
   }
 
-  async function open(id: string): Promise<readonly SectionSummary[]> {
+  async function open(id: string, initial?: InitialPosition): Promise<readonly SectionSummary[]> {
     bookId.value = id;
     currentSection.value = null;
     currentPosition.value = 0;
     currentParagraphIndex.value = 0;
     manifest.value = await readerApi.getManifest(id);
-    await loadPosition(0, "start");
+
+    const startPos = initial
+      ? manifest.value.findIndex((s) => s.sectionIndex === initial.sectionIndex)
+      : -1;
+    if (initial && startPos >= 0) {
+      await loadPosition(startPos, initial.paragraphIndex);
+    } else {
+      await loadPosition(0, "start");
+    }
     return manifest.value;
   }
 
@@ -96,10 +121,11 @@ export function useReader(): UseReader {
     currentSection,
     currentPosition,
     currentParagraphIndex,
-    sectionEntry,
+    entryParagraph,
     isLoadingSection,
     sectionCount,
     currentSectionTitle,
+    currentSectionIndex,
     hasNextSection,
     hasPrevSection,
     open,

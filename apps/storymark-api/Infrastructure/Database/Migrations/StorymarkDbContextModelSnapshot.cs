@@ -192,6 +192,55 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                     b.ToTable("book_sections", (string)null);
                 });
 
+            modelBuilder.Entity("Storymark.Api.Domain.Books.ReadingProgress", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BookId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("book_id");
+
+                    b.Property<DateTimeOffset>("ClientTimestamp")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("client_timestamp");
+
+                    b.Property<string>("DeviceId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("device_id");
+
+                    b.Property<int>("LocationEnd")
+                        .HasColumnType("integer")
+                        .HasColumnName("location_end");
+
+                    b.Property<int>("LocationStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("location_start");
+
+                    b.Property<int?>("ParagraphIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("paragraph_index");
+
+                    b.Property<int>("SectionIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("section_index");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookId", "DeviceId")
+                        .IsUnique()
+                        .HasDatabaseName("reading_progress_book_device");
+
+                    b.ToTable("reading_progress", (string)null);
+                });
+
             modelBuilder.Entity("Storymark.Api.Domain.LlmCalls.LlmCall", b =>
                 {
                     b.Property<Guid>("Id")
@@ -310,6 +359,15 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                 });
 
             modelBuilder.Entity("Storymark.Api.Domain.Books.BookSection", b =>
+                {
+                    b.HasOne("Storymark.Api.Domain.Books.Book", null)
+                        .WithMany()
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.ReadingProgress", b =>
                 {
                     b.HasOne("Storymark.Api.Domain.Books.Book", null)
                         .WithMany()

@@ -9,6 +9,7 @@ import { useBooks } from "@/composables/use-books";
 import { useOfflineSync } from "@/composables/use-offline-sync";
 import { useReader } from "@/composables/use-reader";
 import { useReaderSettings } from "@/composables/use-reader-settings";
+import { useReadingProgress } from "@/composables/use-reading-progress";
 
 const CHROME_IDLE_MS = 3500;
 
@@ -22,7 +23,8 @@ const { progress, ensureCached } = useBookCache();
 const {
   currentSection,
   currentPosition,
-  sectionEntry,
+  currentSectionIndex,
+  entryParagraph,
   sectionCount,
   currentSectionTitle,
   nextSection,
@@ -30,6 +32,7 @@ const {
   setParagraph,
   open,
 } = useReader();
+const { record, resume, flush } = useReadingProgress();
 
 const phase = ref<"loading" | "ready" | "error">("loading");
 const chromeVisible = ref(true);
@@ -94,6 +97,24 @@ function onPageChange(page: number, total: number): void {
   pageInfo.value = { page, total };
 }
 
+// Track the current paragraph and record the position (throttled in the
+// composable). locationStart/End come from the paragraph's offsets.
+function onParagraph(paragraphIndex: number): void {
+  setParagraph(paragraphIndex);
+  const sectionIndex = currentSectionIndex.value;
+  const paragraph = currentSection.value?.paragraphs.find(
+    (p) => p.paragraphIndex === paragraphIndex,
+  );
+  if (sectionIndex !== null && paragraph) {
+    void record(bookId, {
+      sectionIndex,
+      paragraphIndex,
+      locationStart: paragraph.locationStart,
+      locationEnd: paragraph.locationEnd,
+    });
+  }
+}
+
 // The section manifest carries section titles, not the book's. The title comes
 // from the library list, but resolving it must be best-effort: a deep-link or
 // offline open may have no list yet, and that must never fail the reader (the
@@ -115,7 +136,8 @@ onMounted(async () => {
   try {
     await loadSettings();
     await ensureCached(bookId);
-    await open(bookId);
+    const position = await resume(bookId);
+    await open(bookId, position ?? undefined);
     bookTitle.value = await resolveBookTitle();
     phase.value = "ready";
     revealChrome();
@@ -128,6 +150,8 @@ onBeforeUnmount(() => {
   if (idleTimer !== undefined) {
     window.clearTimeout(idleTimer);
   }
+  // Push the last position now rather than waiting out the throttle window.
+  void flush();
 });
 </script>
 
@@ -166,8 +190,8 @@ onBeforeUnmount(() => {
       <PaginatedSection
         v-if="currentSection"
         :section="currentSection"
-        :entry="sectionEntry"
-        @update:paragraph="setParagraph"
+        :entry-paragraph="entryParagraph"
+        @update:paragraph="onParagraph"
         @page-change="onPageChange"
         @next-section="goNext"
         @prev-section="goPrev"

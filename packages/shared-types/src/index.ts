@@ -53,3 +53,13 @@ export interface Section {
   readonly html: string;
   readonly paragraphs: readonly Paragraph[];
 }
+
+/** The canonical reading position for a book — the latest across all devices
+ * (`GET /api/books/{id}/progress`). Mirrors ProgressView. */
+export interface ReadingProgress {
+  readonly sectionIndex: number;
+  readonly paragraphIndex: number | null;
+  readonly locationStart: number;
+  readonly locationEnd: number;
+  readonly clientTimestamp: string;
+}

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { Section } from "@storymark/shared-types";
-import type { SectionEntry } from "@/composables/use-reader";
 
-const props = defineProps<{ section: Section; entry: SectionEntry }>();
+// `entryParagraph` is the paragraph to land on when this section first appears
+// (0 = start, last = end, or a resumed position).
+const props = defineProps<{ section: Section; entryParagraph: number }>();
 
 const emit = defineEmits<{
   (e: "update:paragraph", paragraphIndex: number): void;
@@ -192,10 +193,10 @@ function onKeydown(event: KeyboardEvent): void {
   }
 }
 
-async function reposition(entry: SectionEntry): Promise<void> {
+async function reposition(): Promise<void> {
   await nextTick();
   measure();
-  goToPage(entry === "end" ? totalPages.value - 1 : 0, false);
+  goToPage(pageForParagraph(props.entryParagraph), false);
   updatePageInfo();
   reportParagraph();
 }
@@ -209,13 +210,13 @@ function restoreToTracked(): void {
 watch(
   () => props.section,
   () => {
-    void reposition(props.entry);
+    void reposition();
   },
   { flush: "post" },
 );
 
 onMounted(() => {
-  void reposition(props.entry);
+  void reposition();
   window.addEventListener("keydown", onKeydown);
   // Observe both: contentEl catches typography reflow (column count changes),
   // scrollEl catches viewport resize (which leaves the JS-pinned columnWidth
