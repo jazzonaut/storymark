@@ -18,8 +18,16 @@ This document describes the Portainer-specific bits. The Compose file itself is 
       `STORYMARK_DATA_ROOT` (the Ollama model cache stays a named volume).
     - Authentication: a repo-scoped read token (CI uses this too — see `PORTAINER_REPO_USER` / `PORTAINER_REPO_PASSWORD` in [`01-ci-cd.md`](01-ci-cd.md)).
 2. **Environment variables** — paste the values from `infra/compose/.env.example`, replacing placeholders. Portainer stores these against the stack and re-applies them on every redeploy.
-3. **Enable webhook redeploy** (optional). Portainer exposes a webhook URL that triggers a redeploy. Wire it as the final step of your CI workflow if you don't use the `/git/redeploy` API path.
-4. **First deploy**: click "Deploy the stack." Portainer pulls the repo, reads the Compose file, and brings the services up.
+3. **Prepare the bind-mount data dir (caddy file only).** `docker-compose.caddy.yml` bind-mounts book files at `$STORYMARK_DATA_ROOT/data`. The API runs non-root as uid `1654` (the aspnet image's `APP_UID`); a bind mount keeps the *host* directory's ownership (root by default), shadowing the image's chown, so the app can't write. Create and chown it once on the host before first deploy:
+
+    ```bash
+    sudo mkdir -p "$STORYMARK_DATA_ROOT/data"
+    sudo chown -R 1654:1654 "$STORYMARK_DATA_ROOT/data"
+    ```
+
+    (Postgres fixes its own dir perms on init, so only `data/` needs this. Named-volume deploys — the base file — don't, since volumes inherit the image's ownership.)
+4. **Enable webhook redeploy** (optional). Portainer exposes a webhook URL that triggers a redeploy. Wire it as the final step of your CI workflow if you don't use the `/git/redeploy` API path.
+5. **First deploy**: click "Deploy the stack." Portainer pulls the repo, reads the Compose file, and brings the services up.
 
 ## Reverse proxy
 
