@@ -1,6 +1,6 @@
 # 0010 — Version-tagged embeddings + warn-and-reindex flow
 
-**Status:** accepted
+**Status:** superseded by [ADR-0014](0014-in-place-reindex-dimensionless-vectors.md) (storage/coexistence mechanics only; the no-silent-degradation intent stands)
 
 ## Context
 

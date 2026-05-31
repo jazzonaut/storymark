@@ -144,7 +144,7 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasColumnName("created_at");
 
                     b.Property<Vector>("Embedding")
-                        .HasColumnType("vector(768)")
+                        .HasColumnType("vector")
                         .HasColumnName("embedding");
 
                     b.Property<string>("EmbeddingModelId")
@@ -181,12 +181,6 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasColumnName("token_estimate");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Embedding")
-                        .HasDatabaseName("book_chunks_hnsw");
-
-                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
-                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
 
                     b.HasIndex("SectionId");
 

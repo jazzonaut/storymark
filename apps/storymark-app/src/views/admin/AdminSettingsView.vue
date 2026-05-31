@@ -3,13 +3,14 @@ import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
 import Column from "primevue/column";
 import DataTable from "primevue/datatable";
+import Dialog from "primevue/dialog";
 import InputText from "primevue/inputtext";
 import Password from "primevue/password";
 import Tag from "primevue/tag";
 import Textarea from "primevue/textarea";
 import { useToast } from "primevue/usetoast";
 import { computed, onMounted, ref } from "vue";
-import type { PatchSettingBody, SettingItem } from "@/api/admin-types";
+import type { EmbeddingImpactPreview, PatchSettingBody, SettingItem } from "@/api/admin-types";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
 
@@ -17,13 +18,42 @@ interface SettingRow extends SettingItem {
   readonly namespace: string;
 }
 
-const { settings, isLoading, loadSettings, saveSetting } = useAdmin();
+// Editing this key triggers a full reindex, so it's intercepted with a confirm
+// dialog instead of the normal inline save.
+const EMBEDDING_MODEL_KEY = "llm.embedding.modelId";
+
+const { settings, isLoading, loadSettings, saveSetting, previewEmbeddingSwap, applyEmbeddingSwap } =
+  useAdmin();
 const { report } = useAdminError();
 const toast = useToast();
 
 const editingKey = ref<string | null>(null);
 const draftText = ref("");
 const draftBool = ref(false);
+
+interface SwapState {
+  visible: boolean;
+  modelId: string;
+  preview: EmbeddingImpactPreview | null;
+  loading: boolean;
+  applying: boolean;
+}
+
+const swap = ref<SwapState>({
+  visible: false,
+  modelId: "",
+  preview: null,
+  loading: false,
+  applying: false,
+});
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) {
+    return `~${seconds}s`;
+  }
+  const minutes = Math.round(seconds / 60);
+  return `~${minutes} min`;
+}
 
 const rows = computed<readonly SettingRow[]>(() =>
   [...settings.value]
@@ -111,12 +141,59 @@ async function save(row: SettingItem): Promise<void> {
     return;
   }
 
+  if (row.key === EMBEDDING_MODEL_KEY) {
+    const next = String(value).trim();
+    if (next === displayValue(row)) {
+      toast.add({
+        severity: "info",
+        summary: "No change",
+        detail: "The embedding model is unchanged.",
+        life: 2500,
+      });
+      editingKey.value = null;
+      return;
+    }
+    await openSwapDialog(next);
+    return;
+  }
+
   try {
     await saveSetting(row.key, value, row.valueType);
     editingKey.value = null;
     toast.add({ severity: "success", summary: "Saved", detail: row.key, life: 2500 });
   } catch (error) {
     report(error);
+  }
+}
+
+async function openSwapDialog(modelId: string): Promise<void> {
+  swap.value = { visible: true, modelId, preview: null, loading: true, applying: false };
+  try {
+    swap.value.preview = await previewEmbeddingSwap();
+  } catch (error) {
+    swap.value.visible = false;
+    report(error);
+  } finally {
+    swap.value.loading = false;
+  }
+}
+
+async function confirmSwap(): Promise<void> {
+  swap.value.applying = true;
+  try {
+    const result = await applyEmbeddingSwap(swap.value.modelId);
+    toast.add({
+      severity: "success",
+      summary: "Reindex started",
+      detail: `${result.booksQueued} book(s) queued for ${result.modelId}.`,
+      life: 4000,
+    });
+    swap.value.visible = false;
+    editingKey.value = null;
+  } catch (error) {
+    report(error);
+  } finally {
+    swap.value.applying = false;
   }
 }
 
@@ -191,5 +268,40 @@ onMounted(() => {
         </template>
       </Column>
     </DataTable>
+
+    <Dialog
+      v-model:visible="swap.visible"
+      modal
+      header="Change embedding model"
+      :closable="!swap.applying"
+      :style="{ width: '32rem' }"
+    >
+      <p class="mb-3">
+        Switching to <code class="font-mono">{{ swap.modelId }}</code> re-embeds every chunk under
+        the new model. Search results for a book are incomplete until its reindex finishes.
+      </p>
+
+      <p v-if="swap.loading" class="opacity-70">Estimating impact…</p>
+      <ul v-else-if="swap.preview" class="mb-3 list-disc pl-5">
+        <li>{{ swap.preview.booksAffected }} book(s) will be reindexed</li>
+        <li>{{ swap.preview.chunkCount }} chunk(s) to re-embed</li>
+        <li>Estimated time: {{ formatDuration(swap.preview.estimatedSeconds) }}</li>
+      </ul>
+
+      <p class="text-sm opacity-70">
+        Track progress in the
+        <a href="/hangfire" target="_blank" rel="noopener" class="underline">job dashboard</a>.
+      </p>
+
+      <template #footer>
+        <Button label="Cancel" text :disabled="swap.applying" @click="swap.visible = false" />
+        <Button
+          label="Reindex"
+          :loading="swap.applying"
+          :disabled="swap.loading"
+          @click="confirmSwap"
+        />
+      </template>
+    </Dialog>
   </section>
 </template>

@@ -19,7 +19,12 @@ internal sealed class BookChunkConfiguration : IEntityTypeConfiguration<BookChun
         builder.Property(c => c.LocationEnd).HasColumnName("location_end");
         builder.Property(c => c.Text).HasColumnName("text");
         builder.Property(c => c.TokenEstimate).HasColumnName("token_estimate");
-        builder.Property(c => c.Embedding).HasColumnName("embedding").HasColumnType($"vector({BookChunk.EmbeddingDimensions})");
+        // Dimensionless `vector` (not vector(768)): the embedding model is swappable
+        // and different models have different dimensions (S3.4). Search only ever
+        // compares vectors of one model (filtered by embedding_model_id), so dimensions
+        // never clash at query time. No HNSW index — it requires a fixed dimension and
+        // earns nothing at single-operator scale; an exact <=> scan is sub-ms here.
+        builder.Property(c => c.Embedding).HasColumnName("embedding").HasColumnType("vector");
         builder.Property(c => c.EmbeddingModelId).HasColumnName("embedding_model_id");
         builder.Property(c => c.EmbeddingModelVersion).HasColumnName("embedding_model_version");
         builder.Property(c => c.CreatedAt).HasColumnName("created_at");
@@ -41,12 +46,7 @@ internal sealed class BookChunkConfiguration : IEntityTypeConfiguration<BookChun
         builder.HasIndex(c => new { c.BookId, c.SectionIndex, c.LocationStart })
             .HasDatabaseName("book_chunks_pos");
 
-        // Approximate-NN index for cosine similarity (docs/plan.md §12.4, §13: the
-        // `embedding <=> query` operator). The GIN FTS index on to_tsvector('english',
-        // text) is an expression index EF can't model — added via raw SQL in the migration.
-        builder.HasIndex(c => c.Embedding)
-            .HasDatabaseName("book_chunks_hnsw")
-            .HasMethod("hnsw")
-            .HasOperators("vector_cosine_ops");
+        // The GIN FTS index on to_tsvector('english', text) is an expression index EF
+        // can't model — it's added via raw SQL in the AddBookChunkIndexes migration.
     }
 }

@@ -57,3 +57,14 @@ export interface CostSummary {
   readonly costEstimate: number | null;
   readonly tasks: readonly TaskCostItem[];
 }
+
+export interface EmbeddingImpactPreview {
+  readonly booksAffected: number;
+  readonly chunkCount: number;
+  readonly estimatedSeconds: number;
+}
+
+export interface ApplySwapResult {
+  readonly modelId: string;
+  readonly booksQueued: number;
+}

@@ -1052,15 +1052,15 @@ create table book_chunks (
   location_end int not null,
   text text not null,
   token_estimate int not null,
-  embedding vector(768),                       -- nomic-embed-text default
+  embedding vector,                            -- dimensionless: model is swappable (ADR-0014)
   embedding_model_id text,                     -- e.g. "ollama:nomic-embed-text"
   embedding_model_version text,                -- model build/tag
   created_at timestamptz not null,
   unique(book_id, section_index, chunk_index)
 );
 
-create index book_chunks_hnsw on book_chunks
-  using hnsw (embedding vector_cosine_ops);
+-- No HNSW index (ADR-0014): a dimensionless column can't carry one, and an exact
+-- <=> scan is sub-ms at single-operator scale. Reintroduce per-dimension if it grows.
 
 create index book_chunks_fts on book_chunks
   using gin (to_tsvector('english', text));
@@ -1068,7 +1068,7 @@ create index book_chunks_fts on book_chunks
 create index book_chunks_pos on book_chunks(book_id, section_index, location_start);
 ```
 
-Search only considers vectors whose `embedding_model_id` matches the currently-selected model in settings.
+Search only considers vectors whose `embedding_model_id` matches the currently-selected model in settings — so vectors of different dimensions (different models) never meet in a `<=>` comparison.
 
 ### 12.5 Progress
 
@@ -1456,10 +1456,10 @@ Exposed to the frontend.
 
 - `book_chunks.embedding_model_id` is set when the row is written.
 - Search filters by the currently-selected `llm.embedding.modelId`.
-- Changing the embedding model in admin:
-  - shows a confirmation dialog ("3 books will be reindexed, ~2hr")
-  - enqueues `ReindexBookJob` per book
-  - new vectors written with new model id; old vectors deleted as new ones complete
+- Changing the embedding model in admin (ADR-0014):
+  - shows a confirmation dialog with an impact preview ("3 books, 16 chunks will be reindexed, ~8s")
+  - persists the new model id, then enqueues a per-book reindex (the existing `EmbeddingJob`, since "embed chunks tagged with a different model id" is exactly a reindex — no separate `ReindexBookJob`)
+  - each chunk is re-embedded and overwritten in place; a chunk not yet reindexed keeps the old model id and is filtered out of search, so a mid-reindex book returns fewer (never wrong-model) results until it completes
 
 ---
 

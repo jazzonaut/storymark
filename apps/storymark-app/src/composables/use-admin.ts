@@ -2,7 +2,9 @@ import { computed, ref, shallowRef } from "vue";
 import type { ComputedRef, ShallowRef } from "vue";
 import { adminApi, AdminApiError } from "@/api/admin-api";
 import type {
+  ApplySwapResult,
   CostSummary,
+  EmbeddingImpactPreview,
   LlmCallItem,
   PatchSettingBody,
   PromptItem,
@@ -42,6 +44,8 @@ interface UseAdmin {
   savePrompt: (key: string, text: string) => Promise<void>;
   loadLlmCalls: () => Promise<void>;
   loadCostSummary: () => Promise<void>;
+  previewEmbeddingSwap: () => Promise<EmbeddingImpactPreview>;
+  applyEmbeddingSwap: (modelId: string) => Promise<ApplySwapResult>;
 }
 
 export function useAdmin(): UseAdmin {
@@ -130,6 +134,16 @@ export function useAdmin(): UseAdmin {
     }
   }
 
+  function previewEmbeddingSwap(): Promise<EmbeddingImpactPreview> {
+    return adminApi.getEmbeddingImpact(requireToken());
+  }
+
+  async function applyEmbeddingSwap(modelId: string): Promise<ApplySwapResult> {
+    const result = await adminApi.applyEmbeddingSwap(requireToken(), modelId);
+    await loadSettings();
+    return result;
+  }
+
   return {
     hasToken,
     settings,
@@ -146,5 +160,7 @@ export function useAdmin(): UseAdmin {
     savePrompt,
     loadLlmCalls,
     loadCostSummary,
+    previewEmbeddingSwap,
+    applyEmbeddingSwap,
   };
 }

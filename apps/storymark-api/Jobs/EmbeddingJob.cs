@@ -15,9 +15,15 @@ namespace Storymark.Api.Jobs;
 /// <c>llm_calls</c>), then drives <see cref="ProcessingStatus"/> from
 /// <c>Embedding</c> to <c>Indexed</c>.
 ///
+/// <para>This is also the per-book reindex worker (S3.4): because it embeds chunks
+/// "missing a vector OR tagged with a different model id", re-running it after the
+/// <c>llm.embedding.modelId</c> setting changes re-embeds every chunk under the new
+/// model and overwrites in place — so the swap endpoint just re-enqueues it per book
+/// rather than duplicating the loop in a separate ReindexBookJob.</para>
+///
 /// <para>Idempotent and resumable: it only embeds chunks that are missing a vector
 /// or were embedded under a different model id, so a retry after a partial failure
-/// (or a future re-embed) picks up where it left off. Because of that it allows
+/// (or a reindex) picks up where it left off. Because of that it allows
 /// Hangfire retries — embedding failures (model loading, a timeout) are usually
 /// transient, unlike a parse failure. A book whose retries are all exhausted stays
 /// at <c>Embedding</c> with a failed job visible in the dashboard.</para></summary>
@@ -41,6 +47,9 @@ internal sealed class EmbeddingJob(
         var modelId = settings.GetString("llm.embedding.modelId");
         var modelVersion = modelId[(modelId.IndexOf(':', StringComparison.Ordinal) + 1)..];
 
+        // Chunks needing the current model: never embedded, or embedded under a
+        // different model. The latter case is exactly a reindex (S3.4) — the model
+        // setting changed, so every chunk re-embeds and overwrites in place.
         var pending = await db.BookChunks
             .Where(c => c.BookId == bookId && (c.Embedding == null || c.EmbeddingModelId != modelId))
             .OrderBy(c => c.SectionIndex)
@@ -51,6 +60,12 @@ internal sealed class EmbeddingJob(
             "EmbeddingJob for book {BookId}: {PendingCount} chunks to embed with {ModelId}",
             bookId, pending.Count, modelId);
 
+        if (pending.Count > 0 && book.ProcessingStatus != ProcessingStatus.Embedding)
+        {
+            book.ProcessingStatus = ProcessingStatus.Embedding;
+            await db.SaveChangesAsync(ct);
+        }
+
         var embedded = 0;
         foreach (var chunk in pending)
         {
@@ -58,13 +73,6 @@ internal sealed class EmbeddingJob(
                 chunk.Text,
                 new LlmCallMetadata { BookId = bookId, SectionIndex = chunk.SectionIndex },
                 ct);
-
-            if (vector.Count != BookChunk.EmbeddingDimensions)
-            {
-                throw new InvalidOperationException(
-                    $"Embedding model '{modelId}' returned {vector.Count} dimensions; " +
-                    $"the book_chunks.embedding column is vector({BookChunk.EmbeddingDimensions}).");
-            }
 
             chunk.Embedding = new Vector(vector.ToArray());
             chunk.EmbeddingModelId = modelId;

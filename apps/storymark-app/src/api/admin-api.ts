@@ -1,5 +1,7 @@
 import type {
+  ApplySwapResult,
   CostSummary,
+  EmbeddingImpactPreview,
   LlmCallItem,
   PatchSettingBody,
   PromptItem,
@@ -51,4 +53,13 @@ export const adminApi = {
     request(token, `llm-calls?limit=${limit}`),
 
   getCostSummary: (token: string): Promise<CostSummary> => request(token, "llm-calls/cost-summary"),
+
+  getEmbeddingImpact: (token: string): Promise<EmbeddingImpactPreview> =>
+    request(token, "embedding/impact-preview"),
+
+  applyEmbeddingSwap: (token: string, modelId: string): Promise<ApplySwapResult> =>
+    request(token, "embedding/apply-swap", {
+      method: "POST",
+      body: JSON.stringify({ modelId }),
+    }),
 } as const;

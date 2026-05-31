@@ -14,11 +14,6 @@ namespace Storymark.Api.Domain.Books;
 /// embedding job; they are null until then.</para></summary>
 internal sealed class BookChunk
 {
-    /// <summary>Embedding vector dimensionality (nomic-embed-text); the
-    /// <c>embedding</c> column is fixed at <c>vector(768)</c>, so an embedding of
-    /// any other length is rejected before insert.</summary>
-    public const int EmbeddingDimensions = 768;
-
     public Guid Id { get; set; }
 
     public Guid BookId { get; set; }

@@ -17,10 +17,11 @@ If a decision is small enough that "look at the code" answers it, it's not an AD
 | 0007 | [Per-task LLM model routing](0007-per-task-llm-model-routing.md) | accepted |
 | 0008 | [Settings in Postgres with hot reload](0008-settings-in-db-with-hot-reload.md) | accepted |
 | 0009 | [Single-pass per-section extraction](0009-single-pass-section-extraction.md) | accepted |
-| 0010 | [Version-tagged embeddings + warn-reindex flow](0010-version-tagged-embeddings.md) | accepted |
+| 0010 | [Version-tagged embeddings + warn-reindex flow](0010-version-tagged-embeddings.md) | superseded by 0014 |
 | 0011 | [LLM call log + cost meter](0011-llm-call-log.md)              | accepted |
 | 0012 | [Tests deferred until after Phase 6](0012-tests-deferred.md)   | accepted |
 | 0013 | [SPA served by the API (same-origin, single image)](0013-spa-served-by-api.md) | accepted |
+| 0014 | [In-place reindex, dimensionless vectors, no HNSW](0014-in-place-reindex-dimensionless-vectors.md) | accepted |
 
 ## When to write one
 
