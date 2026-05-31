@@ -56,6 +56,8 @@ Open [http://localhost:5173](http://localhost:5173).
 
 On first boot, the admin panel at `/admin` is gated by the bearer token in `infra/compose/.env` (`STORYMARK_BEARER_TOKEN_SEED`). Set a real value before exposing the API beyond `localhost`.
 
+Before you push, run **`task ci`** — it runs the same lint, format, typecheck, and build gates CI runs across the frontend and backend. See [`docs/conventions/05-commit-and-pr.md`](docs/conventions/05-commit-and-pr.md#local-gates--run-before-every-push).
+
 ---
 
 ## Deployment

@@ -1,5 +1,28 @@
 # Commits and PRs
 
+## Local gates — run before every push
+
+Run **`task ci`** before pushing. It runs the exact gates CI runs, across both
+halves of the stack:
+
+- frontend: `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm build`
+- backend: `dotnet format --verify-no-changes`, `dotnet build -c Release -warnaserror`
+
+This is a rule, not a suggestion: a green `task ci` is the local equivalent of a
+green CI run. We deliberately don't install a git hook to force it (keeps commits
+fast and the toolchain dependency-free) — CI is the backstop, and a push that
+fails CI blocks the deploy.
+
+Note what is **not** a substitute for `task ci`:
+
+- `task build` / `docker compose up --build` compile the code but don't run the
+  frontend lint/typecheck/format or the `dotnet format` whitespace check. (The
+  backend image build *does* fail on analyzer warnings and code-style, because
+  `Directory.Build.props` sets `TreatWarningsAsErrors` + `EnforceCodeStyleInBuild`.)
+- Deployment itself is gated automatically: the CI image is built and pushed only
+  after both the `web` and `dotnet` jobs pass, and the Portainer redeploy only
+  after the image publishes.
+
 ## Branches
 
 - `master` is the default branch and is always deployable.
