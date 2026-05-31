@@ -67,6 +67,8 @@ internal sealed class SettingsSeeder(
             Scalar("upload.maxBytes", options.UploadMaxBytes, SettingValueType.Int),
             Scalar("features.recapCardOnSectionEntry", options.RecapCardOnSectionEntry, SettingValueType.Bool),
             Text("llm.embedding.modelId", options.Llm.EmbeddingModelId),
+            Text("llm.openai.baseUrl", options.Llm.OpenAi.BaseUrl),
+            Json("llm.costRates", options.Llm.CostRates),
             Text("prompts.qa", PromptDefaults.Qa),
             Text("prompts.sectionExtraction", PromptDefaults.SectionExtraction),
             Text("prompts.entitySummary", PromptDefaults.EntitySummary),
@@ -79,27 +81,23 @@ internal sealed class SettingsSeeder(
             seeds.Add(Text($"llm.chat.taskMap.{task}", model));
         }
 
+        seeds.Add(Secret("llm.openai.apiKey", options.Llm.OpenAi.ApiKey));
+
         var bearerSeed = configuration["Auth:BearerTokenSeed"];
         if (!string.IsNullOrWhiteSpace(bearerSeed))
         {
-            seeds.Add(new SettingSeed
-            {
-                Key = "auth.bearerToken",
-                JsonValue = JsonSerializer.Serialize(bearerSeed),
-                ValueType = SettingValueType.String,
-                IsSecret = true,
-            });
+            seeds.Add(Secret("auth.bearerToken", bearerSeed));
         }
 
         return seeds;
     }
 
-    private static SettingSeed Text(string key, string value) => new()
-    {
-        Key = key,
-        JsonValue = JsonSerializer.Serialize(value),
-        ValueType = SettingValueType.String,
-    };
+    private static SettingSeed Text(string key, string value) => Scalar(key, value, SettingValueType.String);
+
+    private static SettingSeed Json<T>(string key, T value) => Scalar(key, value, SettingValueType.Json);
+
+    private static SettingSeed Secret(string key, string value) =>
+        Scalar(key, value, SettingValueType.String) with { IsSecret = true };
 
     private static SettingSeed Scalar<T>(string key, T value, SettingValueType valueType) => new()
     {

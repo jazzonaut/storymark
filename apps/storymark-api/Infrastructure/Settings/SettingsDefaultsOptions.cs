@@ -1,3 +1,5 @@
+using Storymark.Api.Infrastructure.Llm;
+
 namespace Storymark.Api.Infrastructure.Settings;
 
 /// <summary>Non-prompt seed defaults, bound from the <c>SettingsDefaults</c>
@@ -18,4 +20,15 @@ internal sealed class LlmSettingsDefaults
     public string EmbeddingModelId { get; init; } = "ollama:nomic-embed-text";
 
     public Dictionary<string, string> ChatTaskMap { get; init; } = new(StringComparer.Ordinal);
+
+    public OpenAiSettingsDefaults OpenAi { get; init; } = new();
+
+    public Dictionary<string, LlmCostRate> CostRates { get; init; } = new(StringComparer.Ordinal);
+}
+
+internal sealed class OpenAiSettingsDefaults
+{
+    public string BaseUrl { get; init; } = string.Empty;
+
+    public string ApiKey { get; init; } = string.Empty;
 }

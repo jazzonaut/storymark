@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Serilog.Formatting.Compact;
 using Storymark.Api.Infrastructure.Database;
+using Storymark.Api.Infrastructure.Llm;
 using Storymark.Api.Infrastructure.Settings;
+using Storymark.Api.Services.Llm;
 using Storymark.Api.Services.Settings;
 
 Log.Logger = new LoggerConfiguration()
@@ -29,6 +31,17 @@ try
     builder.Services.AddSingleton<ISettingsService, SettingsService>();
     builder.Services.AddSingleton<SettingsSeeder>();
     builder.Services.AddHostedService<SettingsChangeListener>();
+
+    var ollamaUrl = builder.Configuration["Ollama:Url"]
+        ?? throw new InvalidOperationException("Ollama:Url is not configured.");
+    builder.Services.AddHttpClient<OllamaClient>(client =>
+        client.BaseAddress = new Uri(ollamaUrl.TrimEnd('/') + "/"));
+    builder.Services.AddHttpClient<OpenAiCompatibleClient>();
+    builder.Services.AddTransient<IChatModelClient>(sp => sp.GetRequiredService<OllamaClient>());
+    builder.Services.AddTransient<IChatModelClient>(sp => sp.GetRequiredService<OpenAiCompatibleClient>());
+    builder.Services.AddScoped<LlmCallRecorder>();
+    builder.Services.AddScoped<ChatModelRouter>();
+
     builder.Services.AddFastEndpoints();
 
     var app = builder.Build();

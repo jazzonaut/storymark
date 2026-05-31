@@ -22,6 +22,80 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Storymark.Api.Domain.LlmCalls.LlmCall", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BookId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("book_id");
+
+                    b.Property<decimal?>("CostEstimate")
+                        .HasColumnType("numeric")
+                        .HasColumnName("cost_estimate");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int?>("LatencyMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("latency_ms");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("model");
+
+                    b.Property<string>("Prompt")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("prompt");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("Response")
+                        .HasColumnType("text")
+                        .HasColumnName("response");
+
+                    b.Property<int?>("SectionIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("section_index");
+
+                    b.Property<string>("Task")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("task");
+
+                    b.Property<int?>("TokensIn")
+                        .HasColumnType("integer")
+                        .HasColumnName("tokens_in");
+
+                    b.Property<int?>("TokensOut")
+                        .HasColumnType("integer")
+                        .HasColumnName("tokens_out");
+
+                    b.Property<bool>("UsedFutureContent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("used_future_content");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Task", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("llm_calls_task_time");
+
+                    b.ToTable("llm_calls", (string)null);
+                });
+
             modelBuilder.Entity("Storymark.Api.Domain.Settings.Setting", b =>
                 {
                     b.Property<string>("Key")
