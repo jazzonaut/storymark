@@ -44,8 +44,20 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
-            // Covers and inline resource images: immutable per content hash.
-            urlPattern: /\/api\/books\/[^/]+\/(cover|resources\/.*)$/,
+            // A cover's bytes change once (placeholder -> real) when parsing
+            // finishes, so it can't be CacheFirst — that would freeze whichever
+            // version was seen first. Serve from cache for instant grids but
+            // revalidate so the placeholder->cover swap self-heals next view.
+            urlPattern: /\/api\/books\/[^/]+\/cover$/,
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "book-covers",
+              expiration: { maxEntries: 256, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+          {
+            // Inline resource images are immutable (keyed by archive path).
+            urlPattern: /\/api\/books\/[^/]+\/resources\/.*$/,
             handler: "CacheFirst",
             options: {
               cacheName: "book-images",
