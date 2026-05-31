@@ -6,6 +6,7 @@ import ReaderSettingsDrawer from "@/components/reader/ReaderSettingsDrawer.vue";
 import ReaderToolbar from "@/components/reader/ReaderToolbar.vue";
 import { useBookCache } from "@/composables/use-book-cache";
 import { useBooks } from "@/composables/use-books";
+import { useOfflineSync } from "@/composables/use-offline-sync";
 import { useReader } from "@/composables/use-reader";
 import { useReaderSettings } from "@/composables/use-reader-settings";
 
@@ -15,6 +16,7 @@ const route = useRoute();
 const bookId = String(route.params.id);
 
 const { books, loadBooks } = useBooks();
+const { isOnline } = useOfflineSync();
 const { cssVars, load: loadSettings } = useReaderSettings();
 const { progress, ensureCached } = useBookCache();
 const {
@@ -92,17 +94,29 @@ function onPageChange(page: number, total: number): void {
   pageInfo.value = { page, total };
 }
 
+// The section manifest carries section titles, not the book's. The title comes
+// from the library list, but resolving it must be best-effort: a deep-link or
+// offline open may have no list yet, and that must never fail the reader (the
+// book content is already served from Dexie).
+async function resolveBookTitle(): Promise<string> {
+  const cached = books.value.find((book) => book.bookId === bookId)?.title;
+  if (cached !== undefined) {
+    return cached;
+  }
+  try {
+    await loadBooks();
+  } catch {
+    return "Reading";
+  }
+  return books.value.find((book) => book.bookId === bookId)?.title ?? "Reading";
+}
+
 onMounted(async () => {
   try {
     await loadSettings();
     await ensureCached(bookId);
     await open(bookId);
-    // The section manifest carries section titles, not the book's title; read
-    // that from the library list (shared state, usually already loaded).
-    if (!books.value.some((book) => book.bookId === bookId)) {
-      await loadBooks();
-    }
-    bookTitle.value = books.value.find((book) => book.bookId === bookId)?.title ?? "Reading";
+    bookTitle.value = await resolveBookTitle();
     phase.value = "ready";
     revealChrome();
   } catch {
@@ -145,6 +159,7 @@ onBeforeUnmount(() => {
         :section-title="currentSectionTitle"
         :position="positionLabel"
         :visible="chromeVisible"
+        :offline="!isOnline"
         @open-settings="openSettings"
       />
 

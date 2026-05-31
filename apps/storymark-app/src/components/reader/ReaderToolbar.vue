@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
 
-defineProps<{ title: string; sectionTitle: string | null; position: string; visible: boolean }>();
+defineProps<{
+  title: string;
+  sectionTitle: string | null;
+  position: string;
+  visible: boolean;
+  offline: boolean;
+}>();
 
 defineEmits<{ (e: "open-settings"): void }>();
 </script>
@@ -24,6 +30,12 @@ defineEmits<{ (e: "open-settings"): void }>();
         {{ sectionTitle ?? "Untitled section" }} · {{ position }}
       </p>
     </div>
+    <span
+      v-if="offline"
+      class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+    >
+      Offline
+    </span>
     <button
       type="button"
       class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"

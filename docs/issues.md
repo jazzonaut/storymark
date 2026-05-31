@@ -186,10 +186,10 @@ Estimates are rough T-shirt sizes: **S** ≈ ½ day, **M** ≈ 1–2 days, **L**
 > **Scope note (S2.2):** The Dexie cache foundation moved into S2.2, which already ships: the `src/db/storymark-db.ts` schema (`manifests`, `sections`, `readerSettings`), the whole-book prefetch in parallel batches of 4 with a "Caching N/M" progress UI, and the read-through `readerApi` (IndexedDB-first, API fallback, write-back). S2.3 is the remaining PWA/offline layer on top of that.
 
 **Frontend:**
-- `useOfflineSync.ts` exposes online/offline state
-- Service worker (`vite-plugin-pwa`): app shell precache; runtime cache for `/api/books/.../cover`
-- Extend the Dexie schema with `bookmarks` / `pendingProgress` stores as S2.4/S2.5 need them
-- "Installed app" check (BeforeInstallPromptEvent) and install button in toolbar
+- `useOfflineSync.ts` exposes online/offline state (Offline badge in library header + reader toolbar)
+- Service worker (`vite-plugin-pwa`, `autoUpdate`): app-shell precache + `navigateFallback` for deep-link routes; runtime cache for covers + inline `resources/` images (CacheFirst) and `GET /api/books` (NetworkFirst, so the library renders offline). Section content stays Dexie-only (ADR-0006).
+- "Installed app" check (BeforeInstallPromptEvent) and install button (library header)
+- `bookmarks` / `pendingProgress` Dexie stores are added by S2.4/S2.5 when they have a consumer (not here)
 **Acceptance:** open a book online → see caching progress → kill the dev server → reload PWA in airplane mode → can still read the whole book and swipe pages.
 **Depends on:** S2.2
 
