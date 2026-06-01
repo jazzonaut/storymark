@@ -215,7 +215,12 @@ onMounted(() => {
           fluid
           placeholder="Type a new key (current value is hidden)"
         />
-        <Button label="Save" size="small" :disabled="draftApiKey.length === 0" @click="saveApiKey" />
+        <Button
+          label="Save"
+          size="small"
+          :disabled="draftApiKey.length === 0"
+          @click="saveApiKey"
+        />
       </div>
     </div>
 
