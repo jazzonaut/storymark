@@ -14,6 +14,7 @@ defineProps<{
 defineEmits<{
   (e: "open-settings"): void;
   (e: "open-bookmarks"): void;
+  (e: "open-assistant"): void;
   (e: "toggle-bookmark"): void;
 }>();
 </script>
@@ -43,6 +44,14 @@ defineEmits<{
       Offline
     </span>
     <BookmarkButton :active="bookmarked" @toggle="$emit('toggle-bookmark')" />
+    <button
+      type="button"
+      class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
+      aria-label="Ask the assistant"
+      @click="$emit('open-assistant')"
+    >
+      Ask
+    </button>
     <button
       type="button"
       class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"

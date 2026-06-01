@@ -2,9 +2,20 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { Section } from "@storymark/shared-types";
 
+// A request to briefly flash a paragraph (e.g. after jumping to a Q&A source).
+// `nonce` changes per request so re-tapping the same paragraph re-fires.
+interface ParagraphHighlight {
+  readonly paragraphIndex: number;
+  readonly nonce: number;
+}
+
 // `entryParagraph` is the paragraph to land on when this section first appears
 // (0 = start, last = end, or a resumed position).
-const props = defineProps<{ section: Section; entryParagraph: number }>();
+const props = defineProps<{
+  section: Section;
+  entryParagraph: number;
+  highlight: ParagraphHighlight | null;
+}>();
 
 const emit = defineEmits<{
   (e: "update:paragraph", paragraphIndex: number): void;
@@ -16,6 +27,7 @@ const emit = defineEmits<{
 
 const SETTLE_MS = 120;
 const TAP_EDGE_FRACTION = 0.28;
+const FLASH_MS = 2000;
 
 const scrollEl = ref<HTMLDivElement | null>(null);
 const contentEl = ref<HTMLDivElement | null>(null);
@@ -27,6 +39,8 @@ const totalPages = ref(1);
 let trackedParagraph = 0;
 let settleTimer: number | undefined;
 let resizeObserver: ResizeObserver | undefined;
+let flashTimer: number | undefined;
+let flashedEl: HTMLElement | null = null;
 
 function pageWidth(): number {
   return scrollEl.value?.clientWidth ?? 1;
@@ -207,10 +221,47 @@ function restoreToTracked(): void {
   updatePageInfo();
 }
 
+function clearFlash(): void {
+  if (flashTimer !== undefined) {
+    window.clearTimeout(flashTimer);
+    flashTimer = undefined;
+  }
+  flashedEl?.classList.remove("reader-para--flash");
+  flashedEl = null;
+}
+
+function flashParagraph(paragraphIndex: number): void {
+  clearFlash();
+  const el = scrollEl.value?.querySelector<HTMLElement>(
+    `[data-paragraph-index="${String(paragraphIndex)}"]`,
+  );
+  if (!el) {
+    return;
+  }
+  el.classList.add("reader-para--flash");
+  flashedEl = el;
+  flashTimer = window.setTimeout(clearFlash, FLASH_MS);
+}
+
 watch(
   () => props.section,
   () => {
     void reposition();
+  },
+  { flush: "post" },
+);
+
+// A new highlight object (incl. nonce) means "flash this paragraph now". Post
+// flush so the section-change reposition has rendered the target paragraph.
+watch(
+  () => props.highlight,
+  (highlight) => {
+    if (highlight === null) {
+      return;
+    }
+    void nextTick(() => {
+      flashParagraph(highlight.paragraphIndex);
+    });
   },
   { flush: "post" },
 );
@@ -240,6 +291,7 @@ onBeforeUnmount(() => {
   if (settleTimer !== undefined) {
     window.clearTimeout(settleTimer);
   }
+  clearFlash();
 });
 </script>
 
@@ -299,6 +351,21 @@ onBeforeUnmount(() => {
 
 .reader-para + .reader-para {
   margin-top: var(--reader-paragraph-spacing);
+}
+
+/* One-shot fade after jumping to a Q&A source, so the eye lands on it. */
+.reader-para--flash {
+  border-radius: 0.375rem;
+  animation: reader-para-flash 2s ease-out;
+}
+
+@keyframes reader-para-flash {
+  from {
+    background-color: color-mix(in srgb, var(--sm-accent) 26%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
 }
 
 .reader-para :deep(img) {

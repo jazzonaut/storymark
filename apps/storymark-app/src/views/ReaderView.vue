@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
+import type { AssistantSource } from "@storymark/shared-types";
 import BookmarksPanel from "@/components/reader/BookmarksPanel.vue";
+import MemoryPanel from "@/components/reader/MemoryPanel.vue";
 import PaginatedSection from "@/components/reader/PaginatedSection.vue";
 import ReaderSettingsDrawer from "@/components/reader/ReaderSettingsDrawer.vue";
 import ReaderToolbar from "@/components/reader/ReaderToolbar.vue";
@@ -36,6 +38,7 @@ const {
   setParagraph,
   open,
   goTo,
+  goToLocation,
 } = useReader();
 const { record, resume, flush } = useReadingProgress();
 const { bookmarks, load: loadBookmarks, toggle, removeById, isBookmarked } = useBookmarks();
@@ -44,6 +47,9 @@ const phase = ref<"loading" | "ready" | "error">("loading");
 const chromeVisible = ref(true);
 const settingsOpen = ref(false);
 const bookmarksOpen = ref(false);
+const assistantOpen = ref(false);
+const highlight = ref<{ paragraphIndex: number; nonce: number } | null>(null);
+let highlightNonce = 0;
 const pageInfo = ref<{ page: number; total: number }>({ page: 0, total: 1 });
 
 const isCurrentBookmarked = computed<boolean>(() =>
@@ -60,6 +66,13 @@ const positionLabel = computed<string>(
 const sectionProgress = computed<number>(() =>
   pageInfo.value.total > 0 ? (pageInfo.value.page + 1) / pageInfo.value.total : 0,
 );
+// What the assistant treats as "read so far" in the current section: the end
+// offset of the paragraph at the top of the page (the spoiler boundary).
+const currentLocation = computed<number>(
+  () =>
+    currentSection.value?.paragraphs.find((p) => p.paragraphIndex === currentParagraphIndex.value)
+      ?.locationEnd ?? 0,
+);
 const cachingLabel = computed<string>(() =>
   progress.value ? `${String(progress.value.cached)}/${String(progress.value.total)}` : "",
 );
@@ -71,7 +84,7 @@ function scheduleHide(): void {
     window.clearTimeout(idleTimer);
   }
   idleTimer = window.setTimeout(() => {
-    if (!settingsOpen.value && !bookmarksOpen.value) {
+    if (!settingsOpen.value && !bookmarksOpen.value && !assistantOpen.value) {
       chromeVisible.value = false;
     }
   }, CHROME_IDLE_MS);
@@ -101,6 +114,21 @@ function openSettings(): void {
 function openBookmarks(): void {
   bookmarksOpen.value = true;
   chromeVisible.value = true;
+}
+
+function openAssistant(): void {
+  assistantOpen.value = true;
+  chromeVisible.value = true;
+}
+
+// Tapping a Q&A source: close the panel, navigate to the passage, and flash it.
+async function onJumpToSource(source: AssistantSource): Promise<void> {
+  assistantOpen.value = false;
+  const paragraphIndex = await goToLocation(source.sectionIndex, source.locationStart);
+  if (paragraphIndex !== null) {
+    highlightNonce += 1;
+    highlight.value = { paragraphIndex, nonce: highlightNonce };
+  }
 }
 
 // Bookmark (or un-bookmark) the paragraph at the top of the current page, with a
@@ -230,6 +258,7 @@ onBeforeUnmount(() => {
         :bookmarked="isCurrentBookmarked"
         @open-settings="openSettings"
         @open-bookmarks="openBookmarks"
+        @open-assistant="openAssistant"
         @toggle-bookmark="toggleBookmark"
       />
 
@@ -237,6 +266,7 @@ onBeforeUnmount(() => {
         v-if="currentSection"
         :section="currentSection"
         :entry-paragraph="entryParagraph"
+        :highlight="highlight"
         @update:paragraph="onParagraph"
         @page-change="onPageChange"
         @next-section="goNext"
@@ -260,6 +290,16 @@ onBeforeUnmount(() => {
         @close="bookmarksOpen = false"
         @jump="(bookmark) => jumpToBookmark(bookmark.sectionIndex, bookmark.paragraphIndex)"
         @remove="removeById"
+      />
+
+      <MemoryPanel
+        :open="assistantOpen"
+        :book-id="bookId"
+        :current-section="currentSectionIndex"
+        :current-location="currentLocation"
+        :manifest="manifest"
+        @close="assistantOpen = false"
+        @jump="onJumpToSource"
       />
     </template>
   </main>

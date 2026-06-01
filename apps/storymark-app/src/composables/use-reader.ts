@@ -4,9 +4,23 @@ import type { Section, SectionSummary } from "@storymark/shared-types";
 import { readerApi } from "@/api/reader-api";
 
 /** Where to land when a section first appears: 0 (start) when moving forward or
- * opening, the last paragraph (end) when paging backward, or a specific index
- * when resuming a saved position. */
-type SectionEntry = "start" | "end" | number;
+ * opening, the last paragraph (end) when paging backward, a specific paragraph
+ * index when resuming a saved position, or the paragraph covering a character
+ * location (jumping to a Q&A source, whose paragraph is only known post-load). */
+type SectionEntry = "start" | "end" | number | { readonly location: number };
+
+/** The paragraph whose half-open range covers `location`, else the first
+ * paragraph starting at/after it, else the section start. */
+function paragraphIndexForLocation(section: Section, location: number): number {
+  const containing = section.paragraphs.find(
+    (p) => p.locationStart <= location && location < p.locationEnd,
+  );
+  if (containing) {
+    return containing.paragraphIndex;
+  }
+  const after = section.paragraphs.find((p) => p.locationStart >= location);
+  return after?.paragraphIndex ?? 0;
+}
 
 /** A position to open a book at (a resumed reading position). */
 export interface InitialPosition {
@@ -36,6 +50,7 @@ interface UseReader {
   readonly hasPrevSection: ComputedRef<boolean>;
   open: (id: string, initial?: InitialPosition) => Promise<readonly SectionSummary[]>;
   goTo: (sectionIndex: number, paragraphIndex: number) => Promise<void>;
+  goToLocation: (sectionIndex: number, location: number) => Promise<number | null>;
   nextSection: () => Promise<boolean>;
   prevSection: () => Promise<boolean>;
   setParagraph: (paragraphIndex: number) => void;
@@ -62,12 +77,15 @@ export function useReader(): UseReader {
     try {
       const section = await readerApi.getSection(id, summary.sectionIndex);
       const lastIndex = Math.max(section.paragraphs.length - 1, 0);
-      const landing =
+      const requested =
         entry === "start"
           ? 0
           : entry === "end"
             ? lastIndex
-            : Math.min(Math.max(entry, 0), lastIndex);
+            : typeof entry === "number"
+              ? entry
+              : paragraphIndexForLocation(section, entry.location);
+      const landing = Math.min(Math.max(requested, 0), lastIndex);
       currentPosition.value = position;
       entryParagraph.value = landing;
       currentParagraphIndex.value = landing;
@@ -106,6 +124,20 @@ export function useReader(): UseReader {
     }
   }
 
+  // Jump to the paragraph covering a character location (a tapped Q&A source).
+  // Returns the resolved paragraph index so the caller can highlight it.
+  async function goToLocation(sectionIndex: number, location: number): Promise<number | null> {
+    if (isLoadingSection.value) {
+      return null;
+    }
+    const position = manifest.value.findIndex((s) => s.sectionIndex === sectionIndex);
+    if (position < 0) {
+      return null;
+    }
+    await loadPosition(position, { location });
+    return currentParagraphIndex.value;
+  }
+
   async function nextSection(): Promise<boolean> {
     // Ignore a fresh request while one is mid-flight: a fast double tap-edge
     // would otherwise read a stale currentPosition and double-advance / race.
@@ -142,6 +174,7 @@ export function useReader(): UseReader {
     hasPrevSection,
     open,
     goTo,
+    goToLocation,
     nextSection,
     prevSection,
     setParagraph,

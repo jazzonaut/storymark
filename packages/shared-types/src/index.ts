@@ -74,3 +74,27 @@ export interface ReadingProgress {
   readonly locationEnd: number;
   readonly clientTimestamp: string;
 }
+
+/** Coarse confidence the assistant attaches to an answer, derived from the
+ * strength of the retrieved evidence. */
+export type AnswerConfidence = "low" | "medium" | "high";
+
+/** One evidence chunk a Q&A answer cited. `locationStart`/`locationEnd` are
+ * offsets into the section's plain text (the shared coordinate space), so a
+ * source can be navigated to in the reader. Mirrors QuestionSource. */
+export interface AssistantSource {
+  readonly sectionIndex: number;
+  readonly locationStart: number;
+  readonly locationEnd: number;
+  readonly snippet: string;
+}
+
+/** A spoiler-safe answer (`POST /api/books/{id}/ask`). `usedFutureContent` is
+ * derived from the evidence and is always `false` unless the retrieval filter
+ * regresses. Mirrors AskResponse. */
+export interface AssistantAnswer {
+  readonly answer: string;
+  readonly confidence: AnswerConfidence;
+  readonly sources: readonly AssistantSource[];
+  readonly usedFutureContent: boolean;
+}
