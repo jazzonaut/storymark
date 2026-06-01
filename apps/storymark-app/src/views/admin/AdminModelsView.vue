@@ -92,7 +92,13 @@ interface SwapState {
   loading: boolean;
   applying: boolean;
 }
-const swap = ref<SwapState>({ visible: false, modelId: "", preview: null, loading: false, applying: false });
+const swap = ref<SwapState>({
+  visible: false,
+  modelId: "",
+  preview: null,
+  loading: false,
+  applying: false,
+});
 
 function parsedString(value: string): string {
   try {
@@ -183,7 +189,12 @@ function addProvider(): void {
 
 async function saveProviderRow(draft: ProviderDraft): Promise<void> {
   if (draft.name.trim().length === 0 || draft.baseUrl.trim().length === 0) {
-    toast.add({ severity: "error", summary: "Missing field", detail: "Name and base URL are required.", life: 4000 });
+    toast.add({
+      severity: "error",
+      summary: "Missing field",
+      detail: "Name and base URL are required.",
+      life: 4000,
+    });
     return;
   }
   try {
@@ -239,17 +250,32 @@ function parseCost(value: string): number | null | undefined {
 
 async function saveModelRow(draft: ModelDraft): Promise<void> {
   if (draft.label.trim().length === 0 || draft.modelName.trim().length === 0) {
-    toast.add({ severity: "error", summary: "Missing field", detail: "Label and model name are required.", life: 4000 });
+    toast.add({
+      severity: "error",
+      summary: "Missing field",
+      detail: "Label and model name are required.",
+      life: 4000,
+    });
     return;
   }
   if (draft.providerId.length === 0) {
-    toast.add({ severity: "error", summary: "Missing provider", detail: "Pick a provider.", life: 4000 });
+    toast.add({
+      severity: "error",
+      summary: "Missing provider",
+      detail: "Pick a provider.",
+      life: 4000,
+    });
     return;
   }
   const input = parseCost(draft.input);
   const output = parseCost(draft.output);
   if (input === undefined || output === undefined) {
-    toast.add({ severity: "error", summary: "Invalid cost", detail: "Costs must be non-negative numbers.", life: 4000 });
+    toast.add({
+      severity: "error",
+      summary: "Invalid cost",
+      detail: "Costs must be non-negative numbers.",
+      life: 4000,
+    });
     return;
   }
   try {
@@ -297,7 +323,13 @@ async function onEmbeddingChange(): Promise<void> {
   if (embeddingModelId.value === embeddingSaved.value) {
     return;
   }
-  swap.value = { visible: true, modelId: embeddingModelId.value, preview: null, loading: true, applying: false };
+  swap.value = {
+    visible: true,
+    modelId: embeddingModelId.value,
+    preview: null,
+    loading: true,
+    applying: false,
+  };
   try {
     swap.value.preview = await previewEmbeddingSwap();
   } catch (error) {
@@ -337,7 +369,12 @@ async function saveTrim(): Promise<void> {
   const max = Number(draftMaxChunks.value);
   const maxLocal = Number(draftMaxChunksLocal.value);
   if (!Number.isInteger(max) || max < 1 || !Number.isInteger(maxLocal) || maxLocal < 1) {
-    toast.add({ severity: "error", summary: "Invalid value", detail: "Enter whole numbers of 1 or more.", life: 4000 });
+    toast.add({
+      severity: "error",
+      summary: "Invalid value",
+      detail: "Enter whole numbers of 1 or more.",
+      life: 4000,
+    });
     return;
   }
   try {
@@ -396,7 +433,13 @@ onMounted(() => {
               :allow-empty="false"
             />
           </div>
-          <Button label="Delete" size="small" severity="danger" text @click="deleteProviderRow(draft)" />
+          <Button
+            label="Delete"
+            size="small"
+            severity="danger"
+            text
+            @click="deleteProviderRow(draft)"
+          />
           <Button label="Save" size="small" @click="saveProviderRow(draft)" />
         </div>
         <div class="mt-3 flex flex-wrap items-end gap-3">
@@ -470,7 +513,13 @@ onMounted(() => {
             <InputText v-model="draft.output" class="w-28" inputmode="decimal" placeholder="0.60" />
           </div>
           <div class="flex-1"></div>
-          <Button label="Delete" size="small" severity="danger" text @click="deleteModelRow(draft)" />
+          <Button
+            label="Delete"
+            size="small"
+            severity="danger"
+            text
+            @click="deleteModelRow(draft)"
+          />
           <Button label="Save" size="small" @click="saveModelRow(draft)" />
         </div>
       </div>
@@ -543,8 +592,8 @@ onMounted(() => {
       @hide="cancelSwap"
     >
       <p class="mb-3">
-        Switching the embedding model re-embeds every chunk under the new model. Search results for a
-        book are incomplete until its reindex finishes.
+        Switching the embedding model re-embeds every chunk under the new model. Search results for
+        a book are incomplete until its reindex finishes.
       </p>
       <p v-if="swap.loading" class="opacity-70">Estimating impact…</p>
       <ul v-else-if="swap.preview" class="mb-3 list-disc pl-5">
@@ -554,7 +603,12 @@ onMounted(() => {
       </ul>
       <template #footer>
         <Button label="Cancel" text :disabled="swap.applying" @click="cancelSwap" />
-        <Button label="Reindex" :loading="swap.applying" :disabled="swap.loading" @click="confirmSwap" />
+        <Button
+          label="Reindex"
+          :loading="swap.applying"
+          :disabled="swap.loading"
+          @click="confirmSwap"
+        />
       </template>
     </Dialog>
   </section>
