@@ -281,6 +281,7 @@ onBeforeUnmount(() => {
         :section="currentSection"
         :entry-paragraph="entryParagraph"
         :highlight="highlight"
+        :selection-active="selection !== null"
         @update:paragraph="onParagraph"
         @page-change="onPageChange"
         @next-section="goNext"

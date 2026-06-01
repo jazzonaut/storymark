@@ -15,6 +15,7 @@ const props = defineProps<{
   section: Section;
   entryParagraph: number;
   highlight: ParagraphHighlight | null;
+  selectionActive: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -34,6 +35,7 @@ const SETTLE_MS = 120;
 const TAP_EDGE_FRACTION = 0.28;
 const FLASH_MS = 2000;
 const SELECTION_DEBOUNCE_MS = 250;
+const SELECTION_HIGHLIGHT = "sm-selection";
 
 const scrollEl = ref<HTMLDivElement | null>(null);
 const contentEl = ref<HTMLDivElement | null>(null);
@@ -48,6 +50,15 @@ let resizeObserver: ResizeObserver | undefined;
 let flashTimer: number | undefined;
 let flashedEl: HTMLElement | null = null;
 let selectionTimer: number | undefined;
+// Touch-primary devices show an OS selection toolbar that overlaps our popover;
+// there we clear the native selection and repaint it ourselves (see readSelection).
+const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
+// Set when we clear the native selection on touch, so the trailing tap that ends
+// a long-press isn't read as a page-turn.
+let suppressClick = false;
+// Swallows the one selectionchange our own removeAllRanges() triggers, so it
+// isn't mistaken for the user dismissing the selection.
+let clearingSelf = false;
 
 function pageWidth(): number {
   return scrollEl.value?.clientWidth ?? 1;
@@ -183,9 +194,22 @@ function onScroll(): void {
   settleTimer = window.setTimeout(onSettle, SETTLE_MS);
 }
 
+function paintSelection(range: Range): void {
+  CSS.highlights.set(SELECTION_HIGHLIGHT, new Highlight(range.cloneRange()));
+}
+
+function clearPaintedSelection(): void {
+  CSS.highlights.delete(SELECTION_HIGHLIGHT);
+}
+
 // Report a settled, non-collapsed selection inside the reader so the popover can
 // anchor to it; a collapsed/empty selection dismisses it. Covers mouse drag and
 // touch long-press without a page-turn (see the guard in onClick).
+//
+// On touch-primary devices we then clear the native selection — which dismisses
+// the OS selection toolbar that would otherwise overlap our popover — and repaint
+// it via the CSS Custom Highlight API so the text still reads as selected. The
+// trade-off is that the native drag-handles are gone; re-selecting replaces it.
 function readSelection(): void {
   const scroll = scrollEl.value;
   if (!scroll) {
@@ -193,6 +217,7 @@ function readSelection(): void {
   }
   const selection = document.getSelection();
   if (selection === null || selection.isCollapsed || selection.rangeCount === 0) {
+    clearPaintedSelection();
     emit("dismiss-select");
     return;
   }
@@ -202,6 +227,7 @@ function readSelection(): void {
   }
   const text = selection.toString().trim();
   if (text.length === 0) {
+    clearPaintedSelection();
     emit("dismiss-select");
     return;
   }
@@ -210,9 +236,19 @@ function readSelection(): void {
     text,
     rect: { top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width },
   });
+  if (coarsePointer) {
+    paintSelection(range);
+    suppressClick = true;
+    clearingSelf = true;
+    selection.removeAllRanges();
+  }
 }
 
 function onSelectionChange(): void {
+  if (clearingSelf) {
+    clearingSelf = false;
+    return;
+  }
   if (selectionTimer !== undefined) {
     window.clearTimeout(selectionTimer);
   }
@@ -233,7 +269,10 @@ function onClick(event: MouseEvent): void {
     return;
   }
   // A drag-select ends in a click; don't let it turn the page or toggle chrome.
-  if (hasActiveSelection()) {
+  // On desktop the native selection is still live; on touch we've already cleared
+  // it, so suppressClick stands in for the just-ended long-press.
+  if (hasActiveSelection() || suppressClick) {
+    suppressClick = false;
     return;
   }
   const scroll = scrollEl.value;
@@ -300,9 +339,22 @@ function flashParagraph(paragraphIndex: number): void {
 watch(
   () => props.section,
   () => {
+    clearPaintedSelection();
     void reposition();
   },
   { flush: "post" },
+);
+
+// The popover lives in the parent; when it dismisses (outside tap, "Ask…", etc.)
+// drop our repainted highlight too.
+watch(
+  () => props.selectionActive,
+  (active) => {
+    if (!active) {
+      clearPaintedSelection();
+      suppressClick = false;
+    }
+  },
 );
 
 // A new highlight object (incl. nonce) means "flash this paragraph now". Post
@@ -350,6 +402,7 @@ onBeforeUnmount(() => {
   if (selectionTimer !== undefined) {
     window.clearTimeout(selectionTimer);
   }
+  clearPaintedSelection();
   clearFlash();
 });
 </script>
@@ -384,6 +437,9 @@ onBeforeUnmount(() => {
   touch-action: pan-x;
   scrollbar-width: none;
   cursor: pointer;
+  /* Suppress the iOS long-press callout; the floating selection toolbar is
+     handled by clearing the native selection on touch (see readSelection). */
+  -webkit-touch-callout: none;
 }
 
 .reader-scroll::-webkit-scrollbar {
@@ -434,5 +490,12 @@ onBeforeUnmount(() => {
 
 .reader-para :deep(p) {
   margin: 0;
+}
+</style>
+
+<!-- The Custom Highlight API registry is global, so its pseudo can't be scoped. -->
+<style>
+::highlight(sm-selection) {
+  background-color: color-mix(in srgb, var(--sm-accent) 30%, transparent);
 }
 </style>
