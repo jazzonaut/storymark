@@ -74,19 +74,21 @@ internal static class PromptDefaults
 
     public const string EntitySummary =
         """
-        Create a spoiler-safe summary of this entity for a reader.
+        Create a spoiler-safe summary of the named ENTITY for a reader, using only the
+        supplied MENTIONS and CONTEXT (which are filtered to content the reader has
+        already seen).
 
-        Use only the supplied context.
-
-        Return JSON:
-        - shortSummary
-        - knownFacts
-        - relationships
-        - openQuestions
-        - sources
+        Return a single JSON object only — no markdown fences, no commentary:
+        {
+          "shortSummary": "one or two sentences",
+          "knownFacts": ["..."],
+          "relationships": ["how they relate to other characters, one per item"],
+          "openQuestions": ["what the reader might still be wondering"]
+        }
 
         Do not mention or imply anything beyond the supplied context.
-        If very little is known, say that only briefly.
+        Do not foreshadow or reveal future events.
+        If very little is known, say that briefly in shortSummary and leave the lists empty.
         """;
 
     public const string SelectionHint =

@@ -16,6 +16,7 @@ using Storymark.Api.Infrastructure.Storage;
 using Storymark.Api.Jobs;
 using Storymark.Api.Services.Assistant;
 using Storymark.Api.Services.Books;
+using Storymark.Api.Services.Entities;
 using Storymark.Api.Services.Llm;
 using Storymark.Api.Services.Retrieval;
 using Storymark.Api.Services.Selection;
@@ -68,6 +69,8 @@ try
     builder.Services.AddScoped<BookSectionService>();
     builder.Services.AddScoped<BookExtractionService>();
     builder.Services.AddScoped<BookMemoryService>();
+    builder.Services.AddScoped<BookEntityService>();
+    builder.Services.AddScoped<EntitySummaryService>();
     builder.Services.AddScoped<ReadingProgressService>();
     builder.Services.AddScoped<BookmarkService>();
     builder.Services.AddScoped<ProcessBookJob>();

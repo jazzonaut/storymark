@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SelectionEntityCard } from "@storymark/shared-types";
+import EntityTypeBadge from "@/components/reader/EntityTypeBadge.vue";
 
 defineProps<{ card: SelectionEntityCard }>();
 </script>
@@ -8,9 +9,7 @@ defineProps<{ card: SelectionEntityCard }>();
   <div>
     <div class="flex items-baseline gap-2">
       <span class="text-sm font-semibold text-[var(--sm-fg)]">{{ card.canonicalName }}</span>
-      <span class="rounded-full bg-[var(--sm-surface)] px-2 py-0.5 text-xs text-[var(--sm-muted)]">
-        {{ card.entityType }}
-      </span>
+      <EntityTypeBadge :type="card.entityType" />
     </div>
     <p v-if="card.aliases.length > 0" class="mt-1 text-xs text-[var(--sm-muted)]">
       Also known as: {{ card.aliases.join(", ") }}

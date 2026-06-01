@@ -56,13 +56,45 @@ export interface Paragraph {
   readonly text: string;
 }
 
-/** Full section content (`GET /api/books/{id}/sections/{idx}`): sanitised HTML
- * plus paragraph offsets. Mirrors SectionContentView. */
+/** A Story Guide entity visible at a reading position, carried on a section
+ * payload (for in-text highlighting) and the entities list. Mirrors
+ * SectionEntityView. */
+export interface SectionEntity {
+  readonly entityId: string;
+  readonly canonicalName: string;
+  readonly entityType: string;
+  readonly aliases: readonly string[];
+  readonly firstSeenSection: number | null;
+}
+
+/** A Story Guide list entry (`GET /api/books/{id}/entities`): a visible entity
+ * plus its latest cached short summary at-or-before the position, or null if none
+ * has been generated yet. Mirrors StoryGuideEntityView. */
+export interface StoryGuideEntity extends SectionEntity {
+  readonly shortSummary: string | null;
+}
+
+/** A spoiler-safe entity summary
+ * (`GET /api/books/{id}/entities/{entityId}/summary`), generated lazily on first
+ * tap and cached server-side. Mirrors EntitySummaryView. */
+export interface EntitySummary {
+  readonly canonicalName: string;
+  readonly entityType: string;
+  readonly shortSummary: string;
+  readonly knownFacts: readonly string[];
+  readonly relationships: readonly string[];
+  readonly openQuestions: readonly string[];
+}
+
+/** Full section content (`GET /api/books/{id}/sections/{idx}`): sanitised HTML,
+ * paragraph offsets, and the entities visible by this section (for highlighting).
+ * Mirrors SectionContentView. */
 export interface Section {
   readonly sectionIndex: number;
   readonly title: string | null;
   readonly html: string;
   readonly paragraphs: readonly Paragraph[];
+  readonly entities: readonly SectionEntity[];
 }
 
 /** A saved bookmark (`GET /api/books/{id}/bookmarks`). Mirrors BookmarkView.

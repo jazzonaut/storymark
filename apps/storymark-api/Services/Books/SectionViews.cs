@@ -28,7 +28,8 @@ internal sealed record ParagraphView
 }
 
 /// <summary>Full section content (<c>GET /api/books/{id}/sections/{idx}</c>):
-/// sanitised HTML plus paragraph offsets.</summary>
+/// sanitised HTML, paragraph offsets, and the entities visible by this section (for
+/// in-text highlighting — names/aliases the reader has already met).</summary>
 internal sealed record SectionContentView
 {
     public required int SectionIndex { get; init; }
@@ -38,6 +39,8 @@ internal sealed record SectionContentView
     public required string Html { get; init; }
 
     public required IReadOnlyList<ParagraphView> Paragraphs { get; init; }
+
+    public required IReadOnlyList<SectionEntityView> Entities { get; init; }
 }
 
 /// <summary>A resolved inline resource file ready to serve.</summary>

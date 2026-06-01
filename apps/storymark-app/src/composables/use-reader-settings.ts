@@ -21,7 +21,7 @@ const DEFAULTS: ReaderSettings = {
   paragraphSpacingEm: 0.8,
   contentWidthPx: 680,
   theme: "light",
-  entityHighlight: "off",
+  entityHighlight: "subtle",
   recapCardOnSectionEntry: true,
 };
 

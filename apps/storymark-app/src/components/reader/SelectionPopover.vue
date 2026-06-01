@@ -16,6 +16,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "ask", text: string): void;
+  (e: "open-entity", payload: { entityId: string; name: string }): void;
 }>();
 
 const { isResolving, result, error, resolve, reset } = useSelectionHint();
@@ -100,7 +101,16 @@ onBeforeUnmount(() => {
 
     <p v-else-if="error" class="text-sm text-red-600">{{ error }}</p>
 
-    <EntityCard v-else-if="result?.kind === 'entity'" :card="result.card" />
+    <div v-else-if="result?.kind === 'entity'">
+      <EntityCard :card="result.card" />
+      <button
+        type="button"
+        class="mt-2 text-sm font-medium text-[var(--sm-accent)] hover:underline"
+        @click="emit('open-entity', { entityId: result.entityId, name: result.card.canonicalName })"
+      >
+        Tell me more →
+      </button>
+    </div>
 
     <HintText
       v-else-if="result?.kind === 'hint'"

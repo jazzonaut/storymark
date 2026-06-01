@@ -299,6 +299,64 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                     b.ToTable("book_entity_mentions", (string)null);
                 });
 
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookEntitySummary", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BookId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("book_id");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<DateTimeOffset>("GeneratedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("generated_at");
+
+                    b.Property<string>("KnownFacts")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("known_facts");
+
+                    b.Property<string>("OpenQuestions")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("open_questions");
+
+                    b.Property<string>("Relationships")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("relationships");
+
+                    b.Property<string>("ShortSummary")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("short_summary");
+
+                    b.Property<int>("UpToLocation")
+                        .HasColumnType("integer")
+                        .HasColumnName("up_to_location");
+
+                    b.Property<int>("UpToSection")
+                        .HasColumnType("integer")
+                        .HasColumnName("up_to_section");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookId");
+
+                    b.HasIndex("EntityId", "UpToSection", "UpToLocation")
+                        .IsUnique()
+                        .HasDatabaseName("book_entity_summaries_pos");
+
+                    b.ToTable("book_entity_summaries", (string)null);
+                });
+
             modelBuilder.Entity("Storymark.Api.Domain.Books.BookEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -952,6 +1010,21 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                 });
 
             modelBuilder.Entity("Storymark.Api.Domain.Books.BookEntityMention", b =>
+                {
+                    b.HasOne("Storymark.Api.Domain.Books.Book", null)
+                        .WithMany()
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Storymark.Api.Domain.Books.BookEntity", null)
+                        .WithMany()
+                        .HasForeignKey("EntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookEntitySummary", b =>
                 {
                     b.HasOne("Storymark.Api.Domain.Books.Book", null)
                         .WithMany()

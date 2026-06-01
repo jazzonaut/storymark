@@ -8,7 +8,8 @@ namespace Storymark.Api.Services.Books;
 /// <summary>Read access to parsed section content for the reader endpoints
 /// (docs/plan.md §11.3). DB queries and the on-disk HTML/resource reads live here,
 /// not in the endpoints (layering).</summary>
-internal sealed class BookSectionService(StorymarkDbContext db, FileStorageService storage)
+internal sealed class BookSectionService(
+    StorymarkDbContext db, FileStorageService storage, BookEntityService entities)
 {
     /// <summary>The section manifest, or <c>null</c> if the book does not exist.</summary>
     public async Task<IReadOnlyList<SectionSummaryView>?> GetManifestAsync(Guid bookId, CancellationToken ct)
@@ -59,12 +60,15 @@ internal sealed class BookSectionService(StorymarkDbContext db, FileStorageServi
             })
             .ToListAsync(ct);
 
+        var visibleEntities = await entities.GetVisibleForSectionAsync(bookId, sectionIndex, ct);
+
         return new SectionContentView
         {
             SectionIndex = section.SectionIndex,
             Title = section.Title,
             Html = html,
             Paragraphs = paragraphs,
+            Entities = visibleEntities,
         };
     }
 

@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { Section } from "@storymark/shared-types";
+import { useReaderSettings } from "@/composables/use-reader-settings";
+import { highlightEntities } from "@/utils/highlight-entities";
 
 // A request to briefly flash a paragraph (e.g. after jumping to a Q&A source).
 // `nonce` changes per request so re-tapping the same paragraph re-fires.
@@ -42,7 +44,26 @@ const emit = defineEmits<{
     payload: { text: string; rect: { top: number; bottom: number; left: number; width: number } },
   ): void;
   (e: "dismiss-select"): void;
+  (e: "entity-tap", payload: { entityId: string; name: string }): void;
 }>();
+
+const { settings } = useReaderSettings();
+
+// Pre-highlight each paragraph's HTML with tappable entity buttons (keyed by
+// paragraph index). Recomputed only when the section or highlight mode changes.
+const highlightedHtml = computed<Map<number, string>>(() => {
+  const map = new Map<number, string>();
+  const mode = settings.entityHighlight;
+  for (const paragraph of props.section.paragraphs) {
+    if (paragraph.html !== null) {
+      map.set(
+        paragraph.paragraphIndex,
+        highlightEntities(paragraph.html, props.section.entities, mode),
+      );
+    }
+  }
+  return map;
+});
 
 const SETTLE_MS = 120;
 const TAP_EDGE_FRACTION = 0.28;
@@ -556,6 +577,17 @@ function onHandleUp(): void {
 }
 
 function onClick(event: MouseEvent): void {
+  // Tapping a highlighted entity opens its popup; never pages or toggles chrome.
+  const entityEl =
+    event.target instanceof Element ? event.target.closest<HTMLElement>("[data-entity-id]") : null;
+  if (entityEl !== null) {
+    event.preventDefault();
+    const entityId = entityEl.dataset.entityId;
+    if (entityId !== undefined && entityId.length > 0) {
+      emit("entity-tap", { entityId, name: entityEl.dataset.entityName ?? "" });
+    }
+    return;
+  }
   // Internal links in book HTML are relative/fragment hrefs; navigating them
   // would break the SPA. Swallow the click (in-book link routing is future work)
   // and don't treat it as a page tap.
@@ -728,7 +760,11 @@ onBeforeUnmount(() => {
     @pointerup="onPointerUp"
     @pointercancel="onPointerCancel"
   >
-    <div ref="contentEl" class="reader-content">
+    <div
+      ref="contentEl"
+      class="reader-content"
+      :class="`reader-content--hl-${settings.entityHighlight}`"
+    >
       <!-- Paragraph HTML is sanitised server-side by ContentSanitizationService
            (no script/on*/inline-style/external refs); rendering it is safe per
            docs/conventions/02-vue.md. The [data-paragraph-index] wrapper is the
@@ -739,7 +775,10 @@ onBeforeUnmount(() => {
         class="reader-para"
         :data-paragraph-index="paragraph.paragraphIndex"
       >
-        <div v-if="paragraph.html" v-html="paragraph.html"></div>
+        <div
+          v-if="paragraph.html"
+          v-html="highlightedHtml.get(paragraph.paragraphIndex) ?? paragraph.html"
+        ></div>
         <p v-else>{{ paragraph.text }}</p>
       </div>
     </div>
@@ -856,6 +895,32 @@ onBeforeUnmount(() => {
 
 .reader-para :deep(p) {
   margin: 0;
+}
+
+/* Highlighted entity hits are injected via v-html, so reach them with :deep.
+   Reset the <button> to flow as inline text, then mark it by highlight mode. */
+.reader-content :deep(.sm-entity) {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.reader-content--hl-subtle :deep(.sm-entity),
+.reader-content--hl-always :deep(.sm-entity) {
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, var(--sm-accent) 50%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+.reader-content--hl-always :deep(.sm-entity) {
+  border-radius: 0.2em;
+  background-color: color-mix(in srgb, var(--sm-accent) 13%, transparent);
 }
 </style>
 

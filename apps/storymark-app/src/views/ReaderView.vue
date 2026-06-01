@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import type { AssistantSource } from "@storymark/shared-types";
 import BookmarksPanel from "@/components/reader/BookmarksPanel.vue";
+import EntityPopup from "@/components/reader/EntityPopup.vue";
 import MemoryPanel from "@/components/reader/MemoryPanel.vue";
 import PaginatedSection from "@/components/reader/PaginatedSection.vue";
 import ReaderSettingsDrawer from "@/components/reader/ReaderSettingsDrawer.vue";
@@ -10,6 +11,7 @@ import ReaderToolbar from "@/components/reader/ReaderToolbar.vue";
 import SectionRecapCard from "@/components/reader/SectionRecapCard.vue";
 import SelectionPopover from "@/components/reader/SelectionPopover.vue";
 import { useAssistant } from "@/composables/use-assistant";
+import { useEntitySummary } from "@/composables/use-entity-summary";
 import type { ReaderSelection } from "@/composables/use-selection-hint";
 import { useBookCache } from "@/composables/use-book-cache";
 import { useBookmarks } from "@/composables/use-bookmarks";
@@ -50,6 +52,7 @@ const {
 const { record, resume, flush } = useReadingProgress();
 const { bookmarks, load: loadBookmarks, toggle, removeById, isBookmarked } = useBookmarks();
 const { draft: assistantDraft } = useAssistant();
+const { open: openEntitySummary, close: closeEntitySummary } = useEntitySummary();
 const {
   snapshot: recapSnapshot,
   visible: recapVisible,
@@ -166,6 +169,28 @@ function onAskFromSelection(text: string): void {
   chromeVisible.value = true;
 }
 
+// Open the spoiler-safe entity popup at the current position (from a highlighted
+// name tap, the Story Guide, or the selection popover's "Tell me more").
+function onEntityTap(payload: { entityId: string; name: string }): void {
+  const sectionIndex = currentSectionIndex.value;
+  if (sectionIndex === null) {
+    return;
+  }
+  void openEntitySummary(
+    bookId,
+    payload.entityId,
+    payload.name,
+    sectionIndex,
+    currentLocation.value,
+  );
+}
+
+// Same, but dismiss the selection popover the request came from.
+function onOpenEntityFromSelection(payload: { entityId: string; name: string }): void {
+  selection.value = null;
+  onEntityTap(payload);
+}
+
 // Tapping a Q&A source: remember the current spot (so we can offer a way back),
 // close the panel, navigate to the passage, and flash it. Only the first jump in
 // a run captures the origin, so hopping between sources still returns to where
@@ -276,6 +301,7 @@ async function load(): Promise<void> {
   phase.value = "loading";
   try {
     resetRecap();
+    closeEntitySummary();
     await loadSettings();
     await ensureCached(bookId);
     const position = await resume(bookId);
@@ -324,11 +350,7 @@ onBeforeUnmount(() => {
     >
       <p>This book isn't ready to read yet.</p>
       <div class="flex items-center gap-4">
-        <button
-          type="button"
-          class="text-sm text-[var(--sm-accent)] hover:underline"
-          @click="load"
-        >
+        <button type="button" class="text-sm text-[var(--sm-accent)] hover:underline" @click="load">
           Try again
         </button>
         <RouterLink to="/" class="text-sm text-[var(--sm-muted)] hover:underline">
@@ -364,6 +386,7 @@ onBeforeUnmount(() => {
         @toggle-chrome="toggleChrome"
         @select="(payload) => (selection = payload)"
         @dismiss-select="selection = null"
+        @entity-tap="onEntityTap"
       />
 
       <Transition
@@ -430,8 +453,11 @@ onBeforeUnmount(() => {
         :current-section="currentSectionIndex"
         :current-location="currentLocation"
         @ask="onAskFromSelection"
+        @open-entity="onOpenEntityFromSelection"
         @close="selection = null"
       />
+
+      <EntityPopup />
 
       <Transition
         enter-active-class="transition duration-200 ease-out"
