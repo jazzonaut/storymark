@@ -9,13 +9,18 @@ internal sealed record ParsedCover
     public required string Extension { get; init; }
 }
 
-/// <summary>One reading-order unit: its EPUB-internal path, optional title (from
-/// navigation), and the raw, un-sanitised XHTML.</summary>
+/// <summary>One reading-order unit: its EPUB-internal path, the raw un-sanitised XHTML,
+/// and up to two navigation titles. <see cref="Title"/> comes from a whole-file nav entry
+/// (the TOC naming this file outright) and is authoritative. <see cref="FragmentTitle"/>
+/// comes from a nav entry whose link carries an anchor — a position inside the file that
+/// Calibre often places at a split boundary — so it ranks below the file's own heading.</summary>
 internal sealed record ParsedSection
 {
     public required string SourceHref { get; init; }
 
     public string? Title { get; init; }
+
+    public string? FragmentTitle { get; init; }
 
     public required string RawXhtml { get; init; }
 }

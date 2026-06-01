@@ -2,6 +2,7 @@
 import { watch } from "vue";
 import type { SectionSummary } from "@storymark/shared-types";
 import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
+import MemoryStaleBadge from "@/components/reader/MemoryStaleBadge.vue";
 import TimelineList from "@/components/reader/TimelineList.vue";
 import { useTimeline } from "@/composables/use-timeline";
 
@@ -9,6 +10,7 @@ const props = defineProps<{
   bookId: string;
   currentSection: number | null;
   currentLocation: number;
+  cacheVersion: string | null;
   manifest: readonly SectionSummary[];
   isProcessing: boolean;
 }>();
@@ -17,13 +19,22 @@ const emit = defineEmits<{
   (e: "jump", payload: { sectionIndex: number; locationStart: number }): void;
 }>();
 
-const { events, entityNames, isLoading, error, load } = useTimeline();
+const { events, entityNames, isLoading, error, isStale, load } = useTimeline();
 
+// The reader's spoiler boundary is (section, location) and a reprocess changes
+// cacheVersion, so all three must drive the reload — watching section alone would
+// leave the panel showing data for the wrong boundary after an in-section move.
 watch(
-  () => [props.bookId, props.currentSection] as const,
+  () => [props.bookId, props.currentSection, props.currentLocation, props.cacheVersion] as const,
   () => {
     if (props.currentSection !== null) {
-      void load(props.bookId, props.currentSection, props.currentLocation);
+      void load(
+        props.bookId,
+        props.currentSection,
+        props.currentLocation,
+        props.cacheVersion,
+        !props.isProcessing,
+      );
     }
   },
   { immediate: true },
@@ -42,12 +53,14 @@ watch(
       idle="No events yet — they appear here as you read through the story."
     />
 
-    <TimelineList
-      v-else
-      :events="events"
-      :entity-names="entityNames"
-      :manifest="manifest"
-      @jump="(payload) => emit('jump', payload)"
-    />
+    <template v-else>
+      <MemoryStaleBadge v-if="isStale" />
+      <TimelineList
+        :events="events"
+        :entity-names="entityNames"
+        :manifest="manifest"
+        @jump="(payload) => emit('jump', payload)"
+      />
+    </template>
   </div>
 </template>

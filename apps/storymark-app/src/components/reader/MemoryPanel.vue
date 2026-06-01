@@ -7,7 +7,7 @@ import SummaryPanel from "@/components/reader/SummaryPanel.vue";
 import StoryGuidePanel from "@/components/reader/StoryGuidePanel.vue";
 import TimelinePanel from "@/components/reader/TimelinePanel.vue";
 import RelationshipGraphPanel from "@/components/reader/RelationshipGraphPanel.vue";
-import { useAssistant } from "@/composables/use-assistant";
+import { isWithinBoundary, useAssistant } from "@/composables/use-assistant";
 import { useFocusTrap } from "@/composables/use-focus-trap";
 import { useMemoryPanel } from "@/composables/use-memory-panel";
 import { useOfflineSync } from "@/composables/use-offline-sync";
@@ -17,6 +17,7 @@ const props = defineProps<{
   bookId: string;
   currentSection: number | null;
   currentLocation: number;
+  cacheVersion: string | null;
   manifest: readonly SectionSummary[];
   isProcessing: boolean;
 }>();
@@ -27,7 +28,7 @@ const emit = defineEmits<{
   (e: "jump-location", payload: { sectionIndex: number; locationStart: number }): void;
 }>();
 
-const { isAsking, lastQuestion, answer, error, ask } = useAssistant();
+const { isAsking, lastQuestion, answer, answerBoundary, error, ask } = useAssistant();
 const { activeTab, tabs, setTab } = useMemoryPanel();
 const { isOnline } = useOfflineSync();
 
@@ -36,6 +37,20 @@ useFocusTrap(toRef(props, "open"), panel);
 
 // Q&A needs the network and a known position; section text stays readable offline.
 const canAsk = computed<boolean>(() => isOnline.value && props.currentSection !== null);
+
+// An answer drawn from a later point can spoil an earlier one, so hide its body once
+// the reader is behind where it was produced (a backward jump, or reopening earlier).
+// A book switch is handled by the reset on book open, so this only fires within a book.
+const answerOutOfRange = computed<boolean>(() => {
+  const boundary = answerBoundary.value;
+  if (boundary === null || answer.value === null) {
+    return false;
+  }
+  if (props.currentSection === null) {
+    return true;
+  }
+  return !isWithinBoundary(boundary, props.bookId, props.currentSection, props.currentLocation);
+});
 
 function onAsk(question: string): void {
   if (props.currentSection === null) {
@@ -89,6 +104,7 @@ function onAsk(question: string): void {
           v-if="activeTab === 'summary'"
           :book-id="bookId"
           :current-section="currentSection"
+          :cache-version="cacheVersion"
           :is-processing="isProcessing"
         />
         <TimelinePanel
@@ -96,6 +112,7 @@ function onAsk(question: string): void {
           :book-id="bookId"
           :current-section="currentSection"
           :current-location="currentLocation"
+          :cache-version="cacheVersion"
           :manifest="manifest"
           :is-processing="isProcessing"
           @jump="(payload) => emit('jump-location', payload)"
@@ -105,6 +122,7 @@ function onAsk(question: string): void {
           :book-id="bookId"
           :current-section="currentSection"
           :current-location="currentLocation"
+          :cache-version="cacheVersion"
           :is-processing="isProcessing"
         />
         <StoryGuidePanel
@@ -112,6 +130,7 @@ function onAsk(question: string): void {
           :book-id="bookId"
           :current-section="currentSection"
           :current-location="currentLocation"
+          :cache-version="cacheVersion"
           :manifest="manifest"
           :is-processing="isProcessing"
         />
@@ -122,6 +141,7 @@ function onAsk(question: string): void {
           :error="error"
           :question="lastQuestion"
           :manifest="manifest"
+          :out-of-range="answerOutOfRange"
           @select-source="(source) => emit('jump', source)"
         />
       </div>

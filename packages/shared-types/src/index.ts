@@ -42,6 +42,11 @@ export interface BookSummary {
   readonly extractionProgress: ExtractionProgress | null;
   readonly lastReadSection: number | null;
   readonly lastOpenedAt: string | null;
+  /** Bumped (ISO 8601) whenever a processing job rewrites the book's derived data
+   * — extraction, embedding, or memory snapshots. The client stores it with each
+   * cached memory surface (timeline, graph, Story Guide, summary) as a version
+   * token, so a reprocess invalidates those caches. */
+  readonly updatedAt: string;
 }
 
 /** One entry in the section manifest (`GET /api/books/{id}/sections`).

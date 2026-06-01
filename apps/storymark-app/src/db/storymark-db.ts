@@ -32,38 +32,55 @@ export interface CachedMemory {
   readonly bookId: string;
   readonly enteringSection: number;
   readonly snapshot: MemorySnapshot;
+  readonly version?: BookVersion;
 }
 
-/** The events visible at a section boundary, cached for the timeline tab and keyed
- * by [bookId+upToSection]. `cachedAt` (epoch ms) drives a short TTL: a fresh row is
- * served directly, a stale one is refreshed online but still rendered offline. */
+/** The book's extraction version — its `updatedAt`, bumped whenever a processing job
+ * rewrites derived data. Stored on each cached memory surface so a reprocess
+ * invalidates it (the row is refetched rather than reused). Absent on rows cached
+ * before versioning, which are therefore never treated as current. */
+export type BookVersion = string;
+
+/** The events visible at a reading position, cached for the timeline tab and keyed
+ * by [bookId+upToSection]. `upToLocation` records the in-section position the row was
+ * built at: the backend filters events to `(upToSection, upToLocation)`, so the
+ * read-through cache serves a row only at or behind that boundary, never ahead of it
+ * (which would leak later-in-section events). `cachedAt` (epoch ms) drives a short
+ * TTL: a fresh exact-boundary row is served directly, an older one is refreshed online
+ * but still rendered offline as a safe subset. */
 export interface CachedTimeline {
   readonly bookId: string;
   readonly upToSection: number;
+  readonly upToLocation: number;
   readonly events: readonly BookEvent[];
   readonly cachedAt: number;
+  readonly version?: BookVersion;
 }
 
-/** The relationships visible at a section boundary, cached for the graph tab and
- * keyed by [bookId+upToSection]. `cachedAt` (epoch ms) drives a short TTL, exactly
- * like {@link CachedTimeline}: a fresh row is served directly, a stale one is
- * refreshed online but still rendered offline. */
+/** The relationships visible at a reading position, cached for the graph tab and
+ * keyed by [bookId+upToSection]. `upToLocation` and the TTL behave exactly like
+ * {@link CachedTimeline}: the row is gated to the reader's boundary so a relationship
+ * first seen later in the section is never served ahead of it. */
 export interface CachedGraph {
   readonly bookId: string;
   readonly upToSection: number;
+  readonly upToLocation: number;
   readonly relationships: readonly Relationship[];
   readonly cachedAt: number;
+  readonly version?: BookVersion;
 }
 
-/** The Story Guide entities visible at a section boundary, cached and keyed by
- * [bookId+upToSection] with a short TTL like {@link CachedTimeline}. The entity
- * list supplies the Story Guide, the timeline's involved-name lookups, and the
- * graph's nodes, so caching it is what lets all three render offline. */
+/** The Story Guide entities visible at a reading position, cached and keyed by
+ * [bookId+upToSection] with the same boundary gating and TTL as {@link CachedTimeline}.
+ * The entity list supplies the Story Guide, the timeline's involved-name lookups, and
+ * the graph's nodes, so caching it is what lets all three render offline. */
 export interface CachedEntities {
   readonly bookId: string;
   readonly upToSection: number;
+  readonly upToLocation: number;
   readonly entities: readonly StoryGuideEntity[];
   readonly cachedAt: number;
+  readonly version?: BookVersion;
 }
 
 /** The library list, cached as a single row keyed by the literal `"all"`. The list
@@ -117,6 +134,10 @@ export interface StoredProgress {
   readonly bookId: string;
   readonly sectionIndex: number;
   readonly paragraphIndex: number;
+  /** Exact paginated column within the section on this device/layout. This is
+   * local-only: server sync remains paragraph/location based because page numbers
+   * are not portable across devices, viewport sizes, or reader settings. */
+  readonly pageIndex?: number;
   readonly locationStart: number;
   readonly locationEnd: number;
   readonly clientTimestamp: string;
@@ -182,6 +203,19 @@ db.version(2).stores({
   library: "id",
 });
 
+// v3 adds `upToLocation` to the timeline/graph/entity rows so the read-through cache
+// can gate them by the reader's in-section position (see CachedTimeline). The key
+// (still [bookId+upToSection]) is unchanged, so no schema delta — but legacy rows
+// lack the new field, which would defeat the boundary check, so they are cleared and
+// refetched on next open.
+db.version(3).upgrade(async (tx) => {
+  await Promise.all([
+    tx.table("timelines").clear(),
+    tx.table("graphs").clear(),
+    tx.table("entities").clear(),
+  ]);
+});
+
 // A release that adds a db.version() above upgrades the on-device database on
 // first open, and IndexedDB runs that upgrade only once every *other* connection
 // to it has closed. If a second tab — or the still-resident installed PWA — holds
@@ -224,4 +258,25 @@ export async function purgeBookData(bookId: string): Promise<void> {
       .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
       .delete(),
   ]);
+}
+
+/** True if any locally-queued reading-position or bookmark write hasn't reached the
+ * server yet. {@link clearCachedData} drops the sync queue, so the caller flushes and
+ * re-checks this first to avoid discarding unsynced changes. */
+export async function hasUnsyncedChanges(): Promise<boolean> {
+  const [progress, bookmarks] = await Promise.all([
+    db.progress.filter((row) => !row.synced).count(),
+    db.bookmarks.filter((row) => !row.synced).count(),
+  ]);
+  return progress > 0 || bookmarks > 0;
+}
+
+/** Clears every locally-cached and sync-queue table, keeping only the reader's
+ * settings. Everything cleared re-hydrates from the server (the source of truth) on
+ * next load, so flush pending writes and confirm none remain (via
+ * {@link hasUnsyncedChanges}) before calling this. */
+export async function clearCachedData(): Promise<void> {
+  await Promise.all(
+    db.tables.filter((table) => table.name !== "readerSettings").map((table) => table.clear()),
+  );
 }

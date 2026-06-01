@@ -34,6 +34,11 @@ internal sealed record BookSummaryResponse
 
     public DateTimeOffset? LastOpenedAt { get; init; }
 
+    /// <summary>When the book's derived data was last rewritten (extraction,
+    /// embedding, or memory snapshots). The client stores it as a version token on
+    /// its cached memory surfaces, so a reprocess invalidates them.</summary>
+    public required DateTimeOffset UpdatedAt { get; init; }
+
     // A freshly imported book has no chunks or sections yet (status Uploaded), so it
     // has no progress of either kind — map it through an empty entry.
     public static BookSummaryResponse From(Book book) =>
@@ -58,6 +63,7 @@ internal sealed record BookSummaryResponse
             CoverUrl = $"/api/books/{book.Id}/cover",
             ProcessingStatus = book.ProcessingStatus.ToString(),
             ProcessingError = book.ProcessingError,
+            UpdatedAt = book.UpdatedAt,
             EmbeddingProgress =
                 book.ProcessingStatus == Domain.Books.ProcessingStatus.Embedding && entry.TotalChunks > 0
                     ? new EmbeddingProgressResponse { Embedded = entry.EmbeddedChunks, Total = entry.TotalChunks }

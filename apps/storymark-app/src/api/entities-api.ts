@@ -1,30 +1,35 @@
 import type { EntitySummary, StoryGuideEntity } from "@storymark/shared-types";
 import { fetchJson, LLM_TIMEOUT_MS } from "@/api/http";
-import { readThroughCache } from "@/api/read-through-cache";
+import type { CachedResult } from "@/api/read-through-cache";
+import { positionAwareCache } from "@/api/read-through-cache";
+import type { BookVersion } from "@/db/storymark-db";
 import { db } from "@/db/storymark-db";
 
 export const entitiesApi = {
   /** The Story Guide list — entities visible at the reading position. Read-through
-   * Dexie cache (see {@link readThroughCache}): a stale row is still returned on a
+   * Dexie cache (see {@link positionAwareCache}): gated by the reader's boundary and
+   * the book's `version`, and a stale row is still returned (as `stale-offline`) on a
    * network failure, so the Story Guide, the timeline's name lookups, and the graph's
-   * nodes all survive offline. Throws {@link ApiError} only when nothing is cached. */
+   * nodes all survive offline. `canCache` is false while the book is still processing.
+   * Throws {@link ApiError} only when nothing usable is cached. */
   list: (
     bookId: string,
     upToSection: number,
     upToLocation: number,
-  ): Promise<readonly StoryGuideEntity[]> =>
-    readThroughCache({
-      readCached: async () => {
-        const row = await db.entities.get([bookId, upToSection]);
-        return row ? { value: row.entities, cachedAt: row.cachedAt } : undefined;
-      },
-      fetchFresh: () =>
-        fetchJson<readonly StoryGuideEntity[]>(
-          `/api/books/${encodeURIComponent(bookId)}/entities?upToSection=${String(upToSection)}&upToLocation=${String(upToLocation)}`,
-          "Failed to load entities",
-        ),
-      writeBack: (entities) =>
-        db.entities.put({ bookId, upToSection, entities, cachedAt: Date.now() }),
+    version: BookVersion | null,
+    canCache: boolean,
+  ): Promise<CachedResult<readonly StoryGuideEntity[]>> =>
+    positionAwareCache({
+      bookId,
+      upToSection,
+      upToLocation,
+      version,
+      canCache,
+      resource: "entities",
+      errorMessage: "Failed to load entities",
+      table: db.entities,
+      pluck: (row) => row.entities,
+      pack: (entities, base) => ({ ...base, entities }),
     }),
 
   /** A spoiler-safe summary for one entity at the reading position; the server

@@ -41,14 +41,19 @@ internal sealed class EpubImportHandler(IOptions<StorageOptions> options) : IBoo
     {
         EnsureWithinLimits(filePath);
         var epub = await EpubReader.ReadBookAsync(filePath);
-        var titles = BuildTitleMap(epub.Navigation);
+        var (wholeFileTitles, fragmentTitles) = BuildTitleMaps(epub.Navigation);
 
         var sections = epub.ReadingOrder
-            .Select(file => new ParsedSection
+            .Select(file =>
             {
-                SourceHref = EpubPath.Normalize(file.FilePath),
-                Title = titles.GetValueOrDefault(EpubPath.Normalize(file.FilePath)),
-                RawXhtml = file.Content,
+                var path = EpubPath.Normalize(file.FilePath);
+                return new ParsedSection
+                {
+                    SourceHref = path,
+                    Title = wholeFileTitles.GetValueOrDefault(path),
+                    FragmentTitle = fragmentTitles.GetValueOrDefault(path),
+                    RawXhtml = file.Content,
+                };
             })
             .ToList();
 
@@ -112,30 +117,42 @@ internal sealed class EpubImportHandler(IOptions<StorageOptions> options) : IBoo
             : null;
     }
 
-    private static Dictionary<string, string> BuildTitleMap(List<EpubNavigationItem>? navigation)
+    private static (Dictionary<string, string> WholeFile, Dictionary<string, string> Fragment) BuildTitleMaps(
+        List<EpubNavigationItem>? navigation)
     {
-        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        var wholeFile = new Dictionary<string, string>(StringComparer.Ordinal);
+        var fragment = new Dictionary<string, string>(StringComparer.Ordinal);
         if (navigation is not null)
         {
-            CollectTitles(navigation, map);
+            CollectTitles(navigation, wholeFile, fragment);
         }
 
-        return map;
+        return (wholeFile, fragment);
     }
 
-    private static void CollectTitles(List<EpubNavigationItem> items, Dictionary<string, string> map)
+    private static void CollectTitles(
+        List<EpubNavigationItem> items,
+        Dictionary<string, string> wholeFile,
+        Dictionary<string, string> fragment)
     {
         foreach (var item in items)
         {
             var file = item.HtmlContentFile;
             if (file is not null && !string.IsNullOrWhiteSpace(item.Title))
             {
+                // A nav entry whose link carries an anchor names a position *inside* a
+                // file, not the file itself. Calibre routinely emits a part/section anchor
+                // at the very end of the preceding chapter's split file, so titling the
+                // whole file by that anchor mislabels the chapter (e.g. "CHAPTER TWENTY-SIX"
+                // shown as "PART 4 : PERSUASION"). Keep anchored titles only as a
+                // lower-priority fallback than the file's own leading heading.
+                var map = string.IsNullOrWhiteSpace(item.Link?.Anchor) ? wholeFile : fragment;
                 map.TryAdd(EpubPath.Normalize(file.FilePath), item.Title.Trim());
             }
 
             if (item.NestedItems.Count > 0)
             {
-                CollectTitles(item.NestedItems, map);
+                CollectTitles(item.NestedItems, wholeFile, fragment);
             }
         }
     }

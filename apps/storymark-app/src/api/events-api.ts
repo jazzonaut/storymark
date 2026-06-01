@@ -1,29 +1,33 @@
 import type { BookEvent } from "@storymark/shared-types";
-import { fetchJson } from "@/api/http";
-import { readThroughCache } from "@/api/read-through-cache";
+import type { CachedResult } from "@/api/read-through-cache";
+import { positionAwareCache } from "@/api/read-through-cache";
+import type { BookVersion } from "@/db/storymark-db";
 import { db } from "@/db/storymark-db";
 
 export const eventsApi = {
   /** Events visible at the reading position, for the timeline. Read-through Dexie
-   * cache (see {@link readThroughCache}): a stale row is still returned on a network
-   * failure so the timeline works offline. Throws {@link ApiError} only when nothing
-   * is cached. */
+   * cache (see {@link positionAwareCache}): gated by the reader's boundary and the
+   * book's `version`, and a stale row is still returned (as `stale-offline`) on a
+   * network failure so the timeline works offline. `canCache` is false while the
+   * book is still processing, so an incomplete list isn't written back. Throws
+   * {@link ApiError} only when nothing usable is cached. */
   list: (
     bookId: string,
     upToSection: number,
     upToLocation: number,
-  ): Promise<readonly BookEvent[]> =>
-    readThroughCache({
-      readCached: async () => {
-        const row = await db.timelines.get([bookId, upToSection]);
-        return row ? { value: row.events, cachedAt: row.cachedAt } : undefined;
-      },
-      fetchFresh: () =>
-        fetchJson<readonly BookEvent[]>(
-          `/api/books/${encodeURIComponent(bookId)}/events?upToSection=${String(upToSection)}&upToLocation=${String(upToLocation)}`,
-          "Failed to load events",
-        ),
-      writeBack: (events) =>
-        db.timelines.put({ bookId, upToSection, events, cachedAt: Date.now() }),
+    version: BookVersion | null,
+    canCache: boolean,
+  ): Promise<CachedResult<readonly BookEvent[]>> =>
+    positionAwareCache({
+      bookId,
+      upToSection,
+      upToLocation,
+      version,
+      canCache,
+      resource: "events",
+      errorMessage: "Failed to load events",
+      table: db.timelines,
+      pluck: (row) => row.events,
+      pack: (events, base) => ({ ...base, events }),
     }),
 } as const;

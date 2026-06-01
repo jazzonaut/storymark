@@ -3,8 +3,10 @@ import { computed, ref, watch } from "vue";
 import type { SectionSummary, StoryGuideEntity } from "@storymark/shared-types";
 import EntityTypeBadge from "@/components/reader/EntityTypeBadge.vue";
 import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
+import MemoryStaleBadge from "@/components/reader/MemoryStaleBadge.vue";
 import { entitiesApi } from "@/api/entities-api";
 import { useEntitySummary } from "@/composables/use-entity-summary";
+import { useLatestOnly } from "@/composables/use-latest-only";
 import { ApiError } from "@/api/api-error";
 import { entityTypeOrder, entityTypePlural } from "@/utils/entity-type";
 import { sectionLabel } from "@/utils/section-label";
@@ -13,6 +15,7 @@ const props = defineProps<{
   bookId: string;
   currentSection: number | null;
   currentLocation: number;
+  cacheVersion: string | null;
   manifest: readonly SectionSummary[];
   isProcessing: boolean;
 }>();
@@ -22,8 +25,12 @@ const { open } = useEntitySummary();
 const entities = ref<readonly StoryGuideEntity[]>([]);
 const isLoading = ref(false);
 const error = ref<string | null>(null);
+const isStale = ref(false);
 const search = ref("");
 const activeType = ref<string | null>(null);
+// A slow earlier fetch must not overwrite the current boundary's list, so each load
+// commits only if it is still the latest.
+const latest = useLatestOnly();
 
 // The entity types actually present, in the backend's declared order — the type
 // filter only offers kinds the reader has met, so a chip is never a dead end.
@@ -67,22 +74,36 @@ async function load(): Promise<void> {
     entities.value = [];
     return;
   }
+  const token = latest.begin();
   isLoading.value = true;
   error.value = null;
   try {
-    entities.value = await entitiesApi.list(
+    const result = await entitiesApi.list(
       props.bookId,
       props.currentSection,
       props.currentLocation,
+      props.cacheVersion,
+      !props.isProcessing,
     );
+    if (!latest.isCurrent(token)) {
+      return;
+    }
+    entities.value = result.value;
+    isStale.value = result.status === "stale-offline";
   } catch (caught) {
+    if (!latest.isCurrent(token)) {
+      return;
+    }
     error.value =
       caught instanceof ApiError
         ? "Couldn't load the Story Guide just now."
         : "The Story Guide is unavailable offline.";
     entities.value = [];
+    isStale.value = false;
   } finally {
-    isLoading.value = false;
+    if (latest.isCurrent(token)) {
+      isLoading.value = false;
+    }
   }
 }
 
@@ -115,11 +136,12 @@ function reveal(entityId: string, shortSummary: string, section: number): void {
   void entitiesApi.cacheListSummary(props.bookId, section, entityId, shortSummary);
 }
 
-// Load when first shown and whenever the reading position behind it changes.
-// Clear the type filter on reload so a chip selected for the previous section
+// Load when first shown and whenever the reading position behind it changes — the
+// full (section, location) boundary, plus a reprocess (cacheVersion), not section
+// alone. Clear the type filter on reload so a chip selected for the previous section
 // can't hide an otherwise-populated list.
 watch(
-  () => [props.bookId, props.currentSection] as const,
+  () => [props.bookId, props.currentSection, props.currentLocation, props.cacheVersion] as const,
   () => {
     activeType.value = null;
     void load();
@@ -167,6 +189,8 @@ watch(
         {{ entityTypePlural(type) }}
       </button>
     </div>
+
+    <MemoryStaleBadge v-if="isStale && !isLoading && error === null" class="mb-3" />
 
     <div v-if="isLoading" class="space-y-3" aria-busy="true">
       <div

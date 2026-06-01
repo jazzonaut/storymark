@@ -11,6 +11,7 @@ const SYNC_THROTTLE_MS = 5000;
 export interface ReadingPosition {
   readonly sectionIndex: number;
   readonly paragraphIndex: number;
+  readonly pageIndex?: number;
   readonly locationStart: number;
   readonly locationEnd: number;
 }
@@ -85,15 +86,17 @@ export function useReadingProgress(): UseReadingProgress {
   // Persist locally immediately (so an offline reopen resumes), then throttle the
   // server push.
   async function record(bookId: string, position: ReadingPosition): Promise<void> {
-    await db.progress.put({
+    const row: StoredProgress = {
       bookId,
       sectionIndex: position.sectionIndex,
       paragraphIndex: position.paragraphIndex,
+      ...(position.pageIndex === undefined ? {} : { pageIndex: position.pageIndex }),
       locationStart: position.locationStart,
       locationEnd: position.locationEnd,
       clientTimestamp: new Date().toISOString(),
       synced: false,
-    });
+    };
+    await db.progress.put(row);
     scheduleSync(bookId);
   }
 
@@ -131,9 +134,11 @@ export function useReadingProgress(): UseReadingProgress {
     if (!chosen) {
       return null;
     }
+    const pageIndex = chosen === local ? local.pageIndex : undefined;
     return {
       sectionIndex: chosen.sectionIndex,
       paragraphIndex: chosen.paragraphIndex ?? 0,
+      ...(pageIndex === undefined ? {} : { pageIndex }),
       locationStart: chosen.locationStart,
       locationEnd: chosen.locationEnd,
     };

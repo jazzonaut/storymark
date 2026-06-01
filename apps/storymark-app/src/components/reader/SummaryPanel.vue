@@ -2,18 +2,21 @@
 import { ref, watch } from "vue";
 import type { MemorySnapshot } from "@storymark/shared-types";
 import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
+import MemoryStaleBadge from "@/components/reader/MemoryStaleBadge.vue";
 import { memoryApi } from "@/api/memory-api";
 import { ApiError } from "@/api/api-error";
 
 const props = defineProps<{
   bookId: string;
   currentSection: number | null;
+  cacheVersion: string | null;
   isProcessing: boolean;
 }>();
 
 const snapshot = ref<MemorySnapshot | null>(null);
 const isLoading = ref(false);
 const error = ref<string | null>(null);
+const isStale = ref(false);
 
 async function load(): Promise<void> {
   if (props.currentSection === null) {
@@ -26,21 +29,32 @@ async function load(): Promise<void> {
     // The story so far up to the start of the current section (the latest snapshot
     // strictly before it). That at-or-before snapshot is stable for any position
     // within the section, so this reuses the section-entry recap's read-through
-    // cache — the summary renders offline once seen.
-    snapshot.value = await memoryApi.getForSectionEntry(props.bookId, props.currentSection);
+    // cache — the summary renders offline once seen, and a reprocess (cacheVersion)
+    // invalidates it.
+    const result = await memoryApi.getForSectionEntry(
+      props.bookId,
+      props.currentSection,
+      props.cacheVersion,
+      !props.isProcessing,
+    );
+    snapshot.value = result.value;
+    isStale.value = result.status === "stale-offline";
   } catch (caught) {
     error.value =
       caught instanceof ApiError
         ? "Couldn't load the summary just now."
         : "The summary is unavailable offline.";
     snapshot.value = null;
+    isStale.value = false;
   } finally {
     isLoading.value = false;
   }
 }
 
+// The section-entry snapshot is keyed by section (location-independent), so reload on
+// section and on a reprocess (cacheVersion), not on every in-section move.
 watch(
-  () => [props.bookId, props.currentSection] as const,
+  () => [props.bookId, props.currentSection, props.cacheVersion] as const,
   () => {
     void load();
   },
@@ -61,6 +75,7 @@ watch(
     />
 
     <template v-else>
+      <MemoryStaleBadge v-if="isStale" />
       <p class="text-sm leading-relaxed whitespace-pre-line text-[var(--sm-fg)]">
         {{ snapshot.summarySoFar }}
       </p>

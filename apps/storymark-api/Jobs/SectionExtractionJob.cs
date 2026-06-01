@@ -166,7 +166,7 @@ internal sealed class SectionExtractionJob(
             return null;
         }
 
-        return await PersistSectionAsync(book.Id, section, text.Length, extraction, reconciler, ct);
+        return await PersistSectionAsync(book.Id, section, text, extraction, reconciler, ct);
     }
 
     private async Task<SectionExtraction?> ExtractSectionAsync(
@@ -217,7 +217,7 @@ internal sealed class SectionExtractionJob(
     private async Task<SectionCounts> PersistSectionAsync(
         Guid bookId,
         BookSection section,
-        int textLength,
+        string text,
         SectionExtraction extraction,
         EntityReconciler reconciler,
         CancellationToken ct)
@@ -225,10 +225,10 @@ internal sealed class SectionExtractionJob(
         var now = DateTimeOffset.UtcNow;
         var entitiesSeen = new List<string>();
 
-        ResolveIntroduced(extraction, section, reconciler, entitiesSeen);
+        ResolveIntroduced(extraction, section, text, reconciler, entitiesSeen);
         var (eventCount, summaryEvents) =
-            PersistEvents(bookId, section, textLength, extraction, reconciler, entitiesSeen, now);
-        var relationshipCount = PersistRelationships(bookId, section, extraction, reconciler, entitiesSeen, now);
+            PersistEvents(bookId, section, text.Length, extraction, reconciler, entitiesSeen, now);
+        var relationshipCount = PersistRelationships(bookId, section, text, extraction, reconciler, entitiesSeen, now);
 
         db.SectionSummaries.Add(new SectionSummary
         {
@@ -247,7 +247,7 @@ internal sealed class SectionExtractionJob(
     }
 
     private static void ResolveIntroduced(
-        SectionExtraction extraction, BookSection section, EntityReconciler reconciler, List<string> entitiesSeen)
+        SectionExtraction extraction, BookSection section, string text, EntityReconciler reconciler, List<string> entitiesSeen)
     {
         foreach (var introduced in extraction.EntitiesIntroduced ?? [])
         {
@@ -256,7 +256,7 @@ internal sealed class SectionExtractionJob(
                 ParseEntityType(introduced.EntityType),
                 introduced.Aliases,
                 section.SectionIndex,
-                location: null);
+                location: LocateEntity(text, introduced));
             if (entity is not null)
             {
                 entitiesSeen.Add(entity.CanonicalName);
@@ -361,6 +361,7 @@ internal sealed class SectionExtractionJob(
     private int PersistRelationships(
         Guid bookId,
         BookSection section,
+        string text,
         SectionExtraction extraction,
         EntityReconciler reconciler,
         List<string> entitiesSeen,
@@ -370,8 +371,9 @@ internal sealed class SectionExtractionJob(
 
         foreach (var rel in extraction.RelationshipDeltas ?? [])
         {
-            var from = reconciler.Resolve(rel.FromName, EntityType.Unknown, null, section.SectionIndex, location: 0);
-            var to = reconciler.Resolve(rel.ToName, EntityType.Unknown, null, section.SectionIndex, location: 0);
+            var location = LocateRelationship(text, rel);
+            var from = reconciler.Resolve(rel.FromName, EntityType.Unknown, null, section.SectionIndex, location);
+            var to = reconciler.Resolve(rel.ToName, EntityType.Unknown, null, section.SectionIndex, location);
             if (from is null || to is null || from.Id == to.Id)
             {
                 continue;
@@ -389,7 +391,7 @@ internal sealed class SectionExtractionJob(
                 Polarity = CleanOptional(rel.Polarity),
                 Evidence = CleanOptional(rel.Evidence),
                 FirstSeenSection = section.SectionIndex,
-                FirstSeenLocation = 0,
+                FirstSeenLocation = location,
                 CreatedAt = now,
             });
             count++;
@@ -434,6 +436,62 @@ internal sealed class SectionExtractionJob(
         var s = Math.Clamp(start, 0, textLength);
         var e = Math.Clamp(end, 0, textLength);
         return e < s ? (s, s) : (s, e);
+    }
+
+    /// <summary>Best-effort offset of where an introduced entity is first seen in the
+    /// section, so the Story Guide and graph gate it to the reader's location rather than
+    /// surfacing it from the section start. Prefers the model's evidence quote, then the
+    /// canonical name, then an alias; 0 only when none is found in the text.</summary>
+    private static int LocateEntity(string text, ExtractedEntity entity)
+    {
+        var at = IndexOfOrdinal(text, entity.FirstSeenEvidence);
+        if (at >= 0)
+        {
+            return at;
+        }
+
+        at = IndexOfOrdinal(text, entity.CanonicalName);
+        if (at >= 0)
+        {
+            return at;
+        }
+
+        foreach (var alias in entity.Aliases ?? [])
+        {
+            var aliasAt = IndexOfOrdinal(text, alias);
+            if (aliasAt >= 0)
+            {
+                return aliasAt;
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>Best-effort offset of where a relationship is first evidenced. Prefers the
+    /// model's evidence quote; failing that, the point where both endpoints are first on
+    /// the page together (the later of their two first mentions); 0 only when neither is
+    /// found. Keeps a relationship introduced mid-section hidden until the reader reaches
+    /// it rather than from the section start.</summary>
+    private static int LocateRelationship(string text, ExtractedRelationship rel)
+    {
+        var at = IndexOfOrdinal(text, rel.Evidence);
+        if (at >= 0)
+        {
+            return at;
+        }
+
+        var from = IndexOfOrdinal(text, rel.FromName);
+        var to = IndexOfOrdinal(text, rel.ToName);
+        return from >= 0 && to >= 0 ? Math.Max(from, to) : 0;
+    }
+
+    private static int IndexOfOrdinal(string text, string? needle)
+    {
+        var trimmed = needle?.Trim();
+        return string.IsNullOrEmpty(trimmed)
+            ? -1
+            : text.IndexOf(trimmed, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? CleanOptional(string? value)

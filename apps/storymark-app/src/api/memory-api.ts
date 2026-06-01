@@ -1,6 +1,9 @@
 import type { MemorySnapshot } from "@storymark/shared-types";
 import { ApiError } from "@/api/api-error";
 import { apiFetch } from "@/api/http";
+import type { CachedResult } from "@/api/read-through-cache";
+import { readThroughCache } from "@/api/read-through-cache";
+import type { BookVersion } from "@/db/storymark-db";
 import { db } from "@/db/storymark-db";
 
 async function fetchMemory(
@@ -25,20 +28,42 @@ export const memoryApi = {
   // snapshot strictly before this section — what the reader has finished. Read-through
   // (Dexie-first, write-back) like reader-api, so a recap seen online renders offline.
   // A 204 (no snapshot yet) is not cached — it may appear once processing catches up.
-  getForSectionEntry: async (
+  //
+  // The snapshot is stable for a given (book version, section entry), so a cached row
+  // whose `version` still matches is served without a refetch. A reprocess bumps the
+  // version, so a stale-versioned row is refetched (and only falls back to the old row,
+  // marked `stale-offline`, when that refetch fails). `canCache` is false while the
+  // book is still processing.
+  getForSectionEntry: (
     bookId: string,
     enteringSection: number,
-  ): Promise<MemorySnapshot | null> => {
-    const cached = await db.memorySnapshots.get([bookId, enteringSection]);
-    if (cached) {
-      return cached.snapshot;
-    }
-    const snapshot = await fetchMemory(bookId, enteringSection, 0);
-    if (snapshot) {
-      await db.memorySnapshots.put({ bookId, enteringSection, snapshot });
-    }
-    return snapshot;
-  },
+    version: BookVersion | null,
+    canCache: boolean,
+  ): Promise<CachedResult<MemorySnapshot | null>> =>
+    // No boundary and no `cachedAt`: the snapshot is location-independent and stable
+    // for a given version, so the cache is version-gated rather than TTL-gated.
+    readThroughCache<MemorySnapshot | null>({
+      version,
+      canCache,
+      readCached: async () => {
+        const row = await db.memorySnapshots.get([bookId, enteringSection]);
+        return row
+          ? { value: row.snapshot, ...(row.version !== undefined ? { version: row.version } : {}) }
+          : undefined;
+      },
+      fetchFresh: () => fetchMemory(bookId, enteringSection, 0),
+      // A 204 (no snapshot yet) returns null — left uncached so it can still appear
+      // once processing catches up.
+      writeBack: (snapshot) =>
+        snapshot === null
+          ? Promise.resolve()
+          : db.memorySnapshots.put({
+              bookId,
+              enteringSection,
+              snapshot,
+              ...(version !== null ? { version } : {}),
+            }),
+    }),
 
   // The "Previously…" recap: the latest snapshot at-or-before the reader's exact
   // resumed position. Not cached (it fires once per open and the location key would

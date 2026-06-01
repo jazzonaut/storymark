@@ -10,19 +10,21 @@ export const readerApi = {
   // TTL read-through (not cache-forever): the manifest carries section titles, which
   // the server can change after the fact (a title backfill), so a stale row is
   // refreshed when online and still served offline.
-  getManifest: (bookId: string): Promise<readonly SectionSummary[]> =>
-    readThroughCache({
-      readCached: async () => {
-        const row = await db.manifests.get(bookId);
-        return row ? { value: row.sections, cachedAt: row.cachedAt } : undefined;
-      },
-      fetchFresh: () =>
-        fetchJson<readonly SectionSummary[]>(
-          `/api/books/${encodeURIComponent(bookId)}/sections`,
-          "Failed to load sections",
-        ),
-      writeBack: (sections) => db.manifests.put({ bookId, sections, cachedAt: Date.now() }),
-    }),
+  getManifest: async (bookId: string): Promise<readonly SectionSummary[]> =>
+    (
+      await readThroughCache({
+        readCached: async () => {
+          const row = await db.manifests.get(bookId);
+          return row ? { value: row.sections, cachedAt: row.cachedAt } : undefined;
+        },
+        fetchFresh: () =>
+          fetchJson<readonly SectionSummary[]>(
+            `/api/books/${encodeURIComponent(bookId)}/sections`,
+            "Failed to load sections",
+          ),
+        writeBack: (sections) => db.manifests.put({ bookId, sections, cachedAt: Date.now() }),
+      })
+    ).value,
 
   getSection: async (bookId: string, sectionIndex: number): Promise<Section> => {
     const cached = await db.sections.get([bookId, sectionIndex]);

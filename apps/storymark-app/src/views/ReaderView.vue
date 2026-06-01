@@ -49,13 +49,14 @@ const {
   nextSection,
   prevSection,
   setParagraph,
+  entryPage,
   open,
   goTo,
   goToLocation,
 } = useReader();
 const { record, resume, flush } = useReadingProgress();
 const { bookmarks, load: loadBookmarks, toggle, removeById, isBookmarked } = useBookmarks();
-const { draft: assistantDraft } = useAssistant();
+const { draft: assistantDraft, reset: resetAssistant } = useAssistant();
 const { open: openEntitySummary, close: closeEntitySummary } = useEntitySummary();
 const {
   restore: restoreMemoryTab,
@@ -161,6 +162,12 @@ const isMemoryProcessing = computed<boolean>(() => {
   const status = books.value.find((book) => book.bookId === bookId)?.processingStatus;
   return status !== undefined && status !== "Indexed" && status !== "Failed";
 });
+// The book's extraction version, threaded into the Memory caches so a reprocess
+// (which bumps `updatedAt`) invalidates them. Null until the library list is known
+// — then the caches simply don't gate on version.
+const bookVersion = computed<string | null>(
+  () => books.value.find((book) => book.bookId === bookId)?.updatedAt ?? null,
+);
 
 let idleTimer: number | undefined;
 
@@ -324,7 +331,12 @@ async function goNext(): Promise<void> {
   // Recap fires only on a forward advance into a new section (not on resume,
   // backward paging, or jumps) — entering section N shows the through-(N-1) memory.
   if (advanced && currentSectionIndex.value !== null) {
-    void enterSection(bookId, currentSectionIndex.value);
+    void enterSection(
+      bookId,
+      currentSectionIndex.value,
+      bookVersion.value,
+      !isMemoryProcessing.value,
+    );
   }
 }
 
@@ -349,6 +361,7 @@ function onParagraph(paragraphIndex: number): void {
     void record(bookId, {
       sectionIndex,
       paragraphIndex,
+      pageIndex: pageInfo.value.page,
       locationStart: paragraph.locationStart,
       locationEnd: paragraph.locationEnd,
     });
@@ -377,7 +390,12 @@ async function load(): Promise<void> {
   try {
     resetRecap();
     closeEntitySummary();
+    resetAssistant();
     await loadSettings();
+    // Refresh the library in the background so this book's extraction version
+    // (`updatedAt`) is current — a reprocess while we were away then invalidates the
+    // Memory caches. Best-effort: offline keeps the last-seen list.
+    void loadBooks().catch(() => {});
     await ensureCached(bookId);
     const position = await resume(bookId);
     await open(bookId, position ?? undefined);
@@ -501,6 +519,7 @@ onBeforeUnmount(() => {
         v-if="currentSection"
         :section="currentSection"
         :entry-paragraph="entryParagraph"
+        :entry-page="entryPage"
         :highlight="highlight"
         :selection-active="selection !== null"
         @update:paragraph="onParagraph"
@@ -573,6 +592,7 @@ onBeforeUnmount(() => {
         :book-id="bookId"
         :current-section="currentSectionIndex"
         :current-location="currentLocation"
+        :cache-version="bookVersion"
         :manifest="manifest"
         :is-processing="isMemoryProcessing"
         @close="memoryPanelOpen = false"

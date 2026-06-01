@@ -29,6 +29,7 @@ interface HandlePos {
 const props = defineProps<{
   section: Section;
   entryParagraph: number;
+  entryPage: number | null;
   highlight: ParagraphHighlight | null;
   selectionActive: boolean;
 }>();
@@ -753,7 +754,7 @@ function onTouchMove(event: TouchEvent): void {
 async function reposition(): Promise<void> {
   await nextTick();
   measure();
-  goToPage(pageForParagraph(props.entryParagraph), false);
+  goToPage(props.entryPage ?? pageForParagraph(props.entryParagraph), false);
   updatePageInfo();
   reportParagraph();
 }

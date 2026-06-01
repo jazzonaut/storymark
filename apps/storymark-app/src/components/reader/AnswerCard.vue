@@ -9,6 +9,9 @@ const props = defineProps<{
   error: string | null;
   question: string | null;
   manifest: readonly SectionSummary[];
+  // The answer was produced further ahead than the reader's current position, so its
+  // body and sources are hidden behind a notice rather than shown as a spoiler.
+  outOfRange: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -66,6 +69,14 @@ function onCite(index: number): void {
     </div>
 
     <p v-else-if="error" class="text-sm text-red-600">{{ error }}</p>
+
+    <div v-else-if="answer && outOfRange" class="space-y-2">
+      <p v-if="question" class="text-sm font-medium text-[var(--sm-fg)]">{{ question }}</p>
+      <p class="text-sm text-[var(--sm-muted)]">
+        This answer was written for a later point in the book. Read on to where you asked it to see
+        it again, so it can't reveal what's ahead.
+      </p>
+    </div>
 
     <div v-else-if="answer">
       <p v-if="question" class="mb-2 text-sm font-medium text-[var(--sm-fg)]">{{ question }}</p>

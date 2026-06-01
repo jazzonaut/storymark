@@ -2,6 +2,7 @@
 import { ref, toRef } from "vue";
 import RangeControl from "@/components/reader/RangeControl.vue";
 import SegmentedControl from "@/components/reader/SegmentedControl.vue";
+import { useClearLocalData, UnsyncedChangesError } from "@/composables/use-clear-local-data";
 import { useFocusTrap } from "@/composables/use-focus-trap";
 import { useReaderSettings } from "@/composables/use-reader-settings";
 import type { EntityHighlightMode, ReaderFontFamily, ReaderTheme } from "@/db/storymark-db";
@@ -11,9 +12,32 @@ const props = defineProps<{ open: boolean }>();
 defineEmits<{ (e: "close"): void }>();
 
 const { settings, update, reset } = useReaderSettings();
+const { isClearing, clear: clearLocalData } = useClearLocalData();
 
 const panel = ref<HTMLElement | null>(null);
 useFocusTrap(toRef(props, "open"), panel);
+
+const clearStep = ref<"idle" | "confirm">("idle");
+const clearError = ref<string | null>(null);
+
+function startClearConfirm(): void {
+  clearError.value = null;
+  clearStep.value = "confirm";
+}
+
+// On success the page navigates away, so control only returns here on failure.
+async function onClearLocalData(): Promise<void> {
+  clearError.value = null;
+  try {
+    await clearLocalData();
+  } catch (caught) {
+    clearStep.value = "idle";
+    clearError.value =
+      caught instanceof UnsyncedChangesError
+        ? "Some changes haven't synced yet. Reconnect to the server, then try again."
+        : "Couldn't clear local data. Please try again.";
+  }
+}
 
 const THEMES: readonly { value: ReaderTheme; label: string }[] = [
   { value: "light", label: "Light" },
@@ -151,6 +175,42 @@ const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [
         >
           Reset to defaults
         </button>
+
+        <div class="border-t border-[var(--sm-muted)]/15 pt-4">
+          <p class="mb-1 text-sm font-medium">Local data</p>
+          <p class="mb-2 text-xs text-[var(--sm-muted)]">
+            Clears books and other content cached on this device. Your settings, bookmarks, and
+            reading position are kept — they sync from the server.
+          </p>
+          <button
+            v-if="clearStep === 'idle'"
+            type="button"
+            class="text-sm text-red-600 hover:underline"
+            @click="startClearConfirm"
+          >
+            Clear cached content
+          </button>
+          <div v-else class="flex items-center gap-3">
+            <span class="text-sm">Clear cached content?</span>
+            <button
+              type="button"
+              class="text-sm font-semibold text-red-600 hover:underline disabled:opacity-50"
+              :disabled="isClearing"
+              @click="onClearLocalData"
+            >
+              {{ isClearing ? "Clearing…" : "Clear" }}
+            </button>
+            <button
+              type="button"
+              class="text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)] disabled:opacity-50"
+              :disabled="isClearing"
+              @click="clearStep = 'idle'"
+            >
+              Cancel
+            </button>
+          </div>
+          <p v-if="clearError" class="mt-2 text-xs text-red-600">{{ clearError }}</p>
+        </div>
       </div>
     </section>
   </div>

@@ -31,8 +31,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="openEntity" class="absolute inset-0 z-40" @click.self="close">
-    <div class="absolute inset-0 bg-black/30"></div>
+  <div v-if="openEntity" class="absolute inset-0 z-40">
+    <div class="absolute inset-0 bg-black/30" @click="close"></div>
     <section
       ref="panel"
       role="dialog"

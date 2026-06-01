@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { defineAsyncComponent, watch } from "vue";
 import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
+import MemoryStaleBadge from "@/components/reader/MemoryStaleBadge.vue";
 import { useRelationshipGraph } from "@/composables/use-relationship-graph";
 import { useEntitySummary } from "@/composables/use-entity-summary";
 
@@ -13,10 +14,11 @@ const props = defineProps<{
   bookId: string;
   currentSection: number | null;
   currentLocation: number;
+  cacheVersion: string | null;
   isProcessing: boolean;
 }>();
 
-const { nodes, edges, isLoading, error, load } = useRelationshipGraph();
+const { nodes, edges, isLoading, error, isStale, load } = useRelationshipGraph();
 const { open } = useEntitySummary();
 
 // Tap a node → the same global entity popup the Story Guide and highlights open.
@@ -33,11 +35,19 @@ function onNodeTap(payload: { entityId: string; name: string }): void {
   );
 }
 
+// Reload on the full spoiler boundary (section + location) and on a reprocess
+// (cacheVersion), not section alone.
 watch(
-  () => [props.bookId, props.currentSection] as const,
+  () => [props.bookId, props.currentSection, props.currentLocation, props.cacheVersion] as const,
   () => {
     if (props.currentSection !== null) {
-      void load(props.bookId, props.currentSection, props.currentLocation);
+      void load(
+        props.bookId,
+        props.currentSection,
+        props.currentLocation,
+        props.cacheVersion,
+        !props.isProcessing,
+      );
     }
   },
   { immediate: true },
@@ -57,6 +67,7 @@ watch(
     />
 
     <template v-else>
+      <MemoryStaleBadge v-if="isStale" />
       <RelationshipGraphChart :nodes="nodes" :edges="edges" @node-tap="onNodeTap" />
       <p class="text-center text-xs text-[var(--sm-muted)]">
         Drag to rearrange · pinch or scroll to zoom · tap a name to learn more.

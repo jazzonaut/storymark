@@ -2,6 +2,7 @@ import { ref, shallowRef } from "vue";
 import type { Ref, ShallowRef } from "vue";
 import type { MemorySnapshot } from "@storymark/shared-types";
 import { memoryApi } from "@/api/memory-api";
+import type { BookVersion } from "@/db/storymark-db";
 import { useReaderSettings } from "@/composables/use-reader-settings";
 
 // Module-level so the card survives reader interactions. `shown` keeps the recap to
@@ -15,7 +16,12 @@ interface UseSectionRecap {
   readonly snapshot: ShallowRef<MemorySnapshot | null>;
   readonly visible: Ref<boolean>;
   reset: () => void;
-  onSectionEntered: (bookId: string, enteringSection: number) => Promise<void>;
+  onSectionEntered: (
+    bookId: string,
+    enteringSection: number,
+    version: BookVersion | null,
+    canCache: boolean,
+  ) => Promise<void>;
   dismiss: () => void;
   dontShowAgain: () => void;
 }
@@ -30,14 +36,20 @@ export function useSectionRecap(): UseSectionRecap {
     visible.value = false;
   }
 
-  async function onSectionEntered(bookId: string, enteringSection: number): Promise<void> {
+  async function onSectionEntered(
+    bookId: string,
+    enteringSection: number,
+    version: BookVersion | null,
+    canCache: boolean,
+  ): Promise<void> {
     if (!settings.recapCardOnSectionEntry || shown.has(enteringSection)) {
       return;
     }
 
     let result: MemorySnapshot | null;
     try {
-      result = await memoryApi.getForSectionEntry(bookId, enteringSection);
+      result = (await memoryApi.getForSectionEntry(bookId, enteringSection, version, canCache))
+        .value;
     } catch {
       // Offline or transient: skip the recap (reading is unaffected) and leave the
       // section unmarked so a later online entry can still surface it.

@@ -126,6 +126,7 @@ interface UseBookmarks {
   toggle: (bookId: string, position: BookmarkPosition, label: string | null) => Promise<void>;
   removeById: (id: string) => Promise<void>;
   isBookmarked: (sectionIndex: number, paragraphIndex: number) => boolean;
+  flush: () => Promise<void>;
 }
 
 export function useBookmarks(): UseBookmarks {
@@ -175,5 +176,5 @@ export function useBookmarks(): UseBookmarks {
     );
   }
 
-  return { bookmarks, currentBookId, load, toggle, removeById, isBookmarked };
+  return { bookmarks, currentBookId, load, toggle, removeById, isBookmarked, flush };
 }

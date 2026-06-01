@@ -26,6 +26,7 @@ function paragraphIndexForLocation(section: Section, location: number): number {
 export interface InitialPosition {
   readonly sectionIndex: number;
   readonly paragraphIndex: number;
+  readonly pageIndex?: number;
 }
 
 const bookId = ref<string | null>(null);
@@ -34,6 +35,7 @@ const currentPosition = ref(0);
 const currentSection = shallowRef<Section | null>(null);
 const currentParagraphIndex = ref(0);
 const entryParagraph = ref(0);
+const entryPage = ref<number | null>(null);
 const isLoadingSection = ref(false);
 
 interface UseReader {
@@ -42,6 +44,7 @@ interface UseReader {
   readonly currentPosition: Ref<number>;
   readonly currentParagraphIndex: Ref<number>;
   readonly entryParagraph: Ref<number>;
+  readonly entryPage: Ref<number | null>;
   readonly isLoadingSection: Ref<boolean>;
   readonly sectionCount: ComputedRef<number>;
   readonly currentSectionTitle: ComputedRef<string | null>;
@@ -67,7 +70,11 @@ const hasNextSection = computed<boolean>(() => currentPosition.value < manifest.
 const hasPrevSection = computed<boolean>(() => currentPosition.value > 0);
 
 export function useReader(): UseReader {
-  async function loadPosition(position: number, entry: SectionEntry): Promise<void> {
+  async function loadPosition(
+    position: number,
+    entry: SectionEntry,
+    pageIndex: number | null = null,
+  ): Promise<void> {
     const summary = manifest.value[position];
     const id = bookId.value;
     if (!summary || id === null) {
@@ -88,6 +95,7 @@ export function useReader(): UseReader {
       const landing = Math.min(Math.max(requested, 0), lastIndex);
       currentPosition.value = position;
       entryParagraph.value = landing;
+      entryPage.value = pageIndex;
       currentParagraphIndex.value = landing;
       currentSection.value = section;
     } finally {
@@ -106,7 +114,7 @@ export function useReader(): UseReader {
       ? manifest.value.findIndex((s) => s.sectionIndex === initial.sectionIndex)
       : -1;
     if (initial && startPos >= 0) {
-      await loadPosition(startPos, initial.paragraphIndex);
+      await loadPosition(startPos, initial.paragraphIndex, initial.pageIndex ?? null);
     } else {
       await loadPosition(0, "start");
     }
@@ -166,6 +174,7 @@ export function useReader(): UseReader {
     currentPosition,
     currentParagraphIndex,
     entryParagraph,
+    entryPage,
     isLoadingSection,
     sectionCount,
     currentSectionTitle,
