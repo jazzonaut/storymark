@@ -2,8 +2,18 @@ import type { Section, SectionSummary } from "@storymark/shared-types";
 import { ApiError } from "@/api/api-error";
 import { db } from "@/db/storymark-db";
 
+// A mobile connection can leave a fetch half-open with no response and no
+// error, which would hang the read path indefinitely (e.g. the first-open cache
+// loop never settling). Abort after this so the caller sees a failure it can
+// retry instead of a permanent spinner.
+const REQUEST_TIMEOUT_MS = 20_000;
+
+async function fetchReader(path: string): Promise<Response> {
+  return fetch(path, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+}
+
 async function fetchManifest(bookId: string): Promise<readonly SectionSummary[]> {
-  const response = await fetch(`/api/books/${encodeURIComponent(bookId)}/sections`);
+  const response = await fetchReader(`/api/books/${encodeURIComponent(bookId)}/sections`);
   if (!response.ok) {
     throw new ApiError(response.status, `Failed to load sections (${response.status}).`);
   }
@@ -11,7 +21,7 @@ async function fetchManifest(bookId: string): Promise<readonly SectionSummary[]>
 }
 
 async function fetchSection(bookId: string, sectionIndex: number): Promise<Section> {
-  const response = await fetch(
+  const response = await fetchReader(
     `/api/books/${encodeURIComponent(bookId)}/sections/${String(sectionIndex)}`,
   );
   if (!response.ok) {

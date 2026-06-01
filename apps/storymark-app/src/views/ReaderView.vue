@@ -272,7 +272,8 @@ async function resolveBookTitle(): Promise<string> {
   return books.value.find((book) => book.bookId === bookId)?.title ?? "Reading";
 }
 
-onMounted(async () => {
+async function load(): Promise<void> {
+  phase.value = "loading";
   try {
     resetRecap();
     await loadSettings();
@@ -290,6 +291,10 @@ onMounted(async () => {
   } catch {
     phase.value = "error";
   }
+}
+
+onMounted(() => {
+  void load();
 });
 
 onBeforeUnmount(() => {
@@ -318,9 +323,18 @@ onBeforeUnmount(() => {
       class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center"
     >
       <p>This book isn't ready to read yet.</p>
-      <RouterLink to="/" class="text-sm text-[var(--sm-accent)] hover:underline">
-        Back to library
-      </RouterLink>
+      <div class="flex items-center gap-4">
+        <button
+          type="button"
+          class="text-sm text-[var(--sm-accent)] hover:underline"
+          @click="load"
+        >
+          Try again
+        </button>
+        <RouterLink to="/" class="text-sm text-[var(--sm-muted)] hover:underline">
+          Back to library
+        </RouterLink>
+      </div>
     </div>
 
     <template v-else>
