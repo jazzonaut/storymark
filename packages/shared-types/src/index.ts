@@ -185,6 +185,20 @@ export interface BookEvent {
   readonly involvedEntityIds: readonly string[];
 }
 
+/** An extracted relationship between two entities, visible at a reading position
+ * (`GET /api/books/{id}/relationships`). `fromEntityId`/`toEntityId` reference
+ * reconciled `book_entities` ids; `polarity` is a free-text sentiment label
+ * (e.g. "positive") and may be null. Mirrors RelationshipView. */
+export interface Relationship {
+  readonly fromEntityId: string;
+  readonly toEntityId: string;
+  readonly relationshipType: string;
+  readonly polarity: string | null;
+  readonly evidence: string | null;
+  readonly firstSeenSection: number;
+  readonly firstSeenLocation: number;
+}
+
 /** The rolling "story so far" at-or-before a reading position
  * (`GET /api/books/{id}/memory`) — the data source for the section-entry recap
  * card. `upToSection`/`upToLocation` mark the snapshot's boundary (end of that

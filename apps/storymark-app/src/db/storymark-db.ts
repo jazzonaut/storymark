@@ -1,6 +1,12 @@
 import Dexie from "dexie";
 import type { Table } from "dexie";
-import type { BookEvent, MemorySnapshot, Section, SectionSummary } from "@storymark/shared-types";
+import type {
+  BookEvent,
+  MemorySnapshot,
+  Relationship,
+  Section,
+  SectionSummary,
+} from "@storymark/shared-types";
 
 /** A book's section manifest, cached for offline reading. */
 export interface CachedManifest {
@@ -29,6 +35,17 @@ export interface CachedTimeline {
   readonly bookId: string;
   readonly upToSection: number;
   readonly events: readonly BookEvent[];
+  readonly cachedAt: number;
+}
+
+/** The relationships visible at a section boundary, cached for the graph tab and
+ * keyed by [bookId+upToSection]. `cachedAt` (epoch ms) drives a short TTL, exactly
+ * like {@link CachedTimeline}: a fresh row is served directly, a stale one is
+ * refreshed online but still rendered offline. */
+export interface CachedGraph {
+  readonly bookId: string;
+  readonly upToSection: number;
+  readonly relationships: readonly Relationship[];
   readonly cachedAt: number;
 }
 
@@ -97,6 +114,7 @@ type StorymarkDb = Dexie & {
   memorySnapshots: Table<CachedMemory, [string, number]>;
   bookOpens: Table<StoredBookOpen, string>;
   timelines: Table<CachedTimeline, [string, number]>;
+  graphs: Table<CachedGraph, [string, number]>;
 };
 
 export const db = new Dexie("storymark") as StorymarkDb;
@@ -137,6 +155,12 @@ db.version(6).stores({
   timelines: "[bookId+upToSection]",
 });
 
+// v7 adds the relationship-graph cache, keyed [bookId+upToSection] with a short TTL
+// so the graph renders instantly on re-open and survives offline (like timelines).
+db.version(7).stores({
+  graphs: "[bookId+upToSection]",
+});
+
 // A release that adds a db.version() above upgrades the on-device database on
 // first open, and IndexedDB runs that upgrade only once every *other* connection
 // to it has closed. If a second tab — or the still-resident installed PWA — holds
@@ -166,6 +190,10 @@ export async function purgeBookData(bookId: string): Promise<void> {
       .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
       .delete(),
     db.timelines
+      .where("[bookId+upToSection]")
+      .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
+      .delete(),
+    db.graphs
       .where("[bookId+upToSection]")
       .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
       .delete(),

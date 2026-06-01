@@ -5,6 +5,7 @@ import QuestionInput from "@/components/reader/QuestionInput.vue";
 import AnswerCard from "@/components/reader/AnswerCard.vue";
 import StoryGuidePanel from "@/components/reader/StoryGuidePanel.vue";
 import TimelinePanel from "@/components/reader/TimelinePanel.vue";
+import RelationshipGraphPanel from "@/components/reader/RelationshipGraphPanel.vue";
 import { useAssistant } from "@/composables/use-assistant";
 import { useOfflineSync } from "@/composables/use-offline-sync";
 
@@ -22,11 +23,12 @@ const emit = defineEmits<{
   (e: "jump-location", payload: { sectionIndex: number; locationStart: number }): void;
 }>();
 
-type Tab = "assistant" | "timeline" | "guide";
+type Tab = "assistant" | "timeline" | "graph" | "guide";
 
 const TABS: readonly { id: Tab; label: string }[] = [
   { id: "assistant", label: "Assistant" },
   { id: "timeline", label: "Timeline" },
+  { id: "graph", label: "Graph" },
   { id: "guide", label: "Story Guide" },
 ];
 
@@ -53,7 +55,7 @@ function onAsk(question: string): void {
       class="absolute inset-x-0 bottom-0 flex max-h-[80vh] flex-col rounded-t-2xl bg-[var(--sm-bg)] shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:max-h-none sm:w-[26rem] sm:rounded-none"
     >
       <div class="flex items-center justify-between border-b border-[var(--sm-muted)]/15 px-5 py-3">
-        <!-- Graph joins here in S6.3; S6.4 polishes the full tab set. -->
+        <!-- S6.4 polishes the full tab set (order, shortcuts, persistence). -->
         <nav class="flex gap-1">
           <button
             v-for="tab in TABS"
@@ -98,6 +100,12 @@ function onAsk(question: string): void {
           :current-location="currentLocation"
           :manifest="manifest"
           @jump="(payload) => emit('jump-location', payload)"
+        />
+        <RelationshipGraphPanel
+          v-else-if="activeTab === 'graph'"
+          :book-id="bookId"
+          :current-section="currentSection"
+          :current-location="currentLocation"
         />
         <StoryGuidePanel
           v-else
