@@ -62,6 +62,10 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasColumnType("text")
                         .HasColumnName("language");
 
+                    b.Property<string>("ProcessingError")
+                        .HasColumnType("text")
+                        .HasColumnName("processing_error");
+
                     b.Property<string>("ProcessingStatus")
                         .IsRequired()
                         .HasColumnType("text")

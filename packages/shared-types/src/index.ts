@@ -13,6 +13,13 @@ export type ProcessingStatus =
   | "Indexed"
   | "Failed";
 
+/** Embedding progress while a book is on `Embedding`: chunks vectorised under the
+ * current model over the book's total chunks. Mirrors EmbeddingProgressResponse. */
+export interface EmbeddingProgress {
+  readonly embedded: number;
+  readonly total: number;
+}
+
 export interface BookSummary {
   readonly bookId: string;
   readonly title: string;
@@ -20,6 +27,10 @@ export interface BookSummary {
   readonly format: string;
   readonly coverUrl: string;
   readonly processingStatus: ProcessingStatus;
+  /** Why the last processing attempt failed, or null. Present even mid-retry. */
+  readonly processingError: string | null;
+  /** Live embedding progress while `processingStatus` is `Embedding`, else null. */
+  readonly embeddingProgress: EmbeddingProgress | null;
   readonly lastReadSection: number | null;
   readonly lastOpenedAt: string | null;
 }

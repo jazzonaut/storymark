@@ -21,6 +21,7 @@ internal sealed class BookConfiguration : IEntityTypeConfiguration<Book>
         builder.Property(b => b.ProcessingStatus)
             .HasColumnName("processing_status")
             .HasConversion<string>();
+        builder.Property(b => b.ProcessingError).HasColumnName("processing_error");
         builder.Property(b => b.CreatedAt).HasColumnName("created_at");
         builder.Property(b => b.UpdatedAt).HasColumnName("updated_at");
 

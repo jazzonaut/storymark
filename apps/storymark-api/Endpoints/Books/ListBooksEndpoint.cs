@@ -16,8 +16,8 @@ internal sealed class ListBooksEndpoint(BookCatalogService catalog)
 
     public override async Task HandleAsync(CancellationToken ct)
     {
-        var books = await catalog.GetAllAsync(ct);
-        var items = books.Select(BookSummaryResponse.From).ToList();
+        var entries = await catalog.GetAllAsync(ct);
+        var items = entries.Select(BookSummaryResponse.From).ToList();
         await Send.OkAsync(items, ct);
     }
 }

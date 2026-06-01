@@ -25,6 +25,11 @@ internal sealed class Book
 
     public ProcessingStatus ProcessingStatus { get; set; }
 
+    /// <summary>Operator-readable reason the last processing attempt failed, or
+    /// null when the book has never failed. Surfaced in the library so a stuck
+    /// book explains itself instead of sitting silently on a mid-pipeline status.</summary>
+    public string? ProcessingError { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }

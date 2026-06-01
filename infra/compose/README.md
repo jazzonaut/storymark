@@ -42,4 +42,7 @@ docker exec -it storymark-ollama ollama pull llama3.2:1b
 docker exec -it storymark-ollama ollama pull nomic-embed-text
 ```
 
-Or set them via the admin panel at `/admin` — the API will pull on first use if the model isn't cached.
+The model the admin panel selects must already be pulled here — Storymark does not
+pull on demand. A book whose embedding model isn't present fails fast to `Failed`
+with a "model not available" reason in the library (run the matching `ollama pull`,
+then requeue the job from `/hangfire`).

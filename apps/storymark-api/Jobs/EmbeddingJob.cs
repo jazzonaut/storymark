@@ -4,6 +4,7 @@ using Pgvector;
 using Storymark.Api.Domain.Books;
 using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Database;
+using Storymark.Api.Infrastructure.Llm;
 using Storymark.Api.Services.Llm;
 using Storymark.Api.Services.Settings;
 
@@ -23,10 +24,11 @@ namespace Storymark.Api.Jobs;
 ///
 /// <para>Idempotent and resumable: it only embeds chunks that are missing a vector
 /// or were embedded under a different model id, so a retry after a partial failure
-/// (or a reindex) picks up where it left off. Because of that it allows
-/// Hangfire retries — embedding failures (model loading, a timeout) are usually
-/// transient, unlike a parse failure. A book whose retries are all exhausted stays
-/// at <c>Embedding</c> with a failed job visible in the dashboard.</para></summary>
+/// (or a reindex) picks up where it left off. Transient failures (a timeout, a
+/// provider 5xx) record their reason on <see cref="Book.ProcessingError"/> and
+/// rethrow so Hangfire retries, leaving the book on <c>Embedding</c>. A missing
+/// model (<see cref="ModelNotFoundException"/>) is deterministic, so it fails the
+/// book to <c>Failed</c> with that reason and does not retry.</para></summary>
 internal sealed class EmbeddingJob(
     StorymarkDbContext db,
     ChatModelRouter router,
@@ -66,12 +68,46 @@ internal sealed class EmbeddingJob(
             await db.SaveChangesAsync(ct);
         }
 
+        try
+        {
+            await EmbedAllAsync(book, pending, modelId, modelVersion, ct);
+        }
+        catch (ModelNotFoundException ex)
+        {
+            // Deterministic config error: the model isn't pulled, so all 10 Hangfire
+            // retries would fail identically. Fail the book fast with the reason and
+            // don't rethrow, so the job isn't rescheduled. Requeue after pulling the model.
+            logger.LogError(ex, "EmbeddingJob failed for book {BookId}: model unavailable", bookId);
+            book.ProcessingStatus = ProcessingStatus.Failed;
+            book.ProcessingError = ex.Message;
+            book.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Likely transient (timeout, provider 5xx): record why it stalled so the
+            // library shows it, then rethrow to let Hangfire retry. The book stays on
+            // Embedding and a later attempt resumes from the unembedded chunks.
+            logger.LogWarning(ex, "EmbeddingJob attempt failed for book {BookId}; will retry", bookId);
+            book.ProcessingError = ex.Message;
+            await db.SaveChangesAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task EmbedAllAsync(
+        Book book, List<BookChunk> pending, string modelId, string modelVersion, CancellationToken ct)
+    {
         var embedded = 0;
         foreach (var chunk in pending)
         {
             var vector = await router.EmbedAsync(
                 chunk.Text,
-                new LlmCallMetadata { BookId = bookId, SectionIndex = chunk.SectionIndex },
+                new LlmCallMetadata { BookId = book.Id, SectionIndex = chunk.SectionIndex },
                 ct);
 
             chunk.Embedding = new Vector(vector.ToArray());
@@ -83,16 +119,17 @@ internal sealed class EmbeddingJob(
             {
                 await db.SaveChangesAsync(ct);
                 logger.LogInformation(
-                    "EmbeddingJob for book {BookId}: {Embedded}/{Total}", bookId, embedded, pending.Count);
+                    "EmbeddingJob for book {BookId}: {Embedded}/{Total}", book.Id, embedded, pending.Count);
             }
         }
 
         await db.SaveChangesAsync(ct);
 
         book.ProcessingStatus = ProcessingStatus.Indexed;
+        book.ProcessingError = null;
         book.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        logger.LogInformation("Indexed book {BookId}: embedded {Embedded} chunks", bookId, embedded);
+        logger.LogInformation("Indexed book {BookId}: embedded {Embedded} chunks", book.Id, embedded);
     }
 }

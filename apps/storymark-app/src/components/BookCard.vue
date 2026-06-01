@@ -33,6 +33,17 @@ const STATUS_STYLES: Record<ProcessingStatus, string> = {
 
 const statusClass = computed<string>(() => STATUS_STYLES[props.book.processingStatus]);
 
+// Embedding is the long phase with a real denominator (chunk count); show its
+// percentage on the badge. Other phases have no honest fraction, so they don't.
+const statusLabel = computed<string>(() => {
+  const progress = props.book.embeddingProgress;
+  if (props.book.processingStatus === "Embedding" && progress && progress.total > 0) {
+    const pct = Math.min(100, Math.round((progress.embedded / progress.total) * 100));
+    return `Embedding ${pct}%`;
+  }
+  return props.book.processingStatus;
+});
+
 const coverFailed = ref(false);
 </script>
 
@@ -61,7 +72,14 @@ const coverFailed = ref(false);
       class="mt-1 inline-block w-fit rounded-full px-2 py-0.5 text-xs font-medium"
       :class="statusClass"
     >
-      {{ book.processingStatus }}
+      {{ statusLabel }}
     </span>
+    <p
+      v-if="book.processingError"
+      class="mt-1 text-xs text-red-700 dark:text-red-300"
+      :title="book.processingError"
+    >
+      {{ book.processingError }}
+    </p>
   </component>
 </template>

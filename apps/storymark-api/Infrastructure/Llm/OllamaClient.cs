@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Storymark.Api.Domain.Llm;
@@ -20,6 +21,7 @@ internal sealed class OllamaClient(HttpClient http) : IChatModelClient
         };
 
         using var response = await http.PostAsJsonAsync("api/chat", payload, ct);
+        ThrowIfModelMissing(response, request.Model);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<ChatBody>(ct)
             ?? throw new InvalidOperationException("Ollama returned an empty chat response.");
@@ -37,6 +39,7 @@ internal sealed class OllamaClient(HttpClient http) : IChatModelClient
         var payload = new WireEmbedRequest { Model = request.Model, Input = request.Input };
 
         using var response = await http.PostAsJsonAsync("api/embed", payload, ct);
+        ThrowIfModelMissing(response, request.Model);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<EmbedBody>(ct)
             ?? throw new InvalidOperationException("Ollama returned an empty embedding response.");
@@ -45,6 +48,17 @@ internal sealed class OllamaClient(HttpClient http) : IChatModelClient
             ?? throw new InvalidOperationException("Ollama embedding response contained no vectors.");
 
         return new EmbeddingResponse { Embedding = embedding, Tokens = body.PromptEvalCount };
+    }
+
+    // Ollama's /api/chat and /api/embed routes exist in every supported version, so
+    // a 404 from them means the requested model has not been pulled — surfaced as a
+    // typed, non-transient failure rather than a generic 5xx-style HttpRequestException.
+    private static void ThrowIfModelMissing(HttpResponseMessage response, string model)
+    {
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            throw new ModelNotFoundException("ollama", model);
+        }
     }
 
     private sealed record ChatPayload

@@ -40,6 +40,7 @@ internal sealed class ProcessBookJob(
         try
         {
             await ClearExistingSectionsAsync(bookId, ct);
+            book.ProcessingError = null;
             await SetStatusAsync(book, ProcessingStatus.Parsing, ct);
 
             var handler = handlers.First(h => h.CanHandle(book.Format));
@@ -60,6 +61,7 @@ internal sealed class ProcessBookJob(
         catch (Exception ex)
         {
             logger.LogError(ex, "ProcessBookJob failed for book {BookId}", bookId);
+            book.ProcessingError = ex.Message;
             await SetStatusAsync(book, ProcessingStatus.Failed, ct);
             throw;
         }
