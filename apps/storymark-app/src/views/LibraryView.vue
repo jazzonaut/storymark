@@ -106,12 +106,9 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <p
-      v-if="books.length === 0 && !isLoading && apiUnreachable"
-      class="text-[var(--sm-muted)]"
-    >
-      Can't reach your library right now. Check your connection — your books will
-      reappear once the server is back in range.
+    <p v-if="books.length === 0 && !isLoading && apiUnreachable" class="text-[var(--sm-muted)]">
+      Can't reach your library right now. Check your connection — your books will reappear once the
+      server is back in range.
     </p>
 
     <p v-else-if="books.length === 0 && !isLoading" class="text-[var(--sm-muted)]">
