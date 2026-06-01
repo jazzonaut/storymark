@@ -39,9 +39,10 @@ export default defineConfig({
       },
       workbox: {
         // Serve the SPA shell for deep-link routes (e.g. /books/:id/read) when
-        // offline; never hijack API requests with the shell.
+        // offline; never hijack API requests or the server-rendered Hangfire
+        // dashboard with the shell (the latter would otherwise render blank).
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/hangfire(\/|$)/],
         runtimeCaching: [
           {
             // A cover's bytes change once (placeholder -> real) when parsing
