@@ -307,8 +307,8 @@ onMounted(() => {
         @click="runBackfillTitles"
       />
       <span class="text-sm opacity-70">
-        Names untitled sections from their first heading. Display-only — no re-parse,
-        LLM, or re-embedding.
+        Names untitled sections from their first heading. Display-only — no re-parse, LLM, or
+        re-embedding.
         <a href="/hangfire" target="_blank" rel="noopener" class="underline">Track in jobs</a>.
       </span>
     </div>
