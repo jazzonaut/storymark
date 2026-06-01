@@ -25,6 +25,8 @@ internal sealed class StorymarkDbContext(DbContextOptions<StorymarkDbContext> op
 
     public DbSet<QuestionAnswer> QuestionAnswers => Set<QuestionAnswer>();
 
+    public DbSet<BookEntity> BookEntities => Set<BookEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("vector");

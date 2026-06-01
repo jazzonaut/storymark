@@ -18,6 +18,7 @@ using Storymark.Api.Services.Assistant;
 using Storymark.Api.Services.Books;
 using Storymark.Api.Services.Llm;
 using Storymark.Api.Services.Retrieval;
+using Storymark.Api.Services.Selection;
 using Storymark.Api.Services.Settings;
 
 Log.Logger = new LoggerConfiguration()
@@ -70,6 +71,7 @@ try
     builder.Services.AddScoped<EmbeddingJob>();
     builder.Services.AddScoped<SpoilerSafeRetrievalService>();
     builder.Services.AddScoped<AssistantService>();
+    builder.Services.AddScoped<SelectionHintService>();
 
     builder.Services.AddHangfire(config => config
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
