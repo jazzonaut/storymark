@@ -11,8 +11,9 @@ namespace Storymark.Api.Jobs;
 /// parse the EPUB, store the cover and per-section artifacts, persist
 /// <see cref="BookSection"/>/<see cref="BookParagraph"/> rows, then chunk every
 /// section into <see cref="BookChunk"/> rows. Drives <see cref="ProcessingStatus"/>
-/// <c>Uploaded → Parsing → Parsed → Chunking → Embedding</c>, then enqueues
-/// <see cref="EmbeddingJob"/>, which embeds the chunks and finishes at <c>Indexed</c>.
+/// <c>Uploaded → Parsing → Parsed → Chunking → ExtractingPerSection</c>, then enqueues
+/// <see cref="SectionExtractionJob"/>, which extracts per-section structure and chains
+/// to <see cref="EmbeddingJob"/> — embedding the chunks and finishing at <c>Indexed</c>.
 ///
 /// <para><see cref="AutomaticRetryAttribute"/> is set to zero: a parse failure is
 /// deterministic (a malformed file), so a retry would just fail again — it surfaces
@@ -117,13 +118,14 @@ internal sealed class ProcessBookJob(
 
         await db.SaveChangesAsync(ct);
 
-        await SetStatusAsync(book, ProcessingStatus.Embedding, ct);
+        await SetStatusAsync(book, ProcessingStatus.ExtractingPerSection, ct);
         logger.LogInformation("Chunked book {BookId}: {ChunkCount} chunks", book.Id, chunkCount);
 
-        // EmbeddingJob fills the vectors and advances the book to Indexed. Enqueued
-        // here rather than run inline so chunking stays fast and embedding (slow,
-        // retryable) is its own unit of work.
-        jobs.Enqueue<EmbeddingJob>(j => j.RunAsync(book.Id, CancellationToken.None));
+        // SectionExtractionJob runs first (it needs only section text, not vectors),
+        // then chains to EmbeddingJob → Indexed. Keeping EmbeddingJob as the terminal
+        // step means an S3.4 reindex (which only re-enqueues EmbeddingJob) never
+        // re-extracts. Both run in the background so chunking stays fast.
+        jobs.Enqueue<SectionExtractionJob>(j => j.RunAsync(book.Id, CancellationToken.None));
     }
 
     private async Task PersistSectionsAsync(Book book, BookContent content, CancellationToken ct)

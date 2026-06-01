@@ -25,6 +25,7 @@ If a decision is small enough that "look at the code" answers it, it's not an AD
 | 0015 | [Custom selection repaint to suppress mobile toolbar](0015-custom-selection-highlight.md) | superseded by 0017 |
 | 0016 | [Provider/model registry for LLM routing](0016-provider-model-registry.md) | accepted |
 | 0017 | [Fully custom touch selection](0017-fully-custom-touch-selection.md) | accepted |
+| 0018 | [Per-book sequential extraction, before embedding](0018-extraction-pipeline-shape.md) | accepted |
 
 ## When to write one
 
