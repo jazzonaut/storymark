@@ -139,3 +139,15 @@ export type SelectionHintResult =
       readonly hint: string;
       readonly sources: readonly SelectionHintSource[];
     };
+
+/** The rolling "story so far" at-or-before a reading position
+ * (`GET /api/books/{id}/memory`) — the data source for the section-entry recap
+ * card. `upToSection`/`upToLocation` mark the snapshot's boundary (end of that
+ * section). Mirrors MemoryView. */
+export interface MemorySnapshot {
+  readonly upToSection: number;
+  readonly upToLocation: number;
+  readonly summarySoFar: string;
+  readonly timeline: readonly string[];
+  readonly openThreads: readonly string[];
+}

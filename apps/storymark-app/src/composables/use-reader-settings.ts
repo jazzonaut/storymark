@@ -11,6 +11,7 @@ export interface ReaderSettings {
   contentWidthPx: number;
   theme: ReaderTheme;
   entityHighlight: EntityHighlightMode;
+  recapCardOnSectionEntry: boolean;
 }
 
 const DEFAULTS: ReaderSettings = {
@@ -21,6 +22,7 @@ const DEFAULTS: ReaderSettings = {
   contentWidthPx: 680,
   theme: "light",
   entityHighlight: "off",
+  recapCardOnSectionEntry: true,
 };
 
 const FONT_STACKS: Record<ReaderFontFamily, string> = {

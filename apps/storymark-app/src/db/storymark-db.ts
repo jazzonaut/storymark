@@ -1,6 +1,6 @@
 import Dexie from "dexie";
 import type { Table } from "dexie";
-import type { Section, SectionSummary } from "@storymark/shared-types";
+import type { MemorySnapshot, Section, SectionSummary } from "@storymark/shared-types";
 
 /** A book's section manifest, cached for offline reading. */
 export interface CachedManifest {
@@ -11,6 +11,15 @@ export interface CachedManifest {
 /** Full section content, cached and keyed by [bookId+sectionIndex]. */
 export interface CachedSection extends Section {
   readonly bookId: string;
+}
+
+/** A memory snapshot cached for the section-entry recap, keyed by
+ * [bookId+enteringSection] — the section whose entry the snapshot recaps (its
+ * boundary is the *previous* section). Lets the recap render offline. */
+export interface CachedMemory {
+  readonly bookId: string;
+  readonly enteringSection: number;
+  readonly snapshot: MemorySnapshot;
 }
 
 /** Reader typography/theme settings. App-global (single-user), so there is
@@ -24,6 +33,7 @@ export interface StoredReaderSettings {
   readonly contentWidthPx: number;
   readonly theme: ReaderTheme;
   readonly entityHighlight: EntityHighlightMode;
+  readonly recapCardOnSectionEntry: boolean;
 }
 
 export type ReaderFontFamily = "serif" | "sans" | "mono";
@@ -67,6 +77,7 @@ type StorymarkDb = Dexie & {
   readerSettings: Table<StoredReaderSettings, string>;
   progress: Table<StoredProgress, string>;
   bookmarks: Table<StoredBookmark, string>;
+  memorySnapshots: Table<CachedMemory, [string, number]>;
 };
 
 export const db = new Dexie("storymark") as StorymarkDb;
@@ -88,4 +99,10 @@ db.version(2).stores({
 // per-book listing.
 db.version(3).stores({
   bookmarks: "id, bookId",
+});
+
+// v4 adds the section-entry recap cache, keyed by [bookId+enteringSection] so the
+// recap renders offline once seen online (read-through, like sections).
+db.version(4).stores({
+  memorySnapshots: "[bookId+enteringSection]",
 });

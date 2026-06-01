@@ -118,6 +118,25 @@ const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [
           />
         </div>
 
+        <div class="flex items-center justify-between">
+          <p class="text-sm font-medium">Recap card on new section</p>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="settings.recapCardOnSectionEntry"
+            class="relative h-6 w-11 shrink-0 rounded-full transition-colors"
+            :class="
+              settings.recapCardOnSectionEntry ? 'bg-[var(--sm-accent)]' : 'bg-[var(--sm-muted)]/30'
+            "
+            @click="update('recapCardOnSectionEntry', !settings.recapCardOnSectionEntry)"
+          >
+            <span
+              class="absolute top-0.5 left-0.5 size-5 rounded-full bg-white transition-transform"
+              :class="settings.recapCardOnSectionEntry ? 'translate-x-5' : 'translate-x-0'"
+            ></span>
+          </button>
+        </div>
+
         <button
           type="button"
           class="text-sm text-[var(--sm-accent)] hover:underline"

@@ -7,6 +7,7 @@ import MemoryPanel from "@/components/reader/MemoryPanel.vue";
 import PaginatedSection from "@/components/reader/PaginatedSection.vue";
 import ReaderSettingsDrawer from "@/components/reader/ReaderSettingsDrawer.vue";
 import ReaderToolbar from "@/components/reader/ReaderToolbar.vue";
+import SectionRecapCard from "@/components/reader/SectionRecapCard.vue";
 import SelectionPopover from "@/components/reader/SelectionPopover.vue";
 import { useAssistant } from "@/composables/use-assistant";
 import type { ReaderSelection } from "@/composables/use-selection-hint";
@@ -17,6 +18,7 @@ import { useOfflineSync } from "@/composables/use-offline-sync";
 import { useReader } from "@/composables/use-reader";
 import { useReaderSettings } from "@/composables/use-reader-settings";
 import { useReadingProgress } from "@/composables/use-reading-progress";
+import { useSectionRecap } from "@/composables/use-section-recap";
 import { sectionLabel } from "@/utils/section-label";
 
 const CHROME_IDLE_MS = 3500;
@@ -47,6 +49,14 @@ const {
 const { record, resume, flush } = useReadingProgress();
 const { bookmarks, load: loadBookmarks, toggle, removeById, isBookmarked } = useBookmarks();
 const { draft: assistantDraft } = useAssistant();
+const {
+  snapshot: recapSnapshot,
+  visible: recapVisible,
+  reset: resetRecap,
+  onSectionEntered: enterSection,
+  dismiss: dismissRecap,
+  dontShowAgain: recapDontShowAgain,
+} = useSectionRecap();
 
 const phase = ref<"loading" | "ready" | "error">("loading");
 const chromeVisible = ref(true);
@@ -202,7 +212,12 @@ async function jumpToBookmark(sectionIndex: number, paragraphIndex: number): Pro
 
 async function goNext(): Promise<void> {
   returnPoint.value = null;
-  await nextSection();
+  const advanced = await nextSection();
+  // Recap fires only on a forward advance into a new section (not on resume,
+  // backward paging, or jumps) — entering section N shows the through-(N-1) memory.
+  if (advanced && currentSectionIndex.value !== null) {
+    void enterSection(bookId, currentSectionIndex.value);
+  }
 }
 
 async function goPrev(): Promise<void> {
@@ -251,6 +266,7 @@ async function resolveBookTitle(): Promise<string> {
 
 onMounted(async () => {
   try {
+    resetRecap();
     await loadSettings();
     await ensureCached(bookId);
     const position = await resume(bookId);
@@ -390,6 +406,21 @@ onBeforeUnmount(() => {
         @ask="onAskFromSelection"
         @close="selection = null"
       />
+
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="-translate-y-3 opacity-0"
+        leave-active-class="transition duration-150 ease-in"
+        leave-to-class="-translate-y-3 opacity-0"
+      >
+        <SectionRecapCard
+          v-if="recapVisible && recapSnapshot"
+          :snapshot="recapSnapshot"
+          :manifest="manifest"
+          @dismiss="dismissRecap"
+          @dont-show-again="recapDontShowAgain"
+        />
+      </Transition>
     </template>
   </main>
 </template>
