@@ -68,6 +68,13 @@ export interface StoredProgress {
   readonly synced: boolean;
 }
 
+/** When a book was last opened (one row per book), in ISO 8601. Drives the
+ * "Previously…" recap on reopen after a long gap. */
+export interface StoredBookOpen {
+  readonly bookId: string;
+  readonly lastOpenedAt: string;
+}
+
 // The `as Dexie & { … }` pattern types the tables without subclassing Dexie,
 // which would force definite-assignment (`!`) fields the no-non-null-assertion
 // rule forbids. The schema string below is the source of truth for indexes.
@@ -78,6 +85,7 @@ type StorymarkDb = Dexie & {
   progress: Table<StoredProgress, string>;
   bookmarks: Table<StoredBookmark, string>;
   memorySnapshots: Table<CachedMemory, [string, number]>;
+  bookOpens: Table<StoredBookOpen, string>;
 };
 
 export const db = new Dexie("storymark") as StorymarkDb;
@@ -105,4 +113,9 @@ db.version(3).stores({
 // recap renders offline once seen online (read-through, like sections).
 db.version(4).stores({
   memorySnapshots: "[bookId+enteringSection]",
+});
+
+// v5 adds per-book last-opened timestamps, driving the >24h "Previously…" recap.
+db.version(5).stores({
+  bookOpens: "bookId",
 });

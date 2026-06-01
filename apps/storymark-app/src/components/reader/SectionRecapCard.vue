@@ -2,10 +2,15 @@
 import { computed, ref } from "vue";
 import type { MemorySnapshot, SectionSummary } from "@storymark/shared-types";
 
-const props = defineProps<{
-  snapshot: MemorySnapshot;
-  manifest: readonly SectionSummary[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    snapshot: MemorySnapshot;
+    manifest: readonly SectionSummary[];
+    // "The story so far" for the section-entry recap, "Previously…" on reopen (S5.4).
+    heading?: string;
+  }>(),
+  { heading: "The story so far" },
+);
 
 const emit = defineEmits<{
   (e: "dismiss"): void;
@@ -48,7 +53,7 @@ function onTouchEnd(event: TouchEvent): void {
 
       <div class="mb-3 flex items-start justify-between gap-3">
         <div>
-          <h2 class="text-base font-semibold">The story so far</h2>
+          <h2 class="text-base font-semibold">{{ heading }}</h2>
           <p class="text-xs text-[var(--sm-muted)]">Up to {{ boundaryLabel }}</p>
         </div>
         <button

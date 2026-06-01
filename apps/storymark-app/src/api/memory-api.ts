@@ -2,14 +2,13 @@ import type { MemorySnapshot } from "@storymark/shared-types";
 import { ApiError } from "@/api/api-error";
 import { db } from "@/db/storymark-db";
 
-async function fetchForSectionEntry(
+async function fetchMemory(
   bookId: string,
-  enteringSection: number,
+  upToSection: number,
+  upToLocation: number,
 ): Promise<MemorySnapshot | null> {
-  // Querying at (enteringSection, 0) returns the latest snapshot strictly before
-  // this section — i.e. the recap of everything the reader has finished.
   const response = await fetch(
-    `/api/books/${encodeURIComponent(bookId)}/memory?upToSection=${String(enteringSection)}&upToLocation=0`,
+    `/api/books/${encodeURIComponent(bookId)}/memory?upToSection=${String(upToSection)}&upToLocation=${String(upToLocation)}`,
   );
   if (response.status === 204) {
     return null;
@@ -20,10 +19,11 @@ async function fetchForSectionEntry(
   return (await response.json()) as MemorySnapshot;
 }
 
-// Read-through (Dexie-first, then API, write-back) like reader-api, so a recap seen
-// online renders offline next time. A 204 (no snapshot yet) is not cached — the
-// snapshot may appear once background processing catches up.
 export const memoryApi = {
+  // The section-entry recap: querying at (enteringSection, 0) returns the latest
+  // snapshot strictly before this section — what the reader has finished. Read-through
+  // (Dexie-first, write-back) like reader-api, so a recap seen online renders offline.
+  // A 204 (no snapshot yet) is not cached — it may appear once processing catches up.
   getForSectionEntry: async (
     bookId: string,
     enteringSection: number,
@@ -32,10 +32,19 @@ export const memoryApi = {
     if (cached) {
       return cached.snapshot;
     }
-    const snapshot = await fetchForSectionEntry(bookId, enteringSection);
+    const snapshot = await fetchMemory(bookId, enteringSection, 0);
     if (snapshot) {
       await db.memorySnapshots.put({ bookId, enteringSection, snapshot });
     }
     return snapshot;
   },
+
+  // The "Previously…" recap: the latest snapshot at-or-before the reader's exact
+  // resumed position. Not cached (it fires once per open and the location key would
+  // be unbounded), so it's a no-op offline — reading is unaffected.
+  getAtPosition: (
+    bookId: string,
+    section: number,
+    location: number,
+  ): Promise<MemorySnapshot | null> => fetchMemory(bookId, section, location),
 } as const;

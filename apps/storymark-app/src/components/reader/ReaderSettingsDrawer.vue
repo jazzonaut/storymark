@@ -119,7 +119,7 @@ const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [
         </div>
 
         <div class="flex items-center justify-between">
-          <p class="text-sm font-medium">Recap card on new section</p>
+          <p class="text-sm font-medium">Story-so-far recaps</p>
           <button
             type="button"
             role="switch"

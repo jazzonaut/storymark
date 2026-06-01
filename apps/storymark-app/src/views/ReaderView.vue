@@ -17,6 +17,7 @@ import { useBooks } from "@/composables/use-books";
 import { useOfflineSync } from "@/composables/use-offline-sync";
 import { useReader } from "@/composables/use-reader";
 import { useReaderSettings } from "@/composables/use-reader-settings";
+import { usePreviously } from "@/composables/use-previously";
 import { useReadingProgress } from "@/composables/use-reading-progress";
 import { useSectionRecap } from "@/composables/use-section-recap";
 import { sectionLabel } from "@/utils/section-label";
@@ -57,6 +58,13 @@ const {
   dismiss: dismissRecap,
   dontShowAgain: recapDontShowAgain,
 } = useSectionRecap();
+const {
+  snapshot: previouslySnapshot,
+  visible: previouslyVisible,
+  maybeShow: maybeShowPreviously,
+  dismiss: dismissPreviously,
+  dontShowAgain: previouslyDontShowAgain,
+} = usePreviously();
 
 const phase = ref<"loading" | "ready" | "error">("loading");
 const chromeVisible = ref(true);
@@ -275,6 +283,10 @@ onMounted(async () => {
     phase.value = "ready";
     revealChrome();
     void loadBookmarks(bookId);
+    // After a >24h gap, recap the story up to where the reader is resuming.
+    if (currentSectionIndex.value !== null) {
+      void maybeShowPreviously(bookId, currentSectionIndex.value, currentLocation.value);
+    }
   } catch {
     phase.value = "error";
   }
@@ -419,6 +431,22 @@ onBeforeUnmount(() => {
           :manifest="manifest"
           @dismiss="dismissRecap"
           @dont-show-again="recapDontShowAgain"
+        />
+      </Transition>
+
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="-translate-y-3 opacity-0"
+        leave-active-class="transition duration-150 ease-in"
+        leave-to-class="-translate-y-3 opacity-0"
+      >
+        <SectionRecapCard
+          v-if="previouslyVisible && previouslySnapshot"
+          heading="Previously…"
+          :snapshot="previouslySnapshot"
+          :manifest="manifest"
+          @dismiss="dismissPreviously"
+          @dont-show-again="previouslyDontShowAgain"
         />
       </Transition>
     </template>
