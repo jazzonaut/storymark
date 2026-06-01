@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type { StoryGuideEntity } from "@storymark/shared-types";
+import type { SectionSummary, StoryGuideEntity } from "@storymark/shared-types";
 import EntityTypeBadge from "@/components/reader/EntityTypeBadge.vue";
 import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
 import { entitiesApi } from "@/api/entities-api";
 import { useEntitySummary } from "@/composables/use-entity-summary";
 import { ApiError } from "@/api/api-error";
+import { entityTypeOrder, entityTypePlural } from "@/utils/entity-type";
+import { sectionLabel } from "@/utils/section-label";
 
 const props = defineProps<{
   bookId: string;
   currentSection: number | null;
   currentLocation: number;
+  manifest: readonly SectionSummary[];
   isProcessing: boolean;
 }>();
 
@@ -20,18 +23,44 @@ const entities = ref<readonly StoryGuideEntity[]>([]);
 const isLoading = ref(false);
 const error = ref<string | null>(null);
 const search = ref("");
+const activeType = ref<string | null>(null);
+
+// The entity types actually present, in the backend's declared order — the type
+// filter only offers kinds the reader has met, so a chip is never a dead end.
+const presentTypes = computed<readonly string[]>(() =>
+  [...new Set(entities.value.map((entity) => entity.entityType))].toSorted(
+    (a, b) => entityTypeOrder(a) - entityTypeOrder(b),
+  ),
+);
 
 const filtered = computed<readonly StoryGuideEntity[]>(() => {
   const query = search.value.trim().toLowerCase();
-  if (query.length === 0) {
-    return entities.value;
-  }
-  return entities.value.filter(
-    (entity) =>
+  return entities.value.filter((entity) => {
+    if (activeType.value !== null && entity.entityType !== activeType.value) {
+      return false;
+    }
+    if (query.length === 0) {
+      return true;
+    }
+    return (
       entity.canonicalName.toLowerCase().includes(query) ||
-      entity.aliases.some((alias) => alias.toLowerCase().includes(query)),
-  );
+      entity.aliases.some((alias) => alias.toLowerCase().includes(query))
+    );
+  });
 });
+
+// The secondary line under each entry: where it was introduced and any aliases,
+// so a reader recognises "Strider" as the "Aragorn" they've already met.
+function metaLine(entity: StoryGuideEntity): string {
+  const parts: string[] = [];
+  if (entity.firstSeenSection !== null) {
+    parts.push(`Introduced in ${sectionLabel(props.manifest, entity.firstSeenSection)}`);
+  }
+  if (entity.aliases.length > 0) {
+    parts.push(`also known as ${entity.aliases.join(", ")}`);
+  }
+  return parts.join(" · ");
+}
 
 async function load(): Promise<void> {
   if (props.currentSection === null) {
@@ -61,19 +90,38 @@ function onTap(entity: StoryGuideEntity): void {
   if (props.currentSection === null) {
     return;
   }
+  const section = props.currentSection;
   void open(
     props.bookId,
     entity.entityId,
     entity.canonicalName,
-    props.currentSection,
+    section,
     props.currentLocation,
+  ).then((loaded) => {
+    // Generating the summary cached it server-side, but the list snapshot is
+    // stale until the next section turn. Reflect the new summary into the row
+    // (and the offline cache) now, so it doesn't keep showing "Tap to reveal".
+    if (loaded !== null) {
+      reveal(entity.entityId, loaded.shortSummary, section);
+    }
+    return loaded;
+  });
+}
+
+function reveal(entityId: string, shortSummary: string, section: number): void {
+  entities.value = entities.value.map((entity) =>
+    entity.entityId === entityId ? { ...entity, shortSummary } : entity,
   );
+  void entitiesApi.cacheListSummary(props.bookId, section, entityId, shortSummary);
 }
 
 // Load when first shown and whenever the reading position behind it changes.
+// Clear the type filter on reload so a chip selected for the previous section
+// can't hide an otherwise-populated list.
 watch(
   () => [props.bookId, props.currentSection] as const,
   () => {
+    activeType.value = null;
     void load();
   },
   { immediate: true },
@@ -89,6 +137,35 @@ watch(
         placeholder="Search people, places, things…"
         class="w-full rounded-lg border border-[var(--sm-muted)]/20 bg-[var(--sm-surface)] px-3 py-2 text-sm text-[var(--sm-fg)] placeholder:text-[var(--sm-muted)] focus:outline-none"
       />
+    </div>
+
+    <div v-if="presentTypes.length > 1" class="mb-3 flex flex-wrap gap-1.5">
+      <button
+        type="button"
+        class="rounded-full border border-[var(--sm-muted)]/20 px-3 py-1 text-xs font-medium"
+        :class="
+          activeType === null
+            ? 'bg-[var(--sm-surface)] text-[var(--sm-fg)]'
+            : 'text-[var(--sm-muted)] hover:text-[var(--sm-fg)]'
+        "
+        @click="activeType = null"
+      >
+        All
+      </button>
+      <button
+        v-for="type in presentTypes"
+        :key="type"
+        type="button"
+        class="rounded-full border border-[var(--sm-muted)]/20 px-3 py-1 text-xs font-medium"
+        :class="
+          activeType === type
+            ? 'bg-[var(--sm-surface)] text-[var(--sm-fg)]'
+            : 'text-[var(--sm-muted)] hover:text-[var(--sm-fg)]'
+        "
+        @click="activeType = type"
+      >
+        {{ entityTypePlural(type) }}
+      </button>
     </div>
 
     <div v-if="isLoading" class="space-y-3" aria-busy="true">
@@ -129,6 +206,12 @@ watch(
             class="line-clamp-2 text-xs text-[var(--sm-muted)]"
           >
             {{ entity.shortSummary }}
+          </span>
+          <span v-else class="text-xs italic text-[var(--sm-muted)]/70">
+            Tap to reveal a spoiler-safe summary
+          </span>
+          <span v-if="metaLine(entity).length > 0" class="text-[11px] text-[var(--sm-muted)]/80">
+            {{ metaLine(entity) }}
           </span>
         </button>
       </li>

@@ -20,13 +20,13 @@ interface TimelineRow {
   readonly involved: string;
 }
 
-// Chronological order = top-to-bottom down the timeline spine.
+// Reverse-chronological: the most recent event sits at the top of the spine.
 const rows = computed<readonly TimelineRow[]>(() =>
   props.events
     .toSorted((a, b) =>
       a.sectionIndex === b.sectionIndex
-        ? a.locationStart - b.locationStart
-        : a.sectionIndex - b.sectionIndex,
+        ? b.locationStart - a.locationStart
+        : b.sectionIndex - a.sectionIndex,
     )
     .map((event) => ({
       event,

@@ -112,6 +112,7 @@ function onAsk(question: string): void {
           :book-id="bookId"
           :current-section="currentSection"
           :current-location="currentLocation"
+          :manifest="manifest"
           :is-processing="isProcessing"
         />
         <AnswerCard

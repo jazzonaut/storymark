@@ -44,4 +44,26 @@ export const entitiesApi = {
       {},
       LLM_TIMEOUT_MS,
     ),
+
+  /** Reflects a freshly generated entity summary into the cached Story Guide list
+   * row for its section, so the list row stops showing the unrevealed state and
+   * stays revealed if the panel is reopened within the cache TTL. No-op when that
+   * section's list isn't cached yet. */
+  cacheListSummary: async (
+    bookId: string,
+    upToSection: number,
+    entityId: string,
+    shortSummary: string,
+  ): Promise<void> => {
+    const row = await db.entities.get([bookId, upToSection]);
+    if (!row) {
+      return;
+    }
+    await db.entities.put({
+      ...row,
+      entities: row.entities.map((entity) =>
+        entity.entityId === entityId ? { ...entity, shortSummary } : entity,
+      ),
+    });
+  },
 } as const;

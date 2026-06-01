@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 
@@ -18,6 +19,10 @@ internal sealed class ContentSanitizationService
     // A heading longer than this is prose styled as a heading, not a section title;
     // we'd rather fall back to "Untitled" than show a truncated sentence.
     private const int MaxHeadingTitleLength = 200;
+
+    // A title inferred from a non-semantic first block (all-caps or fully emphasised) is
+    // held to a tighter length than an explicit <h*>, since the title signal is weaker.
+    private const int MaxStyledTitleLength = 80;
 
     private static readonly HashSet<string> AllowedTags = new(StringComparer.Ordinal)
     {
@@ -45,6 +50,14 @@ internal sealed class ContentSanitizationService
     };
 
     private static readonly string ParagraphBlockSelector = string.Join(',', ParagraphBlocks);
+
+    // First-block title signal for EPUBs with no <h*>: a chapter/part/number opener.
+    // All-caps and fully-emphasised lines are recognised separately.
+    private static readonly Regex TitleWordPattern = new(
+        @"^(chapter|part|prologue|epilogue|book|section|canto|act|scene|interlude)\b|^\d{1,4}$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.ExplicitCapture
+            | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     private readonly HtmlParser _parser = new();
 
@@ -275,20 +288,98 @@ internal sealed class ContentSanitizationService
         return document.Body is { } body ? ExtractHeadingTitle(body) : null;
     }
 
-    /// <summary>The section's first heading, used as a title for spine files the
-    /// EPUB's table of contents doesn't name. Returns <c>null</c> when there is no
-    /// heading or it reads as prose rather than a title (longer than
-    /// <see cref="MaxHeadingTitleLength"/>), so the caller keeps its own fallback.</summary>
+    /// <summary>The section's title for spine files the EPUB's table of contents doesn't
+    /// name: a semantic <c>&lt;h1&gt;</c>–<c>&lt;h6&gt;</c> heading, or — when the markup has
+    /// none (common in Calibre conversions that style the chapter title as a paragraph) —
+    /// the first block when it reads like a title. Returns <c>null</c> when nothing
+    /// qualifies, so the caller keeps its own fallback.</summary>
     private static string? ExtractHeadingTitle(IElement body)
     {
         var heading = body.QuerySelector("h1, h2, h3, h4, h5, h6");
-        if (heading is null)
+        if (heading is not null)
+        {
+            var headingText = NormalizeWhitespace(heading.TextContent);
+            return headingText.Length is > 0 and <= MaxHeadingTitleLength ? headingText : null;
+        }
+
+        var firstBlock = body.QuerySelectorAll(ParagraphBlockSelector)
+            .FirstOrDefault(block => block.QuerySelector(ParagraphBlockSelector) is null
+                && NormalizeWhitespace(block.TextContent).Length > 0);
+        if (firstBlock is null)
         {
             return null;
         }
 
-        var text = NormalizeWhitespace(heading.TextContent);
-        return text.Length is > 0 and <= MaxHeadingTitleLength ? text : null;
+        var text = NormalizeWhitespace(firstBlock.TextContent);
+        return LooksLikeTitle(firstBlock, text) ? text : null;
+    }
+
+    /// <summary>Whether the first block reads like a chapter title rather than opening
+    /// prose: a chapter/part/number opener (at any length within the heading cap), or a
+    /// short all-caps or fully-emphasised line. Conservative on purpose — an ordinary
+    /// first sentence must not be mistaken for a title.</summary>
+    private static bool LooksLikeTitle(IElement block, string text)
+    {
+        if (text.Length == 0 || text.Length > MaxHeadingTitleLength)
+        {
+            return false;
+        }
+
+        if (TitleWordPattern.IsMatch(text))
+        {
+            return true;
+        }
+
+        return text.Length <= MaxStyledTitleLength && (IsAllCaps(text) || IsFullyEmphasized(block, text));
+    }
+
+    private static bool IsAllCaps(string text)
+    {
+        var hasLetter = false;
+        foreach (var ch in text)
+        {
+            if (!char.IsLetter(ch))
+            {
+                continue;
+            }
+
+            hasLetter = true;
+            if (!char.IsUpper(ch))
+            {
+                return false;
+            }
+        }
+
+        return hasLetter;
+    }
+
+    // A title styled as bold — e.g. <span class="bold">CHAPTER ONE</span> — rather than an
+    // <h*>: an emphasis element whose text spans the block's entire text.
+    private static bool IsFullyEmphasized(IElement block, string normalizedText)
+    {
+        foreach (var element in block.QuerySelectorAll("strong, b, [class]"))
+        {
+            if (IsEmphasis(element)
+                && string.Equals(
+                    NormalizeWhitespace(element.TextContent), normalizedText, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsEmphasis(IElement element)
+    {
+        if (string.Equals(element.LocalName, "strong", StringComparison.Ordinal)
+            || string.Equals(element.LocalName, "b", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var className = element.GetAttribute("class");
+        return className is not null && className.Contains("bold", StringComparison.OrdinalIgnoreCase);
     }
 
     private static SanitizedSection Empty(IReadOnlySet<string> used) => new()

@@ -54,11 +54,22 @@ defineEmits<{
     <BookmarkButton :active="bookmarked" @toggle="$emit('toggle-bookmark')" />
     <button
       type="button"
-      class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
+      class="shrink-0 rounded px-2 py-1 text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
       aria-label="Open the Memory panel"
       @click="$emit('open-memory')"
     >
-      Memory
+      <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path
+          d="M11 9C9.3 8 6.9 7.7 3.8 7.7 3.3 7.7 2.9 7.7 2.5 7.8V18.3C2.9 18.2 3.3 18.2 3.8 18.2 6.9 18.2 9.3 18.5 11 19.5M11 9C12.7 8 15.1 7.7 18.2 7.7 18.7 7.7 19.1 7.7 19.5 7.8V18.3C19.1 18.2 18.7 18.2 18.2 18.2 15.1 18.2 12.7 18.5 11 19.5M11 9V19.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <path
+          d="M17.5 1.5C17.7 2.9 18.6 3.8 20 4 18.6 4.2 17.7 5.1 17.5 6.5 17.3 5.1 16.4 4.2 15 4 16.4 3.8 17.3 2.9 17.5 1.5Z"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
     </button>
     <button
       type="button"

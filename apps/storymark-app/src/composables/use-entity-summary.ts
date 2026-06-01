@@ -28,7 +28,7 @@ interface UseEntitySummary {
     name: string,
     section: number,
     location: number,
-  ) => Promise<void>;
+  ) => Promise<EntitySummary | null>;
   close: () => void;
 }
 
@@ -39,18 +39,21 @@ export function useEntitySummary(): UseEntitySummary {
     name: string,
     section: number,
     location: number,
-  ): Promise<void> {
+  ): Promise<EntitySummary | null> {
     openEntity.value = { entityId, name };
     isLoading.value = true;
     summary.value = null;
     error.value = null;
     try {
-      summary.value = await entitiesApi.summary(bookId, entityId, section, location);
+      const loaded = await entitiesApi.summary(bookId, entityId, section, location);
+      summary.value = loaded;
+      return loaded;
     } catch (caught) {
       error.value =
         caught instanceof ApiError
           ? "Couldn't load this just now."
           : "Story Guide is unavailable offline.";
+      return null;
     } finally {
       isLoading.value = false;
     }
