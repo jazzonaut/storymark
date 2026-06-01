@@ -11,7 +11,9 @@ const props = defineProps<{
   manifest: readonly SectionSummary[];
 }>();
 
-const emit = defineEmits<{ (e: "select-source", source: AssistantAnswer["sources"][number]): void }>();
+const emit = defineEmits<{
+  (e: "select-source", source: AssistantAnswer["sources"][number]): void;
+}>();
 
 const confidenceClass = computed<string>(() => {
   const map: Record<AnswerConfidence, string> = {
