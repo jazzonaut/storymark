@@ -108,6 +108,17 @@ function onClick(params: ECElementEvent): void {
   <!-- touch-action:none lets ECharts own the pinch/drag gesture so the browser
        doesn't hijack it as a viewport (page) zoom. -->
   <div class="min-h-[60vh] w-full flex-1 touch-none sm:min-h-0">
-    <VChart :option="option" autoresize class="h-full w-full" @click="onClick" />
+    <!-- The 60vh floor lives on the chart element itself, not just the wrapper. On
+         mobile the Memory panel is a content-height bottom sheet, so nothing in the
+         chain has a resolved height for `h-full` to read and the canvas collapses to
+         0 — ECharts' roam View coordinate system then builds a null transform from the
+         empty rect and throws. Dropped on sm:, where the full-height desktop rail gives
+         the wrapper a real height that `h-full` fills. -->
+    <VChart
+      :option="option"
+      autoresize
+      class="h-full min-h-[60vh] w-full sm:min-h-0"
+      @click="onClick"
+    />
   </div>
 </template>

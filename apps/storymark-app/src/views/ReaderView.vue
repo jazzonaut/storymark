@@ -96,7 +96,8 @@ function flashParagraph(paragraphIndex: number): void {
   highlight.value = { paragraphIndex, nonce: highlightNonce };
 }
 // Where the reader was before following a Q&A source, so they can jump back.
-// Captured on the first source jump; cleared on return or on reading onward.
+// Captured on the first source jump; persists across paging and chapter changes,
+// and is cleared only when the reader returns via it or dismisses it (the X).
 const returnPoint = ref<{ sectionIndex: number; paragraphIndex: number } | null>(null);
 const pageInfo = ref<{ page: number; total: number }>({ page: 0, total: 1 });
 
@@ -220,7 +221,6 @@ function openContents(): void {
 
 // Jump to the start of a section chosen from the contents list.
 async function jumpToSection(sectionIndex: number): Promise<void> {
-  returnPoint.value = null;
   contentsOpen.value = false;
   await goTo(sectionIndex, 0);
 }
@@ -301,6 +301,11 @@ async function returnToReading(): Promise<void> {
   returnPoint.value = null;
 }
 
+// Dismiss the "Back to…" affordance without navigating (the X on the split button).
+function dismissReturn(): void {
+  returnPoint.value = null;
+}
+
 // Bookmark (or un-bookmark) the paragraph at the top of the current page, with a
 // short text preview as its label.
 async function toggleBookmark(): Promise<void> {
@@ -326,7 +331,6 @@ async function jumpToBookmark(sectionIndex: number, paragraphIndex: number): Pro
 }
 
 async function goNext(): Promise<void> {
-  returnPoint.value = null;
   const advanced = await nextSection();
   // Recap fires only on a forward advance into a new section (not on resume,
   // backward paging, or jumps) — entering section N shows the through-(N-1) memory.
@@ -341,7 +345,6 @@ async function goNext(): Promise<void> {
 }
 
 async function goPrev(): Promise<void> {
-  returnPoint.value = null;
   await prevSection();
 }
 
@@ -541,27 +544,52 @@ onBeforeUnmount(() => {
         leave-active-class="transition duration-150 ease-in"
         leave-to-class="translate-y-2 opacity-0"
       >
-        <button
+        <div
           v-if="returnPoint"
-          type="button"
-          class="absolute bottom-6 left-1/2 z-20 flex max-w-[80%] -translate-x-1/2 items-center gap-2 rounded-full bg-[var(--sm-accent)] px-4 py-2 text-sm font-medium text-white shadow-lg hover:opacity-90"
-          @click="returnToReading"
+          class="absolute bottom-6 left-1/2 z-20 flex max-w-[80%] -translate-x-1/2 items-center rounded-full bg-[var(--sm-accent)] text-sm font-medium text-white shadow-lg"
         >
-          <svg
-            class="size-4 shrink-0"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
+          <button
+            type="button"
+            class="flex min-w-0 items-center gap-2 rounded-l-full py-2 pr-3 pl-4 hover:opacity-90"
+            @click="returnToReading"
           >
-            <path d="M9 14 4 9l5-5" />
-            <path d="M4 9h11a5 5 0 0 1 0 10h-1" />
-          </svg>
-          <span class="truncate">Back to {{ returnLabel }}</span>
-        </button>
+            <svg
+              class="size-4 shrink-0"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M9 14 4 9l5-5" />
+              <path d="M4 9h11a5 5 0 0 1 0 10h-1" />
+            </svg>
+            <span class="truncate">Back to {{ returnLabel }}</span>
+          </button>
+          <span class="h-5 w-px shrink-0 bg-white/25" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="flex shrink-0 items-center rounded-r-full py-2 pr-4 pl-2 hover:opacity-90"
+            aria-label="Dismiss"
+            @click="dismissReturn"
+          >
+            <svg
+              class="size-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
       </Transition>
 
       <div class="absolute inset-x-0 bottom-0 z-10 h-0.5 bg-[var(--sm-muted)]/15">
