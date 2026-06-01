@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AssistantSource, SectionSummary } from "@storymark/shared-types";
+import { sectionLabel } from "@/utils/section-label";
 
 const props = defineProps<{
   sources: readonly AssistantSource[];
@@ -9,11 +10,6 @@ const props = defineProps<{
 }>();
 
 defineEmits<{ (e: "select", source: AssistantSource): void }>();
-
-function sectionLabel(sectionIndex: number): string {
-  const title = props.manifest.find((s) => s.sectionIndex === sectionIndex)?.title;
-  return title ?? `Section ${String(sectionIndex)}`;
-}
 </script>
 
 <template>
@@ -32,7 +28,7 @@ function sectionLabel(sectionIndex: number): string {
         >
           <span class="flex items-baseline gap-1.5 text-xs font-medium text-[var(--sm-accent)]">
             <span class="font-semibold">{{ source.index }}.</span>
-            {{ sectionLabel(source.sectionIndex) }}
+            {{ sectionLabel(manifest, source.sectionIndex) }}
           </span>
           <span class="mt-0.5 block text-sm text-[var(--sm-muted)]">{{ source.snippet }}</span>
         </button>

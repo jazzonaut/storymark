@@ -17,6 +17,7 @@ import { useOfflineSync } from "@/composables/use-offline-sync";
 import { useReader } from "@/composables/use-reader";
 import { useReaderSettings } from "@/composables/use-reader-settings";
 import { useReadingProgress } from "@/composables/use-reading-progress";
+import { sectionLabel } from "@/utils/section-label";
 
 const CHROME_IDLE_MS = 3500;
 
@@ -55,6 +56,15 @@ const assistantOpen = ref(false);
 const selection = ref<ReaderSelection | null>(null);
 const highlight = ref<{ paragraphIndex: number; nonce: number } | null>(null);
 let highlightNonce = 0;
+// Flash a paragraph to re-orient the reader after a jump. The nonce bump makes
+// re-flashing the same paragraph still re-trigger the child's watch.
+function flashParagraph(paragraphIndex: number): void {
+  highlightNonce += 1;
+  highlight.value = { paragraphIndex, nonce: highlightNonce };
+}
+// Where the reader was before following a Q&A source, so they can jump back.
+// Captured on the first source jump; cleared on return or on reading onward.
+const returnPoint = ref<{ sectionIndex: number; paragraphIndex: number } | null>(null);
 const pageInfo = ref<{ page: number; total: number }>({ page: 0, total: 1 });
 
 const isCurrentBookmarked = computed<boolean>(() =>
@@ -67,6 +77,9 @@ const bookTitle = ref("");
 
 const positionLabel = computed<string>(
   () => `${String(currentPosition.value + 1)} / ${String(sectionCount.value)}`,
+);
+const returnLabel = computed<string>(() =>
+  returnPoint.value === null ? "" : sectionLabel(manifest.value, returnPoint.value.sectionIndex),
 );
 const sectionProgress = computed<number>(() =>
   pageInfo.value.total > 0 ? (pageInfo.value.page + 1) / pageInfo.value.total : 0,
@@ -135,14 +148,32 @@ function onAskFromSelection(text: string): void {
   chromeVisible.value = true;
 }
 
-// Tapping a Q&A source: close the panel, navigate to the passage, and flash it.
+// Tapping a Q&A source: remember the current spot (so we can offer a way back),
+// close the panel, navigate to the passage, and flash it. Only the first jump in
+// a run captures the origin, so hopping between sources still returns to where
+// reading actually left off.
 async function onJumpToSource(source: AssistantSource): Promise<void> {
+  const here = currentSectionIndex.value;
+  if (here !== null && returnPoint.value === null) {
+    returnPoint.value = { sectionIndex: here, paragraphIndex: currentParagraphIndex.value };
+  }
   assistantOpen.value = false;
   const paragraphIndex = await goToLocation(source.sectionIndex, source.locationStart);
   if (paragraphIndex !== null) {
-    highlightNonce += 1;
-    highlight.value = { paragraphIndex, nonce: highlightNonce };
+    flashParagraph(paragraphIndex);
   }
+}
+
+// Return to the reading position captured before following a source, flash it to
+// re-orient, and dismiss the affordance.
+async function returnToReading(): Promise<void> {
+  const point = returnPoint.value;
+  if (point === null) {
+    return;
+  }
+  await goTo(point.sectionIndex, point.paragraphIndex);
+  flashParagraph(point.paragraphIndex);
+  returnPoint.value = null;
 }
 
 // Bookmark (or un-bookmark) the paragraph at the top of the current page, with a
@@ -170,10 +201,12 @@ async function jumpToBookmark(sectionIndex: number, paragraphIndex: number): Pro
 }
 
 async function goNext(): Promise<void> {
+  returnPoint.value = null;
   await nextSection();
 }
 
 async function goPrev(): Promise<void> {
+  returnPoint.value = null;
   await prevSection();
 }
 
@@ -290,6 +323,35 @@ onBeforeUnmount(() => {
         @select="(payload) => (selection = payload)"
         @dismiss-select="selection = null"
       />
+
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="translate-y-2 opacity-0"
+        leave-active-class="transition duration-150 ease-in"
+        leave-to-class="translate-y-2 opacity-0"
+      >
+        <button
+          v-if="returnPoint"
+          type="button"
+          class="absolute bottom-6 left-1/2 z-20 flex max-w-[80%] -translate-x-1/2 items-center gap-2 rounded-full bg-[var(--sm-accent)] px-4 py-2 text-sm font-medium text-white shadow-lg hover:opacity-90"
+          @click="returnToReading"
+        >
+          <svg
+            class="size-4 shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M9 14 4 9l5-5" />
+            <path d="M4 9h11a5 5 0 0 1 0 10h-1" />
+          </svg>
+          <span class="truncate">Back to {{ returnLabel }}</span>
+        </button>
+      </Transition>
 
       <div class="absolute inset-x-0 bottom-0 z-10 h-0.5 bg-[var(--sm-muted)]/15">
         <div
