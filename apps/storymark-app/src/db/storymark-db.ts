@@ -1,6 +1,6 @@
 import Dexie from "dexie";
 import type { Table } from "dexie";
-import type { MemorySnapshot, Section, SectionSummary } from "@storymark/shared-types";
+import type { BookEvent, MemorySnapshot, Section, SectionSummary } from "@storymark/shared-types";
 
 /** A book's section manifest, cached for offline reading. */
 export interface CachedManifest {
@@ -20,6 +20,16 @@ export interface CachedMemory {
   readonly bookId: string;
   readonly enteringSection: number;
   readonly snapshot: MemorySnapshot;
+}
+
+/** The events visible at a section boundary, cached for the timeline tab and keyed
+ * by [bookId+upToSection]. `cachedAt` (epoch ms) drives a short TTL: a fresh row is
+ * served directly, a stale one is refreshed online but still rendered offline. */
+export interface CachedTimeline {
+  readonly bookId: string;
+  readonly upToSection: number;
+  readonly events: readonly BookEvent[];
+  readonly cachedAt: number;
 }
 
 /** Reader typography/theme settings. App-global (single-user), so there is
@@ -86,6 +96,7 @@ type StorymarkDb = Dexie & {
   bookmarks: Table<StoredBookmark, string>;
   memorySnapshots: Table<CachedMemory, [string, number]>;
   bookOpens: Table<StoredBookOpen, string>;
+  timelines: Table<CachedTimeline, [string, number]>;
 };
 
 export const db = new Dexie("storymark") as StorymarkDb;
@@ -118,6 +129,12 @@ db.version(4).stores({
 // v5 adds per-book last-opened timestamps, driving the >24h "Previously…" recap.
 db.version(5).stores({
   bookOpens: "bookId",
+});
+
+// v6 adds the timeline events cache, keyed [bookId+upToSection] with a short TTL so
+// the timeline renders instantly on re-open and survives offline.
+db.version(6).stores({
+  timelines: "[bookId+upToSection]",
 });
 
 // A release that adds a db.version() above upgrades the on-device database on

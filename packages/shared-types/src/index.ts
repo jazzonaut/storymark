@@ -172,6 +172,19 @@ export type SelectionHintResult =
       readonly sources: readonly SelectionHintSource[];
     };
 
+/** An extracted story event visible at a reading position
+ * (`GET /api/books/{id}/events`). `locationStart` is where the timeline navigates
+ * to; `eventType` is a free-text label from the model (sometimes a `a | b` option
+ * list) and may be null. Mirrors EventView. */
+export interface BookEvent {
+  readonly sectionIndex: number;
+  readonly locationStart: number;
+  readonly locationEnd: number;
+  readonly eventType: string | null;
+  readonly description: string;
+  readonly involvedEntityIds: readonly string[];
+}
+
 /** The rolling "story so far" at-or-before a reading position
  * (`GET /api/books/{id}/memory`) — the data source for the section-entry recap
  * card. `upToSection`/`upToLocation` mark the snapshot's boundary (end of that

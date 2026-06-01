@@ -191,20 +191,28 @@ function onOpenEntityFromSelection(payload: { entityId: string; name: string }):
   onEntityTap(payload);
 }
 
-// Tapping a Q&A source: remember the current spot (so we can offer a way back),
-// close the panel, navigate to the passage, and flash it. Only the first jump in
-// a run captures the origin, so hopping between sources still returns to where
-// reading actually left off.
-async function onJumpToSource(source: AssistantSource): Promise<void> {
+// Following a source or timeline event: remember the current spot (so we can offer
+// a way back), close the panel, navigate to the passage, and flash it. Only the
+// first jump in a run captures the origin, so hopping between targets still returns
+// to where reading actually left off.
+async function jumpToLocation(sectionIndex: number, locationStart: number): Promise<void> {
   const here = currentSectionIndex.value;
   if (here !== null && returnPoint.value === null) {
     returnPoint.value = { sectionIndex: here, paragraphIndex: currentParagraphIndex.value };
   }
   assistantOpen.value = false;
-  const paragraphIndex = await goToLocation(source.sectionIndex, source.locationStart);
+  const paragraphIndex = await goToLocation(sectionIndex, locationStart);
   if (paragraphIndex !== null) {
     flashParagraph(paragraphIndex);
   }
+}
+
+function onJumpToSource(source: AssistantSource): void {
+  void jumpToLocation(source.sectionIndex, source.locationStart);
+}
+
+function onJumpToTimeline(payload: { sectionIndex: number; locationStart: number }): void {
+  void jumpToLocation(payload.sectionIndex, payload.locationStart);
 }
 
 // Return to the reading position captured before following a source, flash it to
@@ -444,6 +452,7 @@ onBeforeUnmount(() => {
         :manifest="manifest"
         @close="assistantOpen = false"
         @jump="onJumpToSource"
+        @jump-location="onJumpToTimeline"
       />
 
       <SelectionPopover

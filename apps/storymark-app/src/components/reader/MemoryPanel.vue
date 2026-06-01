@@ -4,6 +4,7 @@ import type { AssistantSource, SectionSummary } from "@storymark/shared-types";
 import QuestionInput from "@/components/reader/QuestionInput.vue";
 import AnswerCard from "@/components/reader/AnswerCard.vue";
 import StoryGuidePanel from "@/components/reader/StoryGuidePanel.vue";
+import TimelinePanel from "@/components/reader/TimelinePanel.vue";
 import { useAssistant } from "@/composables/use-assistant";
 import { useOfflineSync } from "@/composables/use-offline-sync";
 
@@ -18,9 +19,16 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "jump", source: AssistantSource): void;
+  (e: "jump-location", payload: { sectionIndex: number; locationStart: number }): void;
 }>();
 
-type Tab = "assistant" | "guide";
+type Tab = "assistant" | "timeline" | "guide";
+
+const TABS: readonly { id: Tab; label: string }[] = [
+  { id: "assistant", label: "Assistant" },
+  { id: "timeline", label: "Timeline" },
+  { id: "guide", label: "Story Guide" },
+];
 
 const { isAsking, lastQuestion, answer, error, ask } = useAssistant();
 const { isOnline } = useOfflineSync();
@@ -45,31 +53,21 @@ function onAsk(question: string): void {
       class="absolute inset-x-0 bottom-0 flex max-h-[80vh] flex-col rounded-t-2xl bg-[var(--sm-bg)] shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:max-h-none sm:w-[26rem] sm:rounded-none"
     >
       <div class="flex items-center justify-between border-b border-[var(--sm-muted)]/15 px-5 py-3">
-        <!-- Timeline / Graph join here in S6.2/S6.3; S6.4 polishes all tabs. -->
+        <!-- Graph joins here in S6.3; S6.4 polishes the full tab set. -->
         <nav class="flex gap-1">
           <button
+            v-for="tab in TABS"
+            :key="tab.id"
             type="button"
             class="rounded-md px-3 py-1 text-sm font-semibold"
             :class="
-              activeTab === 'assistant'
+              activeTab === tab.id
                 ? 'bg-[var(--sm-surface)] text-[var(--sm-fg)]'
                 : 'text-[var(--sm-muted)] hover:text-[var(--sm-fg)]'
             "
-            @click="activeTab = 'assistant'"
+            @click="activeTab = tab.id"
           >
-            Assistant
-          </button>
-          <button
-            type="button"
-            class="rounded-md px-3 py-1 text-sm font-semibold"
-            :class="
-              activeTab === 'guide'
-                ? 'bg-[var(--sm-surface)] text-[var(--sm-fg)]'
-                : 'text-[var(--sm-muted)] hover:text-[var(--sm-fg)]'
-            "
-            @click="activeTab = 'guide'"
-          >
-            Story Guide
+            {{ tab.label }}
           </button>
         </nav>
         <button
@@ -91,7 +89,16 @@ function onAsk(question: string): void {
           :manifest="manifest"
           @select-source="(source) => emit('jump', source)"
         />
-        <!-- Mounted only once the tab is opened, so its data loads lazily. -->
+        <!-- Each non-assistant panel mounts only when its tab opens, so its data
+             (and ECharts, for the timeline) loads lazily. -->
+        <TimelinePanel
+          v-else-if="activeTab === 'timeline'"
+          :book-id="bookId"
+          :current-section="currentSection"
+          :current-location="currentLocation"
+          :manifest="manifest"
+          @jump="(payload) => emit('jump-location', payload)"
+        />
         <StoryGuidePanel
           v-else
           :book-id="bookId"
