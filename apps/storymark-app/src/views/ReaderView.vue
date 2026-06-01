@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { useEventListener, useTimeoutFn } from "@vueuse/core";
+import { useEventListener, useTimeoutFn, useWakeLock } from "@vueuse/core";
 import { useRoute } from "vue-router";
 import type { AssistantSource } from "@storymark/shared-types";
 import BookmarksPanel from "@/components/reader/BookmarksPanel.vue";
@@ -77,6 +77,11 @@ const {
   dismiss: dismissPreviously,
   dontShowAgain: previouslyDontShowAgain,
 } = usePreviously();
+
+// Hold a screen wake lock while a book is open so the phone doesn't dim/sleep
+// mid-page. VueUse re-acquires it on visibilitychange, so backgrounding the PWA
+// and returning keeps the screen awake.
+const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock();
 
 const phase = ref<"loading" | "ready" | "error">("loading");
 const chromeVisible = ref(true);
@@ -391,6 +396,7 @@ async function load(): Promise<void> {
     await open(bookId, position ?? undefined);
     bookTitle.value = await resolveBookTitle();
     phase.value = "ready";
+    void requestWakeLock("screen").catch(() => undefined);
     revealChrome();
     void ensureCached(bookId).catch(() => {});
     void loadBookmarks(bookId);
@@ -458,6 +464,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   // Push the last position now rather than waiting out the throttle window.
   void flush();
+  void releaseWakeLock();
 });
 </script>
 
