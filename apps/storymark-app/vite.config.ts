@@ -25,6 +25,10 @@ export default defineConfig({
         theme_color: "#4f46e5",
         background_color: "#ffffff",
         display: "standalone",
+        // Android launches an installed PWA immersively (status bar hidden) only
+        // when fullscreen is offered here; the runtime Fullscreen API can't fire
+        // at startup without a gesture. Falls back to `display` where unsupported.
+        display_override: ["fullscreen"],
         start_url: "/",
         icons: [
           { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
