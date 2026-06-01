@@ -101,7 +101,12 @@ onMounted(refresh);
         off-label="Future content only"
         size="small"
       />
-      <ToggleButton v-model="errorsOnly" on-label="Errors only" off-label="Errors only" size="small" />
+      <ToggleButton
+        v-model="errorsOnly"
+        on-label="Errors only"
+        off-label="Errors only"
+        size="small"
+      />
     </div>
 
     <DataTable
