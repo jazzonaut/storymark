@@ -12,8 +12,11 @@
   "dependencies": {
     "@primeuix/themes": "catalog:",
     "@storymark/shared-types": "workspace:*",
+    "@vueuse/core": "catalog:",
+    "@vueuse/integrations": "catalog:",
     "dexie": "catalog:",
     "echarts": "catalog:",
+    "focus-trap": "catalog:",
     "primevue": "catalog:",
     "vue": "catalog:",
     "vue-echarts": "catalog:",

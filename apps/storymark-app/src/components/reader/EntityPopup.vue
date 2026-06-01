@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 import EntityTypeBadge from "@/components/reader/EntityTypeBadge.vue";
+import CloseButton from "@/components/reader/CloseButton.vue";
 import { useEntitySummary } from "@/composables/use-entity-summary";
 import { useFocusTrap } from "@/composables/use-focus-trap";
 
@@ -8,26 +9,12 @@ const { openEntity, isLoading, summary, error, close } = useEntitySummary();
 
 const panel = ref<HTMLElement | null>(null);
 const isOpen = computed<boolean>(() => openEntity.value !== null);
-useFocusTrap(isOpen, panel);
+useFocusTrap(isOpen, panel, close);
 
 // Prefer the loaded canonical name; fall back to the tapped text while generating.
 const heading = computed<string>(
   () => summary.value?.canonicalName ?? openEntity.value?.name ?? "",
 );
-
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === "Escape" && openEntity.value !== null) {
-    close();
-  }
-}
-
-onMounted(() => {
-  window.addEventListener("keydown", onKeydown);
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener("keydown", onKeydown);
-});
 </script>
 
 <template>
@@ -53,13 +40,7 @@ onBeforeUnmount(() => {
           </h2>
           <EntityTypeBadge v-if="summary" :type="summary.entityType" />
         </div>
-        <button
-          type="button"
-          class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
-          @click="close"
-        >
-          Done
-        </button>
+        <CloseButton @close="close" />
       </header>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">

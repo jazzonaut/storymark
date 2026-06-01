@@ -329,7 +329,7 @@ Estimates are rough T-shirt sizes: **S** ≈ ½ day, **M** ≈ 1–2 days, **L**
 **Frontend:**
 - `SelectionPopover.vue`
 - Selection capture: `selectionchange` event + position via `getBoundingClientRect()` of the range
-- Chips: **Who/What is this? · Recap to here · Ask…**
+- Chips: **Who/What is this? · Ask…**
 - Resolved state renders `EntityCard.vue` or inline `HintText.vue`
 - "Tell me more" → opens the assistant panel with the selection pre-filled
 - Dismiss on tap-outside / scroll

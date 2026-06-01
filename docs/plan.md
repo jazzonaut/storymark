@@ -253,7 +253,7 @@ The popup must only use content up to the reader's current location.
 
 ### 5.5 Selection Hint (Tiered)
 
-When the reader selects arbitrary text, a popover appears with quick chips: **Who/What is this? · Recap to here · Ask…**
+When the reader selects arbitrary text, a popover appears with quick chips: **Who/What is this? · Ask…**
 
 The interaction is tiered for latency:
 
@@ -661,7 +661,7 @@ Tabs in memory panel:
 Selection popover:
 
 - Long-press on mobile, mouseup on desktop
-- Chips: Who/What is this? · Recap to here · Ask…
+- Chips: Who/What is this? · Ask…
 - Auto-hint renders inline (cached entity card OR 1B-model gloss)
 - "Tell me more" escalates to full Q&A panel
 

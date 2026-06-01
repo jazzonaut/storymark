@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { useEventListener, useTimeoutFn } from "@vueuse/core";
 import { useRoute } from "vue-router";
 import type { AssistantSource } from "@storymark/shared-types";
 import BookmarksPanel from "@/components/reader/BookmarksPanel.vue";
@@ -27,9 +28,6 @@ import { useSectionRecap } from "@/composables/use-section-recap";
 import { sectionLabel } from "@/utils/section-label";
 
 const CHROME_IDLE_MS = 3500;
-// Average adult silent-reading speed; drives the "time left" estimate. A rough
-// constant is fine — the figure is a guide, not a promise.
-const WORDS_PER_MINUTE = 230;
 
 const route = useRoute();
 const bookId = String(route.params.id);
@@ -135,18 +133,6 @@ const bookProgress = computed<number>(() => {
   return Math.min(read / total, 1);
 });
 const bookPercentLabel = computed<string>(() => `${String(Math.round(bookProgress.value * 100))}%`);
-const timeLeftLabel = computed<string>(() => {
-  const minutes = Math.ceil((totalWords.value * (1 - bookProgress.value)) / WORDS_PER_MINUTE);
-  if (minutes <= 0) {
-    return "Finished";
-  }
-  if (minutes < 60) {
-    return `${String(minutes)} min left`;
-  }
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return mins === 0 ? `${String(hours)} hr left` : `${String(hours)} hr ${String(mins)} min left`;
-});
 // What the assistant treats as "read so far" in the current section: the end
 // offset of the paragraph at the top of the page (the spoiler boundary).
 const currentLocation = computed<number>(
@@ -170,13 +156,10 @@ const bookVersion = computed<string | null>(
   () => books.value.find((book) => book.bookId === bookId)?.updatedAt ?? null,
 );
 
-let idleTimer: number | undefined;
-
-function scheduleHide(): void {
-  if (idleTimer !== undefined) {
-    window.clearTimeout(idleTimer);
-  }
-  idleTimer = window.setTimeout(() => {
+// start() restarts the countdown on each reveal; stop() cancels it when chrome is
+// dismissed by hand.
+const { start: scheduleHide, stop: cancelHide } = useTimeoutFn(
+  () => {
     if (
       !settingsOpen.value &&
       !bookmarksOpen.value &&
@@ -185,8 +168,10 @@ function scheduleHide(): void {
     ) {
       chromeVisible.value = false;
     }
-  }, CHROME_IDLE_MS);
-}
+  },
+  CHROME_IDLE_MS,
+  { immediate: false },
+);
 
 function revealChrome(): void {
   chromeVisible.value = true;
@@ -196,9 +181,7 @@ function revealChrome(): void {
 function toggleChrome(): void {
   if (chromeVisible.value) {
     chromeVisible.value = false;
-    if (idleTimer !== undefined) {
-      window.clearTimeout(idleTimer);
-    }
+    cancelHide();
   } else {
     revealChrome();
   }
@@ -422,16 +405,20 @@ async function load(): Promise<void> {
 }
 
 // Desktop shortcuts: `g m` opens the Memory panel; number keys switch tabs while
-// it's open; Esc closes it. Ignored while typing in an input (the question box,
-// the Story Guide search) so they never hijack text entry.
+// it's open. Ignored while typing in an input (the question box, the Story Guide
+// search) so they never hijack text entry. (Esc-to-close is owned by each panel.)
 let awaitingPanelKey = false;
-let panelKeyTimer: number | undefined;
+// The 700ms window in which a `g` arms the next `m`; stop() closes it early once
+// the chord resolves.
+const { start: armPanelChord, stop: disarmPanelChord } = useTimeoutFn(
+  () => {
+    awaitingPanelKey = false;
+  },
+  700,
+  { immediate: false },
+);
 
 function onReaderKeydown(event: KeyboardEvent): void {
-  if (event.key === "Escape" && memoryPanelOpen.value) {
-    memoryPanelOpen.value = false;
-    return;
-  }
   const target = event.target;
   const typing =
     target instanceof HTMLElement &&
@@ -441,7 +428,7 @@ function onReaderKeydown(event: KeyboardEvent): void {
   }
   if (awaitingPanelKey) {
     awaitingPanelKey = false;
-    window.clearTimeout(panelKeyTimer);
+    disarmPanelChord();
     if (event.key === "m") {
       event.preventDefault();
       openMemoryPanel();
@@ -450,9 +437,7 @@ function onReaderKeydown(event: KeyboardEvent): void {
   }
   if (event.key === "g") {
     awaitingPanelKey = true;
-    panelKeyTimer = window.setTimeout(() => {
-      awaitingPanelKey = false;
-    }, 700);
+    armPanelChord();
     return;
   }
   if (memoryPanelOpen.value && /^[1-9]$/.test(event.key)) {
@@ -464,17 +449,13 @@ function onReaderKeydown(event: KeyboardEvent): void {
   }
 }
 
+useEventListener(window, "keydown", onReaderKeydown);
+
 onMounted(() => {
-  window.addEventListener("keydown", onReaderKeydown);
   void load();
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("keydown", onReaderKeydown);
-  window.clearTimeout(panelKeyTimer);
-  if (idleTimer !== undefined) {
-    window.clearTimeout(idleTimer);
-  }
   // Push the last position now rather than waiting out the throttle window.
   void flush();
 });
@@ -512,7 +493,6 @@ onBeforeUnmount(() => {
         :title="bookTitle"
         :section-title="currentSectionTitle"
         :book-percent="bookPercentLabel"
-        :time-left="timeLeftLabel"
         :visible="chromeVisible"
         :offline="!isOnline"
         @open-settings="openSettings"

@@ -1,19 +1,12 @@
-import { ref } from "vue";
-import type { Ref } from "vue";
+import { useOnline } from "@vueuse/core";
+import type { ShallowRef } from "vue";
 
-// Module-level so every consumer shares one source of truth; the listeners are
-// registered once when the module loads.
-const isOnline = ref(navigator.onLine);
-
-window.addEventListener("online", () => {
-  isOnline.value = true;
-});
-window.addEventListener("offline", () => {
-  isOnline.value = false;
-});
+// Module-level so every consumer shares one source of truth; the window listeners
+// are registered once when the module loads.
+const isOnline = useOnline();
 
 interface UseOfflineSync {
-  readonly isOnline: Ref<boolean>;
+  readonly isOnline: Readonly<ShallowRef<boolean>>;
 }
 
 export function useOfflineSync(): UseOfflineSync {

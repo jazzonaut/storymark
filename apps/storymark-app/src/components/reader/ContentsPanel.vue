@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, toRef, watch } from "vue";
 import type { SectionSummary } from "@storymark/shared-types";
+import CloseButton from "@/components/reader/CloseButton.vue";
 import { useFocusTrap } from "@/composables/use-focus-trap";
 import { sectionLabel } from "@/utils/section-label";
 
@@ -16,7 +17,7 @@ const emit = defineEmits<{
 }>();
 
 const panel = ref<HTMLElement | null>(null);
-useFocusTrap(toRef(props, "open"), panel);
+useFocusTrap(toRef(props, "open"), panel, () => emit("close"));
 
 const wordCount = new Intl.NumberFormat();
 
@@ -48,13 +49,7 @@ watch(
     >
       <div class="mb-4 flex items-center justify-between">
         <h2 class="text-base font-semibold">Contents</h2>
-        <button
-          type="button"
-          class="rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
-          @click="emit('close')"
-        >
-          Done
-        </button>
+        <CloseButton @close="emit('close')" />
       </div>
 
       <p v-if="manifest.length === 0" class="text-sm text-[var(--sm-muted)]">

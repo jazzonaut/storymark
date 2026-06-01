@@ -5,7 +5,6 @@ defineProps<{
   title: string;
   sectionTitle: string | null;
   bookPercent: string;
-  timeLeft: string;
   visible: boolean;
   offline: boolean;
 }>();
@@ -25,10 +24,12 @@ defineEmits<{
   >
     <RouterLink
       to="/"
-      class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
+      class="shrink-0 rounded px-2 py-1 text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
       aria-label="Back to library"
     >
-      ‹ Library
+      <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M15 5 8 12l7 7" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
     </RouterLink>
     <button
       type="button"
@@ -39,7 +40,7 @@ defineEmits<{
       <span class="block truncate text-sm font-medium" :title="title">{{ title }}</span>
       <span class="flex min-w-0 items-baseline justify-center gap-1 text-xs text-[var(--sm-muted)]">
         <span class="min-w-0 truncate">{{ sectionTitle ?? "Untitled section" }}</span>
-        <span class="shrink-0 whitespace-nowrap">· {{ bookPercent }} · {{ timeLeft }}</span>
+        <span class="shrink-0 whitespace-nowrap">· {{ bookPercent }}</span>
       </span>
     </button>
     <span
@@ -48,6 +49,22 @@ defineEmits<{
     >
       Offline
     </span>
+    <button
+      type="button"
+      class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
+      aria-label="Bookmarks"
+      @click="$emit('open-bookmarks')"
+    >
+      ☰
+    </button>
+    <button
+      type="button"
+      class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
+      aria-label="Reader settings"
+      @click="$emit('open-settings')"
+    >
+      Aa
+    </button>
     <button
       type="button"
       class="shrink-0 rounded px-2 py-1 text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
@@ -66,22 +83,6 @@ defineEmits<{
           stroke-linejoin="round"
         />
       </svg>
-    </button>
-    <button
-      type="button"
-      class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
-      aria-label="Bookmarks"
-      @click="$emit('open-bookmarks')"
-    >
-      ☰
-    </button>
-    <button
-      type="button"
-      class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
-      aria-label="Reader settings"
-      @click="$emit('open-settings')"
-    >
-      Aa
     </button>
   </header>
 </template>

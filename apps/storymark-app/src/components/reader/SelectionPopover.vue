@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { onClickOutside } from "@vueuse/core";
 import EntityCard from "@/components/reader/EntityCard.vue";
 import HintText from "@/components/reader/HintText.vue";
 import { useSelectionHint } from "@/composables/use-selection-hint";
@@ -64,28 +65,14 @@ function copy(): void {
   void navigator.clipboard.writeText(props.selection.text).then(close).catch(close);
 }
 
-function onPointerDown(event: PointerEvent): void {
-  // A custom selection handle drag starts with a pointerdown outside the
-  // popover; it must not be read as a dismissal.
-  if (event.target instanceof Element && event.target.closest("[data-sm-selection-handle]")) {
-    return;
-  }
-  if (event.target instanceof Node && root.value && !root.value.contains(event.target)) {
-    emit("close");
-  }
-}
+// A custom selection-handle drag starts with a pointerdown outside the popover; it
+// must not be read as a dismissal, so it's excluded from the outside-tap check.
+onClickOutside(root, () => emit("close"), { ignore: ["[data-sm-selection-handle]"] });
 
 // A fresh selection starts back at the chips.
 watch(() => props.selection.text, reset);
 
-onMounted(() => {
-  reset();
-  document.addEventListener("pointerdown", onPointerDown, true);
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener("pointerdown", onPointerDown, true);
-});
+onMounted(reset);
 </script>
 
 <template>
@@ -93,7 +80,7 @@ onBeforeUnmount(() => {
     ref="root"
     role="dialog"
     aria-label="Selection actions"
-    class="fixed z-40 w-80 rounded-xl border border-[var(--sm-muted)]/20 bg-[var(--sm-bg)] p-3 shadow-2xl"
+    class="fixed z-40 w-80 rounded-xl border border-[var(--sm-muted)]/20 bg-[var(--sm-bg)] p-2 shadow-2xl"
     :style="style"
   >
     <div v-if="isResolving" class="space-y-2" aria-busy="true">
@@ -128,14 +115,6 @@ onBeforeUnmount(() => {
         @click="identify"
       >
         Who/What is this?
-      </button>
-      <button
-        type="button"
-        disabled
-        class="cursor-not-allowed rounded-full bg-[var(--sm-surface)] px-4 py-2 text-sm font-medium text-[var(--sm-muted)] opacity-50"
-        title="Available in a later update"
-      >
-        Recap to here
       </button>
       <button
         type="button"

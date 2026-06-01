@@ -4,6 +4,7 @@ import type { SectionSummary } from "@storymark/shared-types";
 import type { StoredBookmark } from "@/db/storymark-db";
 import { useFocusTrap } from "@/composables/use-focus-trap";
 import BookmarkButton from "@/components/reader/BookmarkButton.vue";
+import CloseButton from "@/components/reader/CloseButton.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -12,15 +13,15 @@ const props = defineProps<{
   currentBookmarked: boolean;
 }>();
 
-const panel = ref<HTMLElement | null>(null);
-useFocusTrap(toRef(props, "open"), panel);
-
-defineEmits<{
+const emit = defineEmits<{
   (e: "close"): void;
   (e: "jump", bookmark: StoredBookmark): void;
   (e: "remove", id: string): void;
   (e: "toggle-bookmark"): void;
 }>();
+
+const panel = ref<HTMLElement | null>(null);
+useFocusTrap(toRef(props, "open"), panel, () => emit("close"));
 
 interface BookmarkGroup {
   readonly sectionIndex: number;
@@ -64,13 +65,7 @@ const groups = computed<readonly BookmarkGroup[]>(() => {
         <h2 class="text-base font-semibold">Bookmarks</h2>
         <div class="flex items-center gap-1">
           <BookmarkButton :active="currentBookmarked" @toggle="$emit('toggle-bookmark')" />
-          <button
-            type="button"
-            class="rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
-            @click="$emit('close')"
-          >
-            Done
-          </button>
+          <CloseButton @close="$emit('close')" />
         </div>
       </div>
 

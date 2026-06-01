@@ -2,6 +2,7 @@
 import { computed, ref, toRef } from "vue";
 import type { AssistantSource, SectionSummary } from "@storymark/shared-types";
 import QuestionInput from "@/components/reader/QuestionInput.vue";
+import CloseButton from "@/components/reader/CloseButton.vue";
 import AnswerCard from "@/components/reader/AnswerCard.vue";
 import SummaryPanel from "@/components/reader/SummaryPanel.vue";
 import StoryGuidePanel from "@/components/reader/StoryGuidePanel.vue";
@@ -33,7 +34,7 @@ const { activeTab, tabs, setTab } = useMemoryPanel();
 const { isOnline } = useOfflineSync();
 
 const panel = ref<HTMLElement | null>(null);
-useFocusTrap(toRef(props, "open"), panel);
+useFocusTrap(toRef(props, "open"), panel, () => emit("close"));
 
 // Q&A needs the network and a known position; section text stays readable offline.
 const canAsk = computed<boolean>(() => isOnline.value && props.currentSection !== null);
@@ -88,13 +89,7 @@ function onAsk(question: string): void {
             {{ tab.label }}
           </button>
         </nav>
-        <button
-          type="button"
-          class="rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
-          @click="emit('close')"
-        >
-          Done
-        </button>
+        <CloseButton @close="emit('close')" />
       </div>
 
       <!-- Each non-assistant panel mounts only when its tab opens, so its data

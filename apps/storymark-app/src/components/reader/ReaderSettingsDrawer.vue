@@ -2,6 +2,7 @@
 import { ref, toRef } from "vue";
 import RangeControl from "@/components/reader/RangeControl.vue";
 import SegmentedControl from "@/components/reader/SegmentedControl.vue";
+import CloseButton from "@/components/reader/CloseButton.vue";
 import { useClearLocalData, UnsyncedChangesError } from "@/composables/use-clear-local-data";
 import { useFocusTrap } from "@/composables/use-focus-trap";
 import { useReaderSettings } from "@/composables/use-reader-settings";
@@ -9,13 +10,13 @@ import type { EntityHighlightMode, ReaderFontFamily, ReaderTheme } from "@/db/st
 
 const props = defineProps<{ open: boolean }>();
 
-defineEmits<{ (e: "close"): void }>();
+const emit = defineEmits<{ (e: "close"): void }>();
 
 const { settings, update, reset } = useReaderSettings();
 const { isClearing, clear: clearLocalData } = useClearLocalData();
 
 const panel = ref<HTMLElement | null>(null);
-useFocusTrap(toRef(props, "open"), panel);
+useFocusTrap(toRef(props, "open"), panel, () => emit("close"));
 
 const clearStep = ref<"idle" | "confirm">("idle");
 const clearError = ref<string | null>(null);
@@ -71,13 +72,7 @@ const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [
     >
       <div class="mb-4 flex items-center justify-between">
         <h2 class="text-base font-semibold">Reader settings</h2>
-        <button
-          type="button"
-          class="rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
-          @click="$emit('close')"
-        >
-          Done
-        </button>
+        <CloseButton @close="$emit('close')" />
       </div>
 
       <div class="space-y-5">

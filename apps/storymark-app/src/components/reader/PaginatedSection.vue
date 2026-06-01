@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import {
+  useDebounceFn,
+  useEventListener,
+  useMediaQuery,
+  useRafFn,
+  useResizeObserver,
+} from "@vueuse/core";
+import type { UseRafFnCallbackArguments } from "@vueuse/core";
 import type { Section } from "@storymark/shared-types";
 import { useReaderSettings } from "@/composables/use-reader-settings";
 import { highlightEntities } from "@/utils/highlight-entities";
@@ -81,6 +89,11 @@ const HANDLE_PROBE_PX = 18;
 const SWIPE_COMMIT_FRACTION = 0.18;
 const FLICK_MAX_MS = 250;
 const FLICK_MIN_PX = 24;
+// Duration of the JS-driven page-turn tween. We animate scrollLeft ourselves (see
+// animateTo) rather than via native smooth-scroll, so scroll-snap and the settle
+// timer can stay out of the way for the whole turn — otherwise mandatory snap and
+// the settle re-scroll fight the in-flight smooth scroll and the flip stutters.
+const SWIPE_ANIM_MS = 280;
 
 const scrollEl = ref<HTMLDivElement | null>(null);
 const contentEl = ref<HTMLDivElement | null>(null);
@@ -90,11 +103,8 @@ const totalPages = ref(1);
 // The paragraph at the top of the current page. Tracked locally so a reflow
 // (resize / typography change) can scroll the *same* paragraph back into view.
 let trackedParagraph = 0;
-let settleTimer: number | undefined;
-let resizeObserver: ResizeObserver | undefined;
 let flashTimer: number | undefined;
 let flashedEl: HTMLElement | null = null;
-let selectionTimer: number | undefined;
 
 // On touch-primary devices the OS selection (and its toolbar/handles) would
 // overlap our popover and there is no web API to hide the toolbar while a native
@@ -102,7 +112,7 @@ let selectionTimer: number | undefined;
 // none) and own the whole gesture — long-press to select a word, drag to extend,
 // drag the handles to resize — repainting via the CSS Custom Highlight API.
 // Desktop (fine pointer) keeps native selection untouched. See ADR 0016.
-const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
+const coarsePointer = useMediaQuery("(pointer: coarse)");
 const wordSegmenter = new Intl.Segmenter(undefined, { granularity: "word" });
 
 // The live custom selection on touch and the fixed boundary the active gesture
@@ -138,6 +148,9 @@ const handleDragging = ref(false);
 const selectionShown = ref(false);
 const startHandle = ref<HandlePos | null>(null);
 const endHandle = ref<HandlePos | null>(null);
+// True while a page-turn tween is running. Like `swiping`, it keeps scroll-snap
+// disabled (so the browser doesn't snap mid-tween) and suppresses the settle timer.
+const animating = ref(false);
 
 function pageWidth(): number {
   return scrollEl.value?.clientWidth ?? 1;
@@ -222,6 +235,68 @@ function updatePageInfo(): void {
   emit("page-change", page.value, totalPages.value);
 }
 
+// --- Page-turn animation ----------------------------------------------------
+
+let animFrom = 0;
+let animTo = 0;
+let animStartTs = 0;
+
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
+
+function tickAnimation({ timestamp }: UseRafFnCallbackArguments): void {
+  const scroll = scrollEl.value;
+  if (scroll === null) {
+    finishAnimation();
+    return;
+  }
+  if (animStartTs === 0) {
+    animStartTs = timestamp;
+  }
+  const t = Math.min(1, (timestamp - animStartTs) / SWIPE_ANIM_MS);
+  scroll.scrollLeft = animFrom + (animTo - animFrom) * easeOutCubic(t);
+  if (t >= 1) {
+    finishAnimation();
+  }
+}
+
+const { pause: pauseAnimation, resume: resumeAnimation } = useRafFn(tickAnimation, {
+  immediate: false,
+});
+
+function finishAnimation(): void {
+  pauseAnimation();
+  animStartTs = 0;
+  const scroll = scrollEl.value;
+  if (scroll !== null) {
+    scroll.scrollLeft = animTo;
+  }
+  animating.value = false;
+  updatePageInfo();
+  reportParagraph();
+}
+
+function animateTo(targetLeft: number): void {
+  const scroll = scrollEl.value;
+  if (scroll === null) {
+    return;
+  }
+  animFrom = scroll.scrollLeft;
+  animTo = targetLeft;
+  animStartTs = 0;
+  animating.value = true;
+  resumeAnimation();
+}
+
+function cancelAnimation(): void {
+  if (animating.value) {
+    pauseAnimation();
+    animating.value = false;
+    animStartTs = 0;
+  }
+}
+
 function goToPage(target: number, smooth: boolean): void {
   const scroll = scrollEl.value;
   if (!scroll) {
@@ -229,7 +304,12 @@ function goToPage(target: number, smooth: boolean): void {
   }
   const width = pageWidth();
   const clamped = Math.min(Math.max(target, 0), totalPages.value - 1);
-  scroll.scrollTo({ left: clamped * width, behavior: smooth ? "smooth" : "auto" });
+  if (smooth) {
+    animateTo(clamped * width);
+  } else {
+    cancelAnimation();
+    scroll.scrollLeft = clamped * width;
+  }
 }
 
 function nextPage(): void {
@@ -257,24 +337,24 @@ function onSettle(): void {
   const nearest = Math.round(scroll.scrollLeft / width);
   const target = nearest * width;
   if (Math.abs(scroll.scrollLeft - target) > 1) {
-    scroll.scrollTo({ left: target, behavior: "smooth" });
+    animateTo(target);
     return;
   }
   updatePageInfo();
   reportParagraph();
 }
 
+const debouncedSettle = useDebounceFn(onSettle, SETTLE_MS);
+
 function onScroll(): void {
   // Paging dismisses any open selection popover.
   emit("dismiss-select");
-  // During an owned swipe the page tracks the finger; endSwipe settles it.
-  if (swiping.value) {
+  // During an owned swipe the page tracks the finger, and during our own tween we
+  // drive scrollLeft frame by frame; either way endSwipe/finishAnimation settles it.
+  if (swiping.value || animating.value) {
     return;
   }
-  if (settleTimer !== undefined) {
-    window.clearTimeout(settleTimer);
-  }
-  settleTimer = window.setTimeout(onSettle, SETTLE_MS);
+  void debouncedSettle();
 }
 
 function paintSelection(range: Range): void {
@@ -314,18 +394,17 @@ function readSelection(): void {
   });
 }
 
+const debouncedReadSelection = useDebounceFn(readSelection, SELECTION_DEBOUNCE_MS);
+
 function onSelectionChange(): void {
-  if (coarsePointer) {
+  if (coarsePointer.value) {
     return;
   }
-  if (selectionTimer !== undefined) {
-    window.clearTimeout(selectionTimer);
-  }
-  selectionTimer = window.setTimeout(readSelection, SELECTION_DEBOUNCE_MS);
+  void debouncedReadSelection();
 }
 
 function hasActiveSelection(): boolean {
-  if (coarsePointer) {
+  if (coarsePointer.value) {
     return customRange !== null;
   }
   const selection = document.getSelection();
@@ -501,6 +580,9 @@ function beginSwipe(): void {
     gestureMode = "idle";
     return;
   }
+  // A drag mid-tween takes over from wherever the page currently sits, so stop the
+  // tween first (otherwise it keeps writing scrollLeft and fights the finger).
+  cancelAnimation();
   gestureMode = "swiping";
   swiping.value = true;
   swipeStartScrollLeft = scroll.scrollLeft;
@@ -548,7 +630,7 @@ function endSwipe(clientX: number, time: number): void {
 }
 
 function onPointerDown(event: PointerEvent): void {
-  if (!coarsePointer || draggingHandle !== null || !event.isPrimary) {
+  if (!coarsePointer.value || draggingHandle !== null || !event.isPrimary) {
     return;
   }
   cancelPress();
@@ -562,7 +644,7 @@ function onPointerDown(event: PointerEvent): void {
 }
 
 function onPointerMove(event: PointerEvent): void {
-  if (!coarsePointer) {
+  if (!coarsePointer.value) {
     return;
   }
   if (gestureMode === "pressing") {
@@ -597,7 +679,7 @@ function onPointerMove(event: PointerEvent): void {
 }
 
 function onPointerUp(event: PointerEvent): void {
-  if (!coarsePointer) {
+  if (!coarsePointer.value) {
     return;
   }
   if (gestureMode === "pressing") {
@@ -623,7 +705,7 @@ function onPointerUp(event: PointerEvent): void {
 }
 
 function onPointerCancel(): void {
-  if (!coarsePointer) {
+  if (!coarsePointer.value) {
     return;
   }
   if (gestureMode === "swiping") {
@@ -823,40 +905,26 @@ watch(
   { flush: "post" },
 );
 
+// Observe both: contentEl catches typography reflow (column-count changes), scrollEl
+// catches viewport resize (which leaves the JS-pinned columnWidth stale until we
+// re-measure). Either way, keep the tracked paragraph in view.
+useResizeObserver(contentEl, restoreToTracked);
+useResizeObserver(scrollEl, restoreToTracked);
+
+useEventListener(window, "keydown", onKeydown);
+useEventListener(document, "selectionchange", onSelectionChange);
+// touch-action is latched at touchstart, so flipping the scroll-lock class alone
+// can't stop the page paging mid-gesture; cancel the in-flight scroll with a
+// non-passive listener. Only coarse pointers own the gesture, so only they need it.
+if (coarsePointer.value) {
+  useEventListener(scrollEl, "touchmove", onTouchMove, { passive: false });
+}
+
 onMounted(() => {
   void reposition();
-  window.addEventListener("keydown", onKeydown);
-  document.addEventListener("selectionchange", onSelectionChange);
-  // Observe both: contentEl catches typography reflow (column count changes),
-  // scrollEl catches viewport resize (which leaves the JS-pinned columnWidth
-  // stale until we re-measure). Either way, keep the tracked paragraph in view.
-  resizeObserver = new ResizeObserver(() => {
-    restoreToTracked();
-  });
-  const content = contentEl.value;
-  const scroll = scrollEl.value;
-  if (content) {
-    resizeObserver.observe(content);
-  }
-  if (scroll) {
-    resizeObserver.observe(scroll);
-    if (coarsePointer) {
-      scroll.addEventListener("touchmove", onTouchMove, { passive: false });
-    }
-  }
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("keydown", onKeydown);
-  document.removeEventListener("selectionchange", onSelectionChange);
-  scrollEl.value?.removeEventListener("touchmove", onTouchMove);
-  resizeObserver?.disconnect();
-  if (settleTimer !== undefined) {
-    window.clearTimeout(settleTimer);
-  }
-  if (selectionTimer !== undefined) {
-    window.clearTimeout(selectionTimer);
-  }
   if (pressTimer !== undefined) {
     window.clearTimeout(pressTimer);
   }
@@ -872,7 +940,7 @@ onBeforeUnmount(() => {
     :class="{
       'reader-scroll--coarse': coarsePointer,
       'reader-scroll--locked': scrollLocked,
-      'reader-scroll--swiping': swiping,
+      'reader-scroll--swiping': swiping || animating,
     }"
     @scroll="onScroll"
     @click="onClick"
