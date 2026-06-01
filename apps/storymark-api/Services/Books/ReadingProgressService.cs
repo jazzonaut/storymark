@@ -54,12 +54,18 @@ internal sealed class ReadingProgressService(StorymarkDbContext db)
 
     /// <summary>The latest position across all devices, or <c>null</c> if there is
     /// none (or the book does not exist — callers needing that distinction use
-    /// <see cref="BookExistsAsync"/>).</summary>
+    /// <see cref="BookExistsAsync"/>).
+    ///
+    /// <para>Cross-device ordering is by server receive time (<see cref="ReadingProgress.UpdatedAt"/>),
+    /// not the client wall-clock: a device with a skewed clock can otherwise pin the book
+    /// to an old position with a future <see cref="ReadingProgress.ClientTimestamp"/>. The
+    /// client timestamp stays the same-device stale-flush guard in <see cref="SaveAsync"/>,
+    /// where it's internally consistent.</para></summary>
     public Task<ProgressView?> GetLatestAsync(Guid bookId, CancellationToken ct)
     {
         return db.ReadingProgress.AsNoTracking()
             .Where(p => p.BookId == bookId)
-            .OrderByDescending(p => p.ClientTimestamp)
+            .OrderByDescending(p => p.UpdatedAt)
             .Select(p => new ProgressView
             {
                 SectionIndex = p.SectionIndex,

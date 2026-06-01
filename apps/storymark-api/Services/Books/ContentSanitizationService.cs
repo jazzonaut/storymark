@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using AngleSharp;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 
@@ -230,35 +231,13 @@ internal sealed class ContentSanitizationService
 
     private static (string PlainText, IReadOnlyList<SanitizedParagraph> Paragraphs, int WordCount) ExtractParagraphs(IElement body)
     {
-        var blocks = body.QuerySelectorAll(ParagraphBlockSelector)
-            .Where(block => block.QuerySelector(ParagraphBlockSelector) is null)
-            .ToList();
-
         var builder = new StringBuilder();
         var paragraphs = new List<SanitizedParagraph>();
 
-        foreach (var block in blocks)
-        {
-            var text = NormalizeWhitespace(block.TextContent);
-            if (text.Length == 0)
-            {
-                continue;
-            }
+        EmitParagraphs(body, builder, paragraphs);
 
-            var start = builder.Length;
-            builder.Append(text);
-            paragraphs.Add(new SanitizedParagraph
-            {
-                Html = block.OuterHtml,
-                PlainText = text,
-                LocationStart = start,
-                LocationEnd = builder.Length,
-            });
-            builder.Append("\n\n");
-        }
-
-        // Fall back to the whole body when no paragraph blocks were found, so a
-        // section's text is never silently lost to unusual markup.
+        // Fall back to the whole body when nothing was emitted, so a section's text is
+        // never silently lost to unusual markup.
         if (paragraphs.Count == 0)
         {
             var text = NormalizeWhitespace(body.TextContent);
@@ -277,6 +256,81 @@ internal sealed class ContentSanitizationService
 
         var plainText = builder.ToString().TrimEnd('\n');
         return (plainText, paragraphs, CountWords(plainText));
+    }
+
+    // Walks a container's children in reading order. A block-level leaf becomes one
+    // paragraph (its OuterHtml); a block that itself contains blocks is recursed into;
+    // loose inline text and inline elements between or around blocks are flushed as their
+    // own paragraph fragments. Without the run handling, text directly inside a mixed
+    // block — e.g. the "x" and "z" in <div>x<p>y</p>z</div> — is dropped from paragraphs
+    // even though it survives in the section HTML, so the reader never shows it.
+    private static void EmitParagraphs(INode container, StringBuilder builder, List<SanitizedParagraph> paragraphs)
+    {
+        var run = new List<INode>();
+        foreach (var child in container.ChildNodes)
+        {
+            if (child is IElement element)
+            {
+                var isBlock = ParagraphBlocks.Contains(element.LocalName);
+                var hasBlockDescendant = element.QuerySelector(ParagraphBlockSelector) is not null;
+                if (isBlock && !hasBlockDescendant)
+                {
+                    FlushRun(run, builder, paragraphs);
+                    AppendParagraph(element.OuterHtml, NormalizeWhitespace(element.TextContent), builder, paragraphs);
+                    continue;
+                }
+
+                if (isBlock || hasBlockDescendant)
+                {
+                    FlushRun(run, builder, paragraphs);
+                    EmitParagraphs(element, builder, paragraphs);
+                    continue;
+                }
+            }
+
+            run.Add(child);
+        }
+
+        FlushRun(run, builder, paragraphs);
+    }
+
+    // A run of loose inline nodes (text and inline elements) between block siblings,
+    // wrapped in a paragraph so the reader renders it as its own block.
+    private static void FlushRun(List<INode> run, StringBuilder builder, List<SanitizedParagraph> paragraphs)
+    {
+        if (run.Count == 0)
+        {
+            return;
+        }
+
+        var text = NormalizeWhitespace(string.Concat(run.Select(node => node.TextContent)));
+        if (text.Length > 0)
+        {
+            var html = string.Concat(run.Select(node => node.ToHtml()));
+            AppendParagraph($"<p>{html}</p>", text, builder, paragraphs);
+        }
+
+        run.Clear();
+    }
+
+    private static void AppendParagraph(
+        string html, string text, StringBuilder builder, List<SanitizedParagraph> paragraphs)
+    {
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        var start = builder.Length;
+        builder.Append(text);
+        paragraphs.Add(new SanitizedParagraph
+        {
+            Html = html,
+            PlainText = text,
+            LocationStart = start,
+            LocationEnd = builder.Length,
+        });
+        builder.Append("\n\n");
     }
 
     /// <summary>Extracts the first-heading title from already-sanitised section HTML,

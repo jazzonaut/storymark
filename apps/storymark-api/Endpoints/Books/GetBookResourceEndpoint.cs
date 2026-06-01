@@ -24,12 +24,7 @@ internal sealed class GetBookResourceEndpoint(BookSectionService sections) : End
             return;
         }
 
-        // Resources are EPUB-supplied bytes. An SVG carrying a script is harmless
-        // when loaded via <img> (the only emitter), but the URL is directly
-        // navigable — sandbox it and forbid MIME sniffing so a hand-typed resource
-        // URL can never execute script in our origin.
-        HttpContext.Response.Headers["Content-Security-Policy"] = "default-src 'none'; sandbox";
-        HttpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        EpubFileResponse.ApplySandboxHeaders(HttpContext.Response);
         await Send.FileAsync(new FileInfo(resource.FilePath), resource.ContentType, cancellation: ct);
     }
 }

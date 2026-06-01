@@ -2,6 +2,7 @@ import { computed, ref, shallowRef } from "vue";
 import type { ComputedRef, Ref, ShallowRef } from "vue";
 import type { Section, SectionSummary } from "@storymark/shared-types";
 import { readerApi } from "@/api/reader-api";
+import { useBooks } from "@/composables/use-books";
 
 /** Where to land when a section first appears: 0 (start) when moving forward or
  * opening, the last paragraph (end) when paging backward, a specific paragraph
@@ -70,6 +71,8 @@ const hasNextSection = computed<boolean>(() => currentPosition.value < manifest.
 const hasPrevSection = computed<boolean>(() => currentPosition.value > 0);
 
 export function useReader(): UseReader {
+  const { cacheParams } = useBooks();
+
   async function loadPosition(
     position: number,
     entry: SectionEntry,
@@ -82,7 +85,8 @@ export function useReader(): UseReader {
     }
     isLoadingSection.value = true;
     try {
-      const section = await readerApi.getSection(id, summary.sectionIndex);
+      const { version, canCache } = cacheParams(id);
+      const section = await readerApi.getSection(id, summary.sectionIndex, version, canCache);
       const lastIndex = Math.max(section.paragraphs.length - 1, 0);
       const requested =
         entry === "start"

@@ -32,3 +32,23 @@ internal sealed record BookmarkView
 
     public required DateTimeOffset CreatedAt { get; init; }
 }
+
+internal enum BookmarkUpsertOutcome
+{
+    Saved,
+    BookNotFound,
+
+    /// <summary>The bookmark id already belongs to a different book. The route book
+    /// scopes the mutation, so the write is rejected rather than moving the bookmark.</summary>
+    IdBelongsToAnotherBook,
+}
+
+/// <summary>The result of <see cref="BookmarkService.UpsertAsync"/>: an outcome plus the
+/// saved <see cref="BookmarkView"/> when (and only when) the outcome is
+/// <see cref="BookmarkUpsertOutcome.Saved"/>.</summary>
+internal sealed record BookmarkUpsertResult
+{
+    public required BookmarkUpsertOutcome Outcome { get; init; }
+
+    public BookmarkView? View { get; init; }
+}

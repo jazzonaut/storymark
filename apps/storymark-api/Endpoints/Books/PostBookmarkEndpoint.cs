@@ -19,7 +19,8 @@ internal sealed record SaveBookmarkRequest
 }
 
 /// <summary>Creates or replaces a bookmark (idempotent upsert by client-supplied
-/// id). Public. 404 if the book is unknown.</summary>
+/// id). Public. 404 if the book is unknown; 409 if the id already belongs to another
+/// book (the route book scopes the mutation).</summary>
 internal sealed class PostBookmarkEndpoint(BookmarkService bookmarks)
     : Endpoint<SaveBookmarkRequest, BookmarkView>
 {
@@ -33,7 +34,7 @@ internal sealed class PostBookmarkEndpoint(BookmarkService bookmarks)
 
     public override async Task HandleAsync(SaveBookmarkRequest req, CancellationToken ct)
     {
-        var saved = await bookmarks.UpsertAsync(
+        var result = await bookmarks.UpsertAsync(
             Route<Guid>("bookId"),
             new SaveBookmarkInput
             {
@@ -46,12 +47,20 @@ internal sealed class PostBookmarkEndpoint(BookmarkService bookmarks)
             },
             ct);
 
-        if (saved is null)
+        switch (result.Outcome)
         {
-            await Send.NotFoundAsync(ct);
-            return;
+            case BookmarkUpsertOutcome.BookNotFound:
+                await Send.NotFoundAsync(ct);
+                return;
+            case BookmarkUpsertOutcome.IdBelongsToAnotherBook:
+                await Send.StringAsync(
+                    "This bookmark id already belongs to another book.", 409, cancellation: ct);
+                return;
         }
 
-        await Send.OkAsync(saved, ct);
+        if (result.View is { } view)
+        {
+            await Send.OkAsync(view, ct);
+        }
     }
 }

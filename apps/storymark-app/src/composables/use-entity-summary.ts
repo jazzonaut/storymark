@@ -3,6 +3,7 @@ import type { Ref, ShallowRef } from "vue";
 import type { EntitySummary } from "@storymark/shared-types";
 import { entitiesApi } from "@/api/entities-api";
 import { ApiError } from "@/api/api-error";
+import { useLatestOnly } from "@/composables/use-latest-only";
 
 /** The entity whose popup is open: its id and the display name to show while the
  * summary is still generating. */
@@ -37,6 +38,9 @@ const openEntity = shallowRef<OpenEntity | null>(null);
 const isLoading = ref(false);
 const summary = shallowRef<EntitySummary | null>(null);
 const error = ref<string | null>(null);
+// Tapping entity B before entity A's request resolves must not let A's slow response
+// populate B's popup. Each open claims a token and commits only if still current.
+const latest = useLatestOnly();
 
 interface UseEntitySummary {
   readonly openEntity: ShallowRef<OpenEntity | null>;
@@ -61,23 +65,32 @@ export function useEntitySummary(): UseEntitySummary {
     section: number,
     location: number,
   ): Promise<EntitySummary | null> {
+    const token = latest.begin();
     openEntity.value = { entityId, name };
     isLoading.value = true;
     summary.value = null;
     error.value = null;
     try {
       const loaded = await entitiesApi.summary(bookId, entityId, section, location);
-      summary.value = loaded;
+      if (latest.isCurrent(token)) {
+        summary.value = loaded;
+      }
       return loaded;
     } catch (caught) {
-      error.value = describeError(caught);
+      if (latest.isCurrent(token)) {
+        error.value = describeError(caught);
+      }
       return null;
     } finally {
-      isLoading.value = false;
+      if (latest.isCurrent(token)) {
+        isLoading.value = false;
+      }
     }
   }
 
   function close(): void {
+    // Claim a token so any in-flight request is stale and can't repopulate after close.
+    latest.begin();
     openEntity.value = null;
     isLoading.value = false;
     summary.value = null;

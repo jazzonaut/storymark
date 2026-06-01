@@ -2,6 +2,7 @@ using System.Text.Json;
 using FastEndpoints;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
+using Storymark.Api.Domain.Books;
 using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Auth;
 using Storymark.Api.Infrastructure.Database;
@@ -49,7 +50,17 @@ internal sealed class ApplySwapEndpoint(
         var updatedBy = HttpContext.Items[AdminAuthPreProcessor.FingerprintItemKey] as string ?? "admin";
         await settings.UpdateAsync(LlmSettingKeys.EmbeddingModelId, JsonSerializer.Serialize(modelId), updatedBy, ct);
 
-        var bookIds = await db.BookChunks.Select(c => c.BookId).Distinct().ToListAsync(ct);
+        // Reindex only books that have finished the import pipeline (Indexed) or are
+        // mid-embedding (an interrupted reindex). EmbeddingJob unconditionally drives a
+        // book to Indexed when its chunks are embedded, so enqueuing it for a Failed or
+        // still-extracting book would falsely mark it Indexed and skip the rest of the
+        // pipeline — those books reindex naturally once they next reach Indexed.
+        var bookIds = await db.Books
+            .Where(b => (b.ProcessingStatus == ProcessingStatus.Indexed
+                    || b.ProcessingStatus == ProcessingStatus.Embedding)
+                && db.BookChunks.Any(c => c.BookId == b.Id))
+            .Select(b => b.Id)
+            .ToListAsync(ct);
         foreach (var bookId in bookIds)
         {
             jobs.Enqueue<EmbeddingJob>(j => j.RunAsync(bookId, CancellationToken.None));

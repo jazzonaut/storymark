@@ -2,7 +2,18 @@ import { shallowRef } from "vue";
 import type { ShallowRef } from "vue";
 import type { BookSummary, ProcessingStatus } from "@storymark/shared-types";
 import { booksApi } from "@/api/books-api";
+import type { BookVersion } from "@/db/storymark-db";
 import { purgeBookData } from "@/db/storymark-db";
+
+/** How a book's offline content should be cache-gated: its extraction `version`
+ * (`updatedAt`, null until the list is known) and whether its derived data is complete
+ * enough to write back (`canCache` is false only while we positively know the book is
+ * mid-processing). Shared by the section cache and the memory surfaces so a reprocess
+ * invalidates them and an incomplete mid-processing payload is never persisted. */
+export interface BookCacheParams {
+  readonly version: BookVersion | null;
+  readonly canCache: boolean;
+}
 
 const TERMINAL: ReadonlySet<ProcessingStatus> = new Set<ProcessingStatus>(["Indexed", "Failed"]);
 
@@ -19,6 +30,7 @@ interface UseBooks {
   readonly offline: ShallowRef<boolean>;
   loadBooks: () => Promise<void>;
   hasPending: () => boolean;
+  cacheParams: (bookId: string) => BookCacheParams;
   upsert: (book: BookSummary) => void;
   remove: (bookId: string) => Promise<void>;
 }
@@ -54,6 +66,17 @@ export function useBooks(): UseBooks {
     return books.value.some((book) => !TERMINAL.has(book.processingStatus));
   }
 
+  // An unknown book (list not loaded yet — e.g. an offline deep-link) is treated as
+  // cacheable with no version gate, matching the reader's memory-surface handling: the
+  // gate only kicks in once we know the book is mid-processing or know its version.
+  function cacheParams(bookId: string): BookCacheParams {
+    const book = books.value.find((existing) => existing.bookId === bookId);
+    return {
+      version: book?.updatedAt ?? null,
+      canCache: book === undefined || TERMINAL.has(book.processingStatus),
+    };
+  }
+
   function upsert(book: BookSummary): void {
     const without = books.value.filter((existing) => existing.bookId !== book.bookId);
     books.value = [book, ...without];
@@ -68,5 +91,5 @@ export function useBooks(): UseBooks {
     books.value = books.value.filter((existing) => existing.bookId !== bookId);
   }
 
-  return { books, isLoading, offline, loadBooks, hasPending, upsert, remove };
+  return { books, isLoading, offline, loadBooks, hasPending, cacheParams, upsert, remove };
 }

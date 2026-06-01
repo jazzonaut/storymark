@@ -1,6 +1,7 @@
 import type { Section, SectionSummary } from "@storymark/shared-types";
 import { fetchJson } from "@/api/http";
 import { readThroughCache } from "@/api/read-through-cache";
+import type { BookVersion } from "@/db/storymark-db";
 import { db } from "@/db/storymark-db";
 
 // The single read path for reader content. Reads through IndexedDB first, falls
@@ -26,16 +27,35 @@ export const readerApi = {
       })
     ).value,
 
-  getSection: async (bookId: string, sectionIndex: number): Promise<Section> => {
-    const cached = await db.sections.get([bookId, sectionIndex]);
-    if (cached) {
-      return cached;
-    }
-    const section = await fetchJson<Section>(
-      `/api/books/${encodeURIComponent(bookId)}/sections/${String(sectionIndex)}`,
-      `Failed to load section ${String(sectionIndex)}`,
-    );
-    await db.sections.put({ ...section, bookId });
-    return section;
-  },
+  // Version-gated read-through (like the memory surfaces, not cache-forever): a cached
+  // row whose `version` still matches is served without a refetch, a stale-versioned row
+  // is refetched (falling back to the old row offline), and a missing row is fetched and
+  // written back. Section content is location-independent and stable for a given version,
+  // so the gate is version-only — no TTL. `canCache` is false while the book is still
+  // processing, so an incomplete entities array is never written back.
+  getSection: async (
+    bookId: string,
+    sectionIndex: number,
+    version: BookVersion | null,
+    canCache: boolean,
+  ): Promise<Section> =>
+    (
+      await readThroughCache<Section>({
+        version,
+        canCache,
+        readCached: async () => {
+          const row = await db.sections.get([bookId, sectionIndex]);
+          return row
+            ? { value: row, ...(row.version !== undefined ? { version: row.version } : {}) }
+            : undefined;
+        },
+        fetchFresh: () =>
+          fetchJson<Section>(
+            `/api/books/${encodeURIComponent(bookId)}/sections/${String(sectionIndex)}`,
+            `Failed to load section ${String(sectionIndex)}`,
+          ),
+        writeBack: (section) =>
+          db.sections.put({ ...section, bookId, ...(version !== null ? { version } : {}) }),
+      })
+    ).value,
 } as const;

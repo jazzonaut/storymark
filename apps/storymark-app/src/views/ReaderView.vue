@@ -396,12 +396,17 @@ async function load(): Promise<void> {
     // (`updatedAt`) is current — a reprocess while we were away then invalidates the
     // Memory caches. Best-effort: offline keeps the last-seen list.
     void loadBooks().catch(() => {});
-    await ensureCached(bookId);
     const position = await resume(bookId);
+    // Open as soon as the manifest and the resume target section are available
+    // (both cached-first), so a partially-cached book opens offline at a cached
+    // section. Whole-book prefetch then continues in the background — a missing
+    // section there must not block or fail the reader (the cache progress chip
+    // surfaces that it isn't fully downloaded yet).
     await open(bookId, position ?? undefined);
     bookTitle.value = await resolveBookTitle();
     phase.value = "ready";
     revealChrome();
+    void ensureCached(bookId).catch(() => {});
     void loadBookmarks(bookId);
     void restoreMemoryTab(bookId);
     // After a >24h gap, recap the story up to where the reader is resuming.

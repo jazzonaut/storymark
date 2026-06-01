@@ -20,9 +20,14 @@ export interface CachedManifest {
   readonly cachedAt: number;
 }
 
-/** Full section content, cached and keyed by [bookId+sectionIndex]. */
+/** Full section content, cached and keyed by [bookId+sectionIndex]. Tagged with the
+ * book's extraction `version` (like the memory surfaces below) so a reprocess — which
+ * rewrites section HTML, paragraph offsets, or the visible-entities array — invalidates
+ * the row instead of leaving stale content in IndexedDB forever. Absent on rows cached
+ * before versioning, which are therefore never treated as current. */
 export interface CachedSection extends Section {
   readonly bookId: string;
+  readonly version?: BookVersion;
 }
 
 /** A memory snapshot cached for the section-entry recap, keyed by

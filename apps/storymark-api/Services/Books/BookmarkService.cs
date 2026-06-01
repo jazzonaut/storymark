@@ -34,16 +34,24 @@ internal sealed class BookmarkService(StorymarkDbContext db)
             .ToListAsync(ct);
     }
 
-    /// <summary>Creates or replaces a bookmark by its id. Returns the saved view,
-    /// or <c>null</c> if the book does not exist.</summary>
-    public async Task<BookmarkView?> UpsertAsync(Guid bookId, SaveBookmarkInput input, CancellationToken ct)
+    /// <summary>Creates or replaces a bookmark by its id, scoped to the route book.
+    /// Returns <see cref="BookmarkUpsertOutcome.BookNotFound"/> if the book does not
+    /// exist, or <see cref="BookmarkUpsertOutcome.IdBelongsToAnotherBook"/> if the id is
+    /// already owned by a different book (the mutation never reassigns a bookmark across
+    /// books — the route book id scopes it).</summary>
+    public async Task<BookmarkUpsertResult> UpsertAsync(Guid bookId, SaveBookmarkInput input, CancellationToken ct)
     {
         if (!await db.Books.AnyAsync(b => b.Id == bookId, ct))
         {
-            return null;
+            return new BookmarkUpsertResult { Outcome = BookmarkUpsertOutcome.BookNotFound };
         }
 
         var existing = await db.BookBookmarks.FirstOrDefaultAsync(b => b.Id == input.Id, ct);
+        if (existing is not null && existing.BookId != bookId)
+        {
+            return new BookmarkUpsertResult { Outcome = BookmarkUpsertOutcome.IdBelongsToAnotherBook };
+        }
+
         if (existing is null)
         {
             db.BookBookmarks.Add(new BookBookmark
@@ -59,7 +67,7 @@ internal sealed class BookmarkService(StorymarkDbContext db)
         }
         else
         {
-            existing.BookId = bookId;
+            // existing.BookId == bookId here, so the upsert stays within the route book.
             existing.SectionIndex = input.SectionIndex;
             existing.ParagraphIndex = input.ParagraphIndex;
             existing.LocationStart = input.LocationStart;
@@ -69,14 +77,18 @@ internal sealed class BookmarkService(StorymarkDbContext db)
 
         await db.SaveChangesAsync(ct);
 
-        return new BookmarkView
+        return new BookmarkUpsertResult
         {
-            Id = input.Id,
-            SectionIndex = input.SectionIndex,
-            ParagraphIndex = input.ParagraphIndex,
-            LocationStart = input.LocationStart,
-            Label = input.Label,
-            CreatedAt = input.CreatedAt,
+            Outcome = BookmarkUpsertOutcome.Saved,
+            View = new BookmarkView
+            {
+                Id = input.Id,
+                SectionIndex = input.SectionIndex,
+                ParagraphIndex = input.ParagraphIndex,
+                LocationStart = input.LocationStart,
+                Label = input.Label,
+                CreatedAt = input.CreatedAt,
+            },
         };
     }
 

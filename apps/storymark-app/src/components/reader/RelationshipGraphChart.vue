@@ -105,7 +105,9 @@ function onClick(params: ECElementEvent): void {
 </script>
 
 <template>
-  <div class="h-72 w-full">
+  <!-- touch-action:none lets ECharts own the pinch/drag gesture so the browser
+       doesn't hijack it as a viewport (page) zoom. -->
+  <div class="min-h-[60vh] w-full flex-1 touch-none sm:min-h-0">
     <VChart :option="option" autoresize class="h-full w-full" @click="onClick" />
   </div>
 </template>

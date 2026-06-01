@@ -30,6 +30,7 @@ internal sealed class GetBookCoverEndpoint(BookCatalogService catalog) : Endpoin
         {
             var contentType = ImageContentTypes.ContentTypeForExtension(Path.GetExtension(book.CoverPath))
                 ?? "application/octet-stream";
+            EpubFileResponse.ApplySandboxHeaders(HttpContext.Response);
             await Send.FileAsync(new FileInfo(book.CoverPath), contentType, cancellation: ct);
             return;
         }

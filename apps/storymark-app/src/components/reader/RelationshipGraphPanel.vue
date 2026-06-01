@@ -55,8 +55,11 @@ watch(
 </script>
 
 <template>
-  <div class="flex h-full flex-col gap-3">
-    <div v-if="isLoading" class="h-72 w-full animate-pulse rounded-lg bg-[var(--sm-surface)]"></div>
+  <div class="flex h-full min-h-0 flex-col gap-3">
+    <div
+      v-if="isLoading"
+      class="min-h-[60vh] w-full flex-1 animate-pulse rounded-lg bg-[var(--sm-surface)] sm:min-h-0"
+    ></div>
 
     <p v-else-if="error" class="text-sm text-[var(--sm-muted)]">{{ error }}</p>
 

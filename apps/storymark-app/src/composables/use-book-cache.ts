@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import type { Ref } from "vue";
 import { readerApi } from "@/api/reader-api";
+import { useBooks } from "@/composables/use-books";
 
 const BATCH_SIZE = 4;
 
@@ -22,9 +23,12 @@ interface UseBookCache {
  * open (parallel batches of {@link BATCH_SIZE}), exposing reactive progress.
  * Re-opening an already-cached book resolves immediately. */
 export function useBookCache(): UseBookCache {
+  const { cacheParams } = useBooks();
+
   async function ensureCached(bookId: string): Promise<void> {
     isCaching.value = true;
     try {
+      const { version, canCache } = cacheParams(bookId);
       const manifest = await readerApi.getManifest(bookId);
       const total = manifest.length;
       let cached = 0;
@@ -37,7 +41,9 @@ export function useBookCache(): UseBookCache {
         // firing every section at once — is exactly what we avoid).
         // eslint-disable-next-line no-await-in-loop
         await Promise.all(
-          batch.map((section) => readerApi.getSection(bookId, section.sectionIndex)),
+          batch.map((section) =>
+            readerApi.getSection(bookId, section.sectionIndex, version, canCache),
+          ),
         );
         cached += batch.length;
         progress.value = { cached, total };
