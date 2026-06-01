@@ -103,6 +103,19 @@ async function unlock(): Promise<void> {
         >
           Cost Meter
         </RouterLink>
+
+        <!-- Hangfire is a server-rendered dashboard outside the SPA, behind its own
+             Basic-auth prompt (the admin bearer token). Open it in a new tab so the
+             admin session here is kept. -->
+        <a
+          href="/hangfire"
+          target="_blank"
+          rel="noopener"
+          class="mt-2 flex items-center gap-1 rounded border-t border-zinc-200 px-3 pb-2 pt-3 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-800"
+        >
+          Jobs (Hangfire)
+          <span class="opacity-50" aria-hidden="true">↗</span>
+        </a>
       </nav>
 
       <main class="flex-1 p-6">
