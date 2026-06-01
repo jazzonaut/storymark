@@ -50,6 +50,7 @@ const FONTS: readonly { value: ReaderFontFamily; label: string }[] = [
   { value: "serif", label: "Serif" },
   { value: "sans", label: "Sans" },
   { value: "mono", label: "Mono" },
+  { value: "dyslexic", label: "Dyslexic" },
 ];
 
 const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [

@@ -29,6 +29,7 @@ const FONT_STACKS: Record<ReaderFontFamily, string> = {
   serif: 'Georgia, "Iowan Old Style", "Times New Roman", serif',
   sans: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
   mono: 'ui-monospace, "Cascadia Code", "Courier New", monospace',
+  dyslexic: '"OpenDyslexic", system-ui, sans-serif',
 };
 
 const settings = reactive<ReaderSettings>({ ...DEFAULTS });

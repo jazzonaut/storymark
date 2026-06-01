@@ -38,6 +38,10 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Workbox's default precache glob omits woff2, so the bundled
+        // OpenDyslexic faces (the only fonts we self-host) must be added
+        // explicitly or the dyslexic reader font 404s offline.
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         // The admin panel is an online-only operator tool, so its lazy chunks are
         // kept out of the precache — readers never download them (notably echarts,
         // bundled into CostBarChart), and an /admin view can't be served stale from

@@ -1,5 +1,38 @@
 @import "tailwindcss";
 
+/* OpenDyslexic (SIL OFL 1.1, see assets/fonts/OFL.txt) is bundled rather than
+   loaded from a CDN so the dyslexia-friendly reader font works offline. The real
+   weights/styles are shipped so the browser never has to synthesize faux
+   bold/italic, which mangles this font's weighted-bottom letterforms. */
+@font-face {
+  font-family: "OpenDyslexic";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/opendyslexic-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "OpenDyslexic";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../assets/fonts/opendyslexic-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "OpenDyslexic";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/opendyslexic-latin-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "OpenDyslexic";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../assets/fonts/opendyslexic-latin-700-italic.woff2") format("woff2");
+}
+
 /* Reader theme tokens. Themes are swapped by the `data-theme` attribute on
    <html> (see docs/conventions/02-vue.md), not by Tailwind variants. */
 :root,

@@ -113,7 +113,7 @@ export interface StoredReaderSettings {
   readonly recapCardOnSectionEntry: boolean;
 }
 
-export type ReaderFontFamily = "serif" | "sans" | "mono";
+export type ReaderFontFamily = "serif" | "sans" | "mono" | "dyslexic";
 export type ReaderTheme = "light" | "sepia" | "dark";
 export type EntityHighlightMode = "off" | "subtle" | "always";
 
