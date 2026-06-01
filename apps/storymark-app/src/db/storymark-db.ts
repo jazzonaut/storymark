@@ -129,50 +129,19 @@ type StorymarkDb = Dexie & {
 
 export const db = new Dexie("storymark") as StorymarkDb;
 
+// The schema string is the source of truth for indexes. `synced`/`deleted` flags
+// are not indexed — booleans aren't valid IndexedDB key types, and with a handful
+// of books the reconnect flush filters unsynced rows in memory.
 db.version(1).stores({
   manifests: "bookId",
   sections: "[bookId+sectionIndex]",
   readerSettings: "id",
-});
-
-// v2 adds the reading-progress mirror. Keyed by bookId only — `synced` is a
-// boolean (not an indexable IndexedDB key type), and with a handful of books the
-// reconnect flush filters unsynced rows in memory.
-db.version(2).stores({
   progress: "bookId",
-});
-
-// v3 adds bookmarks, keyed by the client-owned id and indexed by bookId for
-// per-book listing.
-db.version(3).stores({
   bookmarks: "id, bookId",
-});
-
-// v4 adds the section-entry recap cache, keyed by [bookId+enteringSection] so the
-// recap renders offline once seen online (read-through, like sections).
-db.version(4).stores({
   memorySnapshots: "[bookId+enteringSection]",
-});
-
-// v5 adds per-book last-opened timestamps, driving the >24h "Previously…" recap.
-db.version(5).stores({
   bookOpens: "bookId",
-});
-
-// v6 adds the timeline events cache, keyed [bookId+upToSection] with a short TTL so
-// the timeline renders instantly on re-open and survives offline.
-db.version(6).stores({
   timelines: "[bookId+upToSection]",
-});
-
-// v7 adds the relationship-graph cache, keyed [bookId+upToSection] with a short TTL
-// so the graph renders instantly on re-open and survives offline (like timelines).
-db.version(7).stores({
   graphs: "[bookId+upToSection]",
-});
-
-// v8 adds the per-book last-active Memory panel tab, keyed by bookId.
-db.version(8).stores({
   panelState: "bookId",
 });
 
