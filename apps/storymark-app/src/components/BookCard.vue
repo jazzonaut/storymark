@@ -42,15 +42,26 @@ const STATUS_STYLES: Record<ProcessingStatus, string> = {
 
 const statusClass = computed<string>(() => STATUS_STYLES[props.book.processingStatus]);
 
-// Embedding is the long phase with a real denominator (chunk count); show its
-// percentage on the badge. Other phases have no honest fraction, so they don't.
+// Extraction and embedding are the long phases with a real denominator (sections,
+// then chunks); show each one's percentage on the badge. Remaining phases have no
+// honest fraction, so they show the bare status.
 const statusLabel = computed<string>(() => {
-  const progress = props.book.embeddingProgress;
-  if (props.book.processingStatus === "Embedding" && progress && progress.total > 0) {
-    const pct = Math.min(100, Math.round((progress.embedded / progress.total) * 100));
-    return `Embedding ${pct}%`;
+  const book = props.book;
+  if (book.processingStatus === "ExtractingPerSection" && book.extractionProgress) {
+    const { extracted, total } = book.extractionProgress;
+    if (total > 0) {
+      const pct = Math.min(100, Math.round((extracted / total) * 100));
+      return `Extracting ${pct}%`;
+    }
   }
-  return props.book.processingStatus;
+  if (book.processingStatus === "Embedding" && book.embeddingProgress) {
+    const { embedded, total } = book.embeddingProgress;
+    if (total > 0) {
+      const pct = Math.min(100, Math.round((embedded / total) * 100));
+      return `Embedding ${pct}%`;
+    }
+  }
+  return book.processingStatus;
 });
 
 const coverFailed = ref(false);

@@ -20,6 +20,13 @@ export interface EmbeddingProgress {
   readonly total: number;
 }
 
+/** Extraction progress while a book is on `ExtractingPerSection`: section summaries
+ * written over the book's total sections. Mirrors ExtractionProgressResponse. */
+export interface ExtractionProgress {
+  readonly extracted: number;
+  readonly total: number;
+}
+
 export interface BookSummary {
   readonly bookId: string;
   readonly title: string;
@@ -31,6 +38,8 @@ export interface BookSummary {
   readonly processingError: string | null;
   /** Live embedding progress while `processingStatus` is `Embedding`, else null. */
   readonly embeddingProgress: EmbeddingProgress | null;
+  /** Live extraction progress while `processingStatus` is `ExtractingPerSection`, else null. */
+  readonly extractionProgress: ExtractionProgress | null;
   readonly lastReadSection: number | null;
   readonly lastOpenedAt: string | null;
 }

@@ -47,7 +47,13 @@ and so never re-extracts. This also matches §15.4's status order.
 - A book isn't `Indexed` (searchable in the UI's terms) until extraction *and*
   embedding finish. Extraction is the slow part on CPU, so Q&A-readiness is gated
   behind it. Acceptable: the UI treats anything pre-`Indexed` as still processing,
-  so the user waits for the whole pipeline regardless of internal order.
+  so the user waits for the whole pipeline regardless of internal order. Because it
+  is the slowest phase, the library badge now surfaces an honest section fraction
+  (`Extracting N%`) the same way `Embedding` does — derived at read time from
+  section-summary rows / total sections, no persisted counter. Skipped sections
+  never write a summary, so the fraction can stop just short of 100% before the
+  status flips; that is correct (the badge clears on the transition, not on reaching
+  the denominator).
 - A single section's transient call failure is logged and skipped (extraction is an
   enhancement layer); a missing extract model fails the book fast. A hard mid-run
   failure that propagates triggers a Hangfire retry, which redoes the cleared work

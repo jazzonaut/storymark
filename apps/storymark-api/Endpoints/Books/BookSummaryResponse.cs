@@ -27,14 +27,24 @@ internal sealed record BookSummaryResponse
     /// <summary>Embedding progress while the book is on <c>Embedding</c>, else null.</summary>
     public EmbeddingProgressResponse? EmbeddingProgress { get; init; }
 
+    /// <summary>Extraction progress while the book is on <c>ExtractingPerSection</c>, else null.</summary>
+    public ExtractionProgressResponse? ExtractionProgress { get; init; }
+
     public int? LastReadSection { get; init; }
 
     public DateTimeOffset? LastOpenedAt { get; init; }
 
-    // A freshly imported book has no chunks yet (status Uploaded), so it has no
-    // embedding progress — map it through an empty entry.
+    // A freshly imported book has no chunks or sections yet (status Uploaded), so it
+    // has no progress of either kind — map it through an empty entry.
     public static BookSummaryResponse From(Book book) =>
-        From(new BookCatalogEntry { Book = book, EmbeddedChunks = 0, TotalChunks = 0 });
+        From(new BookCatalogEntry
+        {
+            Book = book,
+            EmbeddedChunks = 0,
+            TotalChunks = 0,
+            ExtractedSections = 0,
+            TotalSections = 0,
+        });
 
     public static BookSummaryResponse From(BookCatalogEntry entry)
     {
@@ -52,6 +62,10 @@ internal sealed record BookSummaryResponse
                 book.ProcessingStatus == Domain.Books.ProcessingStatus.Embedding && entry.TotalChunks > 0
                     ? new EmbeddingProgressResponse { Embedded = entry.EmbeddedChunks, Total = entry.TotalChunks }
                     : null,
+            ExtractionProgress =
+                book.ProcessingStatus == Domain.Books.ProcessingStatus.ExtractingPerSection && entry.TotalSections > 0
+                    ? new ExtractionProgressResponse { Extracted = entry.ExtractedSections, Total = entry.TotalSections }
+                    : null,
         };
     }
 }
@@ -61,6 +75,15 @@ internal sealed record BookSummaryResponse
 internal sealed record EmbeddingProgressResponse
 {
     public required int Embedded { get; init; }
+
+    public required int Total { get; init; }
+}
+
+/// <summary>Section summaries written / total sections. Mirrors
+/// <c>ExtractionProgress</c> in @storymark/shared-types.</summary>
+internal sealed record ExtractionProgressResponse
+{
+    public required int Extracted { get; init; }
 
     public required int Total { get; init; }
 }

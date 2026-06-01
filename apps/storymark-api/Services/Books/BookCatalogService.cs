@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Storymark.Api.Domain.Books;
 using Storymark.Api.Infrastructure.Database;
@@ -22,9 +23,17 @@ internal sealed class BookCatalogService(StorymarkDbContext db, LlmRegistryServi
         // grouped counts rather than one filtered aggregate, to keep the SQL trivially
         // translatable.
         var modelId = await registry.ResolveEmbeddingIdentityAsync(ct);
-        var totalByBook = await CountByBookAsync(db.BookChunks, ct);
+        var totalByBook = await CountByBookAsync(db.BookChunks, c => c.BookId, ct);
         var embeddedByBook = await CountByBookAsync(
-            db.BookChunks.Where(c => c.Embedding != null && c.EmbeddingModelId == modelId), ct);
+            db.BookChunks.Where(c => c.Embedding != null && c.EmbeddingModelId == modelId), c => c.BookId, ct);
+
+        // Extraction progress is section summaries written / total sections — the job
+        // writes one summary per processed section (SectionExtractionJob), so it is as
+        // honest a fraction as embedding's chunk count. Skipped sections never produce a
+        // summary, so a book with skips tops out just shy of total; that is correct (the
+        // badge clears on the status transition, not on reaching the denominator).
+        var totalSectionsByBook = await CountByBookAsync(db.BookSections, s => s.BookId, ct);
+        var extractedByBook = await CountByBookAsync(db.SectionSummaries, s => s.BookId, ct);
 
         return books
             .Select(b => new BookCatalogEntry
@@ -32,14 +41,16 @@ internal sealed class BookCatalogService(StorymarkDbContext db, LlmRegistryServi
                 Book = b,
                 TotalChunks = totalByBook.GetValueOrDefault(b.Id),
                 EmbeddedChunks = embeddedByBook.GetValueOrDefault(b.Id),
+                TotalSections = totalSectionsByBook.GetValueOrDefault(b.Id),
+                ExtractedSections = extractedByBook.GetValueOrDefault(b.Id),
             })
             .ToList();
     }
 
-    private static Task<Dictionary<Guid, int>> CountByBookAsync(
-        IQueryable<BookChunk> chunks, CancellationToken ct) =>
-        chunks
-            .GroupBy(c => c.BookId)
+    private static Task<Dictionary<Guid, int>> CountByBookAsync<T>(
+        IQueryable<T> rows, Expression<Func<T, Guid>> bookId, CancellationToken ct) =>
+        rows
+            .GroupBy(bookId)
             .Select(g => new { BookId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(g => g.BookId, g => g.Count, ct);
 
