@@ -21,4 +21,12 @@ export const booksApi = {
     }
     return (await response.json()) as BookSummary;
   },
+
+  remove: async (bookId: string): Promise<void> => {
+    const response = await fetch(`/api/books/${encodeURIComponent(bookId)}`, { method: "DELETE" });
+    // 404 means it is already gone — the desired end state, so treat it as success.
+    if (!response.ok && response.status !== 404) {
+      throw new ApiError(response.status, `Failed to delete book (${response.status}).`);
+    }
+  },
 } as const;

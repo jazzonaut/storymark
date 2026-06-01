@@ -147,3 +147,27 @@ db.version(6).stores({
 db.on("versionchange", () => {
   db.close();
 });
+
+/** Removes every locally-cached row for a book once it has been deleted on the
+ * server, so nothing orphans in IndexedDB. Compound-key stores are range-deleted
+ * across the book's whole key span; single-key stores delete by their key. */
+export async function purgeBookData(bookId: string): Promise<void> {
+  await Promise.all([
+    db.manifests.delete(bookId),
+    db.progress.delete(bookId),
+    db.bookOpens.delete(bookId),
+    db.bookmarks.where("bookId").equals(bookId).delete(),
+    db.sections
+      .where("[bookId+sectionIndex]")
+      .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
+      .delete(),
+    db.memorySnapshots
+      .where("[bookId+enteringSection]")
+      .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
+      .delete(),
+    db.timelines
+      .where("[bookId+upToSection]")
+      .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
+      .delete(),
+  ]);
+}

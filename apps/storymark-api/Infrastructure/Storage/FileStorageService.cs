@@ -132,6 +132,19 @@ internal sealed class FileStorageService(IOptions<StorageOptions> options)
         return path is not null && File.Exists(path) ? path : null;
     }
 
+    /// <summary>Removes a book's entire on-disk directory
+    /// (<c>{root}/books/{hash}/</c> — original, cover, sections, resources).
+    /// Idempotent: a missing directory is a no-op. Safe to key on the hash alone
+    /// because content-hash dedup means exactly one book per directory.</summary>
+    public void DeleteBookDirectory(string hash)
+    {
+        var dir = BookDir(hash);
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
     /// <summary>Reads a stored text artifact (a section's HTML or plain text) by
     /// absolute path, or <c>null</c> if it no longer exists.</summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage(

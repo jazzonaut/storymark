@@ -2,6 +2,7 @@ import { shallowRef } from "vue";
 import type { ShallowRef } from "vue";
 import type { BookSummary, ProcessingStatus } from "@storymark/shared-types";
 import { booksApi } from "@/api/books-api";
+import { purgeBookData } from "@/db/storymark-db";
 
 const TERMINAL: ReadonlySet<ProcessingStatus> = new Set<ProcessingStatus>(["Indexed", "Failed"]);
 
@@ -15,6 +16,7 @@ interface UseBooks {
   loadBooks: () => Promise<void>;
   hasPending: () => boolean;
   upsert: (book: BookSummary) => void;
+  remove: (bookId: string) => Promise<void>;
 }
 
 export function useBooks(): UseBooks {
@@ -46,5 +48,14 @@ export function useBooks(): UseBooks {
     books.value = [book, ...without];
   }
 
-  return { books, isLoading, loadBooks, hasPending, upsert };
+  // Wipe the book server-side, then drop its local caches and the in-memory list
+  // entry. Server-first: if the request fails we keep the book rather than hiding
+  // a book that still exists.
+  async function remove(bookId: string): Promise<void> {
+    await booksApi.remove(bookId);
+    await purgeBookData(bookId);
+    books.value = books.value.filter((existing) => existing.bookId !== bookId);
+  }
+
+  return { books, isLoading, loadBooks, hasPending, upsert, remove };
 }

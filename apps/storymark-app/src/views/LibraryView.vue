@@ -1,17 +1,51 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
+import type { BookSummary } from "@storymark/shared-types";
 import BookCard from "@/components/BookCard.vue";
+import DeleteBookDialog from "@/components/DeleteBookDialog.vue";
 import { useBooks } from "@/composables/use-books";
 import { useOfflineSync } from "@/composables/use-offline-sync";
 import { usePwaInstall } from "@/composables/use-pwa-install";
 
-const { books, isLoading, loadBooks, hasPending } = useBooks();
+const { books, isLoading, loadBooks, hasPending, remove } = useBooks();
 const { isOnline } = useOfflineSync();
 const { canInstall, promptInstall } = usePwaInstall();
 
 const POLL_INTERVAL_MS = 5000;
 let pollTimer: number | undefined;
+
+const pendingDelete = ref<BookSummary | null>(null);
+const deleting = ref(false);
+const deleteError = ref<string | null>(null);
+
+function requestDelete(book: BookSummary): void {
+  deleteError.value = null;
+  pendingDelete.value = book;
+}
+
+function cancelDelete(): void {
+  if (!deleting.value) {
+    pendingDelete.value = null;
+  }
+}
+
+async function confirmDelete(): Promise<void> {
+  const book = pendingDelete.value;
+  if (book === null) {
+    return;
+  }
+  deleting.value = true;
+  deleteError.value = null;
+  try {
+    await remove(book.bookId);
+    pendingDelete.value = null;
+  } catch {
+    deleteError.value = "Couldn't delete the book. Check your connection and try again.";
+  } finally {
+    deleting.value = false;
+  }
+}
 
 async function refresh(): Promise<void> {
   try {
@@ -77,7 +111,21 @@ onUnmounted(() => {
       v-else
       class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
     >
-      <BookCard v-for="book in books" :key="book.bookId" :book="book" />
+      <BookCard
+        v-for="book in books"
+        :key="book.bookId"
+        :book="book"
+        @request-delete="requestDelete"
+      />
     </div>
+
+    <DeleteBookDialog
+      v-if="pendingDelete"
+      :book="pendingDelete"
+      :busy="deleting"
+      :error="deleteError"
+      @cancel="cancelDelete"
+      @confirm="confirmDelete"
+    />
   </main>
 </template>

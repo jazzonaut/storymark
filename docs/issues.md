@@ -142,6 +142,20 @@ Estimates are rough T-shirt sizes: **S** ≈ ½ day, **M** ≈ 1–2 days, **L**
 **Acceptance:** upload a real EPUB; file lands on disk; library shows it; uploading the same file again reuses the existing row.
 **Depends on:** S0.3
 
+### S1.2 — Delete a book and wipe all its data — **S**
+**Goal:** From the library I can delete a book; every trace — DB rows, on-disk files, and local caches — is removed, and re-uploading the same file starts fresh.
+**Backend:**
+- `FileStorageService.DeleteBookDirectory(hash)` — recursive delete of `{root}/books/{hash}/`, idempotent
+- `BookDeletionService` — remove the `books` row (DB-level `ON DELETE CASCADE` clears all child tables), then delete the on-disk directory; DB-first so a file-IO failure orphans recoverable files rather than leaving a dangling library row
+- `llm_calls` is preserved (nullable `book_id`, no FK) — it is the spoiler-safety audit trail + cost meter and outlives the book
+- `DELETE /api/books/{id}` → 204, or 404 if unknown
+**Frontend:**
+- Overflow (⋯) menu on `BookCard.vue` with Delete; never triggers navigation
+- `DeleteBookDialog.vue` — type-the-title-to-confirm modal (irreversible action)
+- `purgeBookData(bookId)` clears every per-book Dexie store; `useBooks.remove()` calls the API, purges locally, then drops the list entry
+**Acceptance:** delete a fully-processed book → it leaves the library, `{root}/books/{hash}/` is gone, all child rows are gone, `llm_calls` rows remain with their original `book_id`; re-uploading the same file recreates everything.
+**Depends on:** S1.1
+
 ---
 
 ## Phase 2 — EPUB Parsing and Paginated Reading
