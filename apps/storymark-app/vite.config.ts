@@ -38,11 +38,17 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // The admin panel is an online-only operator tool, so its lazy chunks are
+        // kept out of the precache — readers never download them (notably echarts,
+        // bundled into CostBarChart), and an /admin view can't be served stale from
+        // cache after a deploy. Covers every admin-only chunk: the Admin*View
+        // routes, the use-admin* composables, and the CostBarChart (echarts) chart.
+        globIgnores: ["**/Admin*", "**/use-admin*", "**/CostBarChart*"],
         // Serve the SPA shell for deep-link routes (e.g. /books/:id/read) when
-        // offline; never hijack API requests or the server-rendered Hangfire
-        // dashboard with the shell (the latter would otherwise render blank).
+        // offline; never hijack API requests, the server-rendered Hangfire
+        // dashboard (would render blank), or /admin (online-only) with the shell.
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api\//, /^\/hangfire(\/|$)/],
+        navigateFallbackDenylist: [/^\/api\//, /^\/hangfire(\/|$)/, /^\/admin(\/|$)/],
         runtimeCaching: [
           {
             // A cover's bytes change once (placeholder -> real) when parsing
