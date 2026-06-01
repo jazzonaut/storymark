@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import type { BookSummary } from "@storymark/shared-types";
 import BookCard from "@/components/BookCard.vue";
@@ -8,9 +8,13 @@ import { useBooks } from "@/composables/use-books";
 import { useOfflineSync } from "@/composables/use-offline-sync";
 import { usePwaInstall } from "@/composables/use-pwa-install";
 
-const { books, isLoading, loadBooks, hasPending, remove } = useBooks();
+const { books, isLoading, offline, loadBooks, hasPending, remove } = useBooks();
 const { isOnline } = useOfflineSync();
 const { canInstall, promptInstall } = usePwaInstall();
+
+// Either the browser reports offline, or a list load couldn't reach the API
+// (the off-VPN case navigator.onLine misses) — both mean "showing cached/no data".
+const apiUnreachable = computed<boolean>(() => !isOnline.value || offline.value);
 
 const POLL_INTERVAL_MS = 5000;
 let pollTimer: number | undefined;
@@ -77,8 +81,9 @@ onUnmounted(() => {
       <h1 class="flex items-center gap-2 text-2xl font-semibold">
         Storymark
         <span
-          v-if="!isOnline"
+          v-if="apiUnreachable"
           class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+          title="Can't reach the server — showing your saved library"
         >
           Offline
         </span>
@@ -101,7 +106,15 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <p v-if="books.length === 0 && !isLoading" class="text-[var(--sm-muted)]">
+    <p
+      v-if="books.length === 0 && !isLoading && apiUnreachable"
+      class="text-[var(--sm-muted)]"
+    >
+      Can't reach your library right now. Check your connection — your books will
+      reappear once the server is back in range.
+    </p>
+
+    <p v-else-if="books.length === 0 && !isLoading" class="text-[var(--sm-muted)]">
       Your library is empty.
       <RouterLink to="/upload" class="underline">Upload a book</RouterLink>
       to get started.

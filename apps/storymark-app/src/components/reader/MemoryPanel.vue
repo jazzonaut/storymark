@@ -46,8 +46,8 @@ function onAsk(question: string): void {
 </script>
 
 <template>
-  <div v-if="open" class="absolute inset-0 z-30" @click.self="emit('close')">
-    <div class="absolute inset-0 bg-black/30"></div>
+  <div v-if="open" class="absolute inset-0 z-30">
+    <div class="absolute inset-0 bg-black/30" @click="emit('close')"></div>
     <section
       ref="panel"
       role="dialog"

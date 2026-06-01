@@ -2,6 +2,7 @@ import Dexie from "dexie";
 import type { Table } from "dexie";
 import type {
   BookEvent,
+  BookSummary,
   MemorySnapshot,
   Relationship,
   Section,
@@ -62,6 +63,17 @@ export interface CachedEntities {
   readonly bookId: string;
   readonly upToSection: number;
   readonly entities: readonly StoryGuideEntity[];
+  readonly cachedAt: number;
+}
+
+/** The library list, cached as a single row keyed by the literal `"all"`. The list
+ * is the one reader read path with no Dexie cache of its own — it leant entirely on
+ * the service worker's NetworkFirst cache, so an unreachable API (e.g. off-VPN) with
+ * a cold SW cache showed an empty library. `cachedAt` (epoch ms) is informational;
+ * the list is fetched network-first and this row is the fallback. */
+export interface CachedLibrary {
+  readonly id: "all";
+  readonly books: readonly BookSummary[];
   readonly cachedAt: number;
 }
 
@@ -131,6 +143,7 @@ export interface StoredPanelState {
 // which would force definite-assignment (`!`) fields the no-non-null-assertion
 // rule forbids. The schema string below is the source of truth for indexes.
 type StorymarkDb = Dexie & {
+  library: Table<CachedLibrary, string>;
   manifests: Table<CachedManifest, string>;
   sections: Table<CachedSection, [string, number]>;
   readerSettings: Table<StoredReaderSettings, string>;
@@ -161,6 +174,12 @@ db.version(1).stores({
   graphs: "[bookId+upToSection]",
   entities: "[bookId+upToSection]",
   panelState: "bookId",
+});
+
+// v2 adds the library list cache. Dexie carries the v1 stores forward, so only the
+// new store is declared here. The single row is keyed by the literal "all".
+db.version(2).stores({
+  library: "id",
 });
 
 // A release that adds a db.version() above upgrades the on-device database on

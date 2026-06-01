@@ -8,11 +8,15 @@ const TERMINAL: ReadonlySet<ProcessingStatus> = new Set<ProcessingStatus>(["Inde
 
 const books = shallowRef<readonly BookSummary[]>([]);
 const isLoading = shallowRef(false);
+// True when the last list load couldn't reach the API (served cache, or nothing
+// cached). Reflects real API reachability, unlike navigator.onLine.
+const offline = shallowRef(false);
 let inFlight: Promise<void> | null = null;
 
 interface UseBooks {
   readonly books: ShallowRef<readonly BookSummary[]>;
   readonly isLoading: ShallowRef<boolean>;
+  readonly offline: ShallowRef<boolean>;
   loadBooks: () => Promise<void>;
   hasPending: () => boolean;
   upsert: (book: BookSummary) => void;
@@ -25,7 +29,14 @@ export function useBooks(): UseBooks {
   async function fetchBooks(): Promise<void> {
     isLoading.value = true;
     try {
-      books.value = await booksApi.list();
+      const result = await booksApi.list();
+      books.value = result.books;
+      offline.value = result.fromCache;
+    } catch (caught) {
+      // Couldn't reach the API and nothing was cached: keep whatever we had and
+      // flag offline so the view explains the empty list instead of claiming it.
+      offline.value = true;
+      throw caught;
     } finally {
       isLoading.value = false;
       inFlight = null;
@@ -57,5 +68,5 @@ export function useBooks(): UseBooks {
     books.value = books.value.filter((existing) => existing.bookId !== bookId);
   }
 
-  return { books, isLoading, loadBooks, hasPending, upsert, remove };
+  return { books, isLoading, offline, loadBooks, hasPending, upsert, remove };
 }
