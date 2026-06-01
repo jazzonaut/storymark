@@ -25,6 +25,11 @@ const routes: readonly RouteRecordRaw[] = [
         component: () => import("@/views/admin/AdminSettingsView.vue"),
       },
       {
+        path: "models",
+        name: "admin-models",
+        component: () => import("@/views/admin/AdminModelsView.vue"),
+      },
+      {
         path: "prompts",
         name: "admin-prompts",
         component: () => import("@/views/admin/AdminPromptsView.vue"),

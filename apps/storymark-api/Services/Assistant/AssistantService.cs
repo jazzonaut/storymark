@@ -23,7 +23,6 @@ internal sealed class AssistantService(
     ISettingsService settings)
 {
     private const int PerQueryK = 8;
-    private const int MaxEvidence = 12;
     private const int SnippetMaxChars = 240;
 
     // A chunk scores up to ~2.0 only when it surfaces in both the semantic and the
@@ -45,7 +44,9 @@ internal sealed class AssistantService(
             return null;
         }
 
-        var evidence = await GatherEvidenceAsync(bookId, question, currentSection, currentLocation, ct);
+        var maxEvidence = ResolveMaxEvidence();
+        var evidence = await GatherEvidenceAsync(
+            bookId, question, currentSection, currentLocation, maxEvidence, ct);
 
         // Always false because the SQL filter already excluded future content; deriving
         // it from the evidence (rather than hardcoding false) makes the audit flag fire
@@ -102,11 +103,30 @@ internal sealed class AssistantService(
     /// de-dup by <c>(section, chunk)</c> keeping the strongest hit, and cap to the top
     /// evidence by score. Scores are per-query and not strictly comparable across them,
     /// so the merge is a pragmatic best-of rather than a fused ranking.</summary>
+    /// <summary>Caps the evidence set: the full <c>assistant.evidence.maxChunks</c>,
+    /// or the smaller <c>maxChunksLocal</c> when <c>trimLocal</c> is on and the qa
+    /// model is local (Ollama) — a shorter prompt for slow CPU inference. Hosted
+    /// models always get the full set.</summary>
+    private int ResolveMaxEvidence()
+    {
+        var max = settings.GetInt("assistant.evidence.maxChunks");
+        if (!settings.GetBool("assistant.evidence.trimLocal"))
+        {
+            return max;
+        }
+
+        var (provider, _) = router.ResolveTask("qa");
+        return string.Equals(provider, "ollama", StringComparison.Ordinal)
+            ? settings.GetInt("assistant.evidence.maxChunksLocal")
+            : max;
+    }
+
     private async Task<List<EvidenceChunk>> GatherEvidenceAsync(
         Guid bookId,
         string question,
         int currentSection,
         int currentLocation,
+        int maxEvidence,
         CancellationToken ct)
     {
         var synonyms = settings.GetJson<Dictionary<string, List<string>>>("search.synonyms");
@@ -125,7 +145,7 @@ internal sealed class AssistantService(
             .OrderByDescending(e => e.Score)
             .ThenBy(e => e.SectionIndex)
             .ThenBy(e => e.ChunkIndex)
-            .Take(MaxEvidence)
+            .Take(maxEvidence)
             .ToList();
     }
 

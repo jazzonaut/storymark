@@ -15,6 +15,21 @@ internal sealed class SettingsDefaultsOptions
     public LlmSettingsDefaults Llm { get; init; } = new();
 
     public SearchSettingsDefaults Search { get; init; } = new();
+
+    public AssistantSettingsDefaults Assistant { get; init; } = new();
+}
+
+internal sealed class AssistantSettingsDefaults
+{
+    /// <summary>When true, the Q&amp;A evidence set is capped at the smaller
+    /// <see cref="MaxChunksLocal"/> whenever the resolved <c>qa</c> model is local
+    /// (Ollama), to keep the prompt short for slow CPU inference. Hosted models keep
+    /// the full <see cref="MaxChunks"/>.</summary>
+    public bool TrimLocal { get; init; } = true;
+
+    public int MaxChunks { get; init; } = 12;
+
+    public int MaxChunksLocal { get; init; } = 6;
 }
 
 internal sealed class SearchSettingsDefaults

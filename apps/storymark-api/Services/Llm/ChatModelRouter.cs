@@ -109,6 +109,12 @@ internal sealed class ChatModelRouter
         return response.Embedding;
     }
 
+    /// <summary>Resolves a chat task to its configured <c>(provider, model)</c>
+    /// without making a call, so a caller can branch on where the task runs (local
+    /// vs hosted) before building the request — e.g. to size the prompt.</summary>
+    public (string Provider, string Model) ResolveTask(string task) =>
+        Resolve($"llm.chat.taskMap.{task}");
+
     private (string Provider, string Model) Resolve(string settingKey)
     {
         var value = _settings.GetString(settingKey);
