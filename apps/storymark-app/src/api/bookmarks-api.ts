@@ -1,5 +1,6 @@
 import type { Bookmark } from "@storymark/shared-types";
 import { ApiError } from "@/api/api-error";
+import { apiFetch, fetchJson } from "@/api/http";
 
 export interface SaveBookmarkBody {
   readonly id: string;
@@ -11,28 +12,25 @@ export interface SaveBookmarkBody {
 }
 
 export const bookmarksApi = {
-  list: async (bookId: string): Promise<readonly Bookmark[]> => {
-    const response = await fetch(`/api/books/${encodeURIComponent(bookId)}/bookmarks`);
-    if (!response.ok) {
-      throw new ApiError(response.status, `Failed to load bookmarks (${response.status}).`);
-    }
-    return (await response.json()) as readonly Bookmark[];
-  },
+  list: (bookId: string): Promise<readonly Bookmark[]> =>
+    fetchJson<readonly Bookmark[]>(
+      `/api/books/${encodeURIComponent(bookId)}/bookmarks`,
+      "Failed to load bookmarks",
+    ),
 
-  save: async (bookId: string, body: SaveBookmarkBody): Promise<Bookmark> => {
-    const response = await fetch(`/api/books/${encodeURIComponent(bookId)}/bookmarks`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      throw new ApiError(response.status, `Failed to save bookmark (${response.status}).`);
-    }
-    return (await response.json()) as Bookmark;
-  },
+  save: (bookId: string, body: SaveBookmarkBody): Promise<Bookmark> =>
+    fetchJson<Bookmark>(
+      `/api/books/${encodeURIComponent(bookId)}/bookmarks`,
+      "Failed to save bookmark",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
 
   remove: async (bookId: string, bookmarkId: string): Promise<void> => {
-    const response = await fetch(
+    const response = await apiFetch(
       `/api/books/${encodeURIComponent(bookId)}/bookmarks/${encodeURIComponent(bookmarkId)}`,
       { method: "DELETE" },
     );

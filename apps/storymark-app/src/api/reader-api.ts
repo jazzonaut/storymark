@@ -1,37 +1,6 @@
 import type { Section, SectionSummary } from "@storymark/shared-types";
-import { ApiError } from "@/api/api-error";
+import { fetchJson } from "@/api/http";
 import { db } from "@/db/storymark-db";
-
-// A mobile connection can leave a fetch half-open with no response and no
-// error, which would hang the read path indefinitely (e.g. the first-open cache
-// loop never settling). Abort after this so the caller sees a failure it can
-// retry instead of a permanent spinner.
-const REQUEST_TIMEOUT_MS = 20_000;
-
-async function fetchReader(path: string): Promise<Response> {
-  return fetch(path, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-}
-
-async function fetchManifest(bookId: string): Promise<readonly SectionSummary[]> {
-  const response = await fetchReader(`/api/books/${encodeURIComponent(bookId)}/sections`);
-  if (!response.ok) {
-    throw new ApiError(response.status, `Failed to load sections (${response.status}).`);
-  }
-  return (await response.json()) as readonly SectionSummary[];
-}
-
-async function fetchSection(bookId: string, sectionIndex: number): Promise<Section> {
-  const response = await fetchReader(
-    `/api/books/${encodeURIComponent(bookId)}/sections/${String(sectionIndex)}`,
-  );
-  if (!response.ok) {
-    throw new ApiError(
-      response.status,
-      `Failed to load section ${String(sectionIndex)} (${response.status}).`,
-    );
-  }
-  return (await response.json()) as Section;
-}
 
 // The single read path for reader content. Reads through IndexedDB first, falls
 // back to the API, and writes back — so once a book is prefetched the reader is
@@ -42,7 +11,10 @@ export const readerApi = {
     if (cached) {
       return cached.sections;
     }
-    const sections = await fetchManifest(bookId);
+    const sections = await fetchJson<readonly SectionSummary[]>(
+      `/api/books/${encodeURIComponent(bookId)}/sections`,
+      "Failed to load sections",
+    );
     await db.manifests.put({ bookId, sections });
     return sections;
   },
@@ -52,7 +24,10 @@ export const readerApi = {
     if (cached) {
       return cached;
     }
-    const section = await fetchSection(bookId, sectionIndex);
+    const section = await fetchJson<Section>(
+      `/api/books/${encodeURIComponent(bookId)}/sections/${String(sectionIndex)}`,
+      `Failed to load section ${String(sectionIndex)}`,
+    );
     await db.sections.put({ ...section, bookId });
     return section;
   },

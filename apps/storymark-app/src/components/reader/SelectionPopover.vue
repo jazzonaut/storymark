@@ -91,6 +91,8 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="root"
+    role="dialog"
+    aria-label="Selection actions"
     class="fixed z-40 w-80 rounded-xl border border-[var(--sm-muted)]/20 bg-[var(--sm-bg)] p-3 shadow-2xl"
     :style="style"
   >

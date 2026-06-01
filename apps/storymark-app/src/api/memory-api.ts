@@ -1,5 +1,6 @@
 import type { MemorySnapshot } from "@storymark/shared-types";
 import { ApiError } from "@/api/api-error";
+import { apiFetch } from "@/api/http";
 import { db } from "@/db/storymark-db";
 
 async function fetchMemory(
@@ -7,7 +8,7 @@ async function fetchMemory(
   upToSection: number,
   upToLocation: number,
 ): Promise<MemorySnapshot | null> {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/books/${encodeURIComponent(bookId)}/memory?upToSection=${String(upToSection)}&upToLocation=${String(upToLocation)}`,
   );
   if (response.status === 204) {

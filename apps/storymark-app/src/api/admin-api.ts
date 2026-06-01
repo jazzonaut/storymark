@@ -1,3 +1,4 @@
+import { apiFetch } from "@/api/http";
 import type {
   ApplySwapResult,
   CostSummary,
@@ -24,7 +25,7 @@ export class AdminApiError extends Error {
 }
 
 async function send(token: string, path: string, init?: RequestInit): Promise<Response> {
-  const response = await fetch(`/api/admin/${path}`, {
+  const response = await apiFetch(`/api/admin/${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",

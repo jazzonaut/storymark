@@ -1,14 +1,19 @@
 <script setup lang="ts">
+import { ref, toRef } from "vue";
 import RangeControl from "@/components/reader/RangeControl.vue";
 import SegmentedControl from "@/components/reader/SegmentedControl.vue";
+import { useFocusTrap } from "@/composables/use-focus-trap";
 import { useReaderSettings } from "@/composables/use-reader-settings";
 import type { EntityHighlightMode, ReaderFontFamily, ReaderTheme } from "@/db/storymark-db";
 
-defineProps<{ open: boolean }>();
+const props = defineProps<{ open: boolean }>();
 
 defineEmits<{ (e: "close"): void }>();
 
 const { settings, update, reset } = useReaderSettings();
+
+const panel = ref<HTMLElement | null>(null);
+useFocusTrap(toRef(props, "open"), panel);
 
 const THEMES: readonly { value: ReaderTheme; label: string }[] = [
   { value: "light", label: "Light" },
@@ -33,7 +38,12 @@ const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [
   <div v-if="open" class="absolute inset-0 z-30" @click.self="$emit('close')">
     <div class="absolute inset-0 bg-black/30"></div>
     <section
-      class="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-[var(--sm-bg)] p-5 shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:w-80 sm:max-h-none sm:rounded-none"
+      ref="panel"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Reader settings"
+      tabindex="-1"
+      class="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-[var(--sm-bg)] p-5 shadow-2xl outline-none sm:inset-y-0 sm:right-0 sm:left-auto sm:w-80 sm:max-h-none sm:rounded-none"
     >
       <div class="mb-4 flex items-center justify-between">
         <h2 class="text-base font-semibold">Reader settings</h2>
@@ -107,10 +117,7 @@ const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [
         />
 
         <div>
-          <p class="mb-1 text-sm font-medium">
-            Entity highlight
-            <span class="ml-1 text-xs font-normal text-[var(--sm-muted)]">(active in Phase 6)</span>
-          </p>
+          <p class="mb-1 text-sm font-medium">Entity highlight</p>
           <SegmentedControl
             :model-value="settings.entityHighlight"
             :options="HIGHLIGHTS"

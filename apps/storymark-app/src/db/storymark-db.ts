@@ -6,6 +6,7 @@ import type {
   Relationship,
   Section,
   SectionSummary,
+  StoryGuideEntity,
 } from "@storymark/shared-types";
 
 /** A book's section manifest, cached for offline reading. */
@@ -46,6 +47,17 @@ export interface CachedGraph {
   readonly bookId: string;
   readonly upToSection: number;
   readonly relationships: readonly Relationship[];
+  readonly cachedAt: number;
+}
+
+/** The Story Guide entities visible at a section boundary, cached and keyed by
+ * [bookId+upToSection] with a short TTL like {@link CachedTimeline}. The entity
+ * list supplies the Story Guide, the timeline's involved-name lookups, and the
+ * graph's nodes, so caching it is what lets all three render offline. */
+export interface CachedEntities {
+  readonly bookId: string;
+  readonly upToSection: number;
+  readonly entities: readonly StoryGuideEntity[];
   readonly cachedAt: number;
 }
 
@@ -124,6 +136,7 @@ type StorymarkDb = Dexie & {
   bookOpens: Table<StoredBookOpen, string>;
   timelines: Table<CachedTimeline, [string, number]>;
   graphs: Table<CachedGraph, [string, number]>;
+  entities: Table<CachedEntities, [string, number]>;
   panelState: Table<StoredPanelState, string>;
 };
 
@@ -142,6 +155,7 @@ db.version(1).stores({
   bookOpens: "bookId",
   timelines: "[bookId+upToSection]",
   graphs: "[bookId+upToSection]",
+  entities: "[bookId+upToSection]",
   panelState: "bookId",
 });
 
@@ -179,6 +193,10 @@ export async function purgeBookData(bookId: string): Promise<void> {
       .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
       .delete(),
     db.graphs
+      .where("[bookId+upToSection]")
+      .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
+      .delete(),
+    db.entities
       .where("[bookId+upToSection]")
       .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
       .delete(),

@@ -1,6 +1,6 @@
 import { ref, shallowRef } from "vue";
 import type { Ref, ShallowRef } from "vue";
-import type { BookEvent } from "@storymark/shared-types";
+import type { BookEvent, StoryGuideEntity } from "@storymark/shared-types";
 import { eventsApi } from "@/api/events-api";
 import { entitiesApi } from "@/api/entities-api";
 import { ApiError } from "@/api/api-error";
@@ -24,11 +24,13 @@ export function useTimeline(): UseTimeline {
     isLoading.value = true;
     error.value = null;
     try {
-      // Events drive the chart; the entity list resolves involved-entity ids to names
-      // for tooltips and the detail card (both spoiler-filtered to the same position).
+      // Events drive the chart; the entity list only resolves involved-entity ids to
+      // display names for tooltips/detail. Names are best-effort, so the entity fetch
+      // fails soft to an empty map — otherwise its failure (e.g. a cold cache offline)
+      // would reject the pair and discard the cached events the timeline can still show.
       const [loadedEvents, entities] = await Promise.all([
         eventsApi.list(bookId, section, location),
-        entitiesApi.list(bookId, section, location),
+        entitiesApi.list(bookId, section, location).catch((): readonly StoryGuideEntity[] => []),
       ]);
       events.value = loadedEvents;
       entityNames.value = new Map(

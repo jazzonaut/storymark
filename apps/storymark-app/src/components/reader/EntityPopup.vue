@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import EntityTypeBadge from "@/components/reader/EntityTypeBadge.vue";
 import { useEntitySummary } from "@/composables/use-entity-summary";
+import { useFocusTrap } from "@/composables/use-focus-trap";
 
 const { openEntity, isLoading, summary, error, close } = useEntitySummary();
+
+const panel = ref<HTMLElement | null>(null);
+const isOpen = computed<boolean>(() => openEntity.value !== null);
+useFocusTrap(isOpen, panel);
 
 // Prefer the loaded canonical name; fall back to the tapped text while generating.
 const heading = computed<string>(
@@ -29,13 +34,23 @@ onBeforeUnmount(() => {
   <div v-if="openEntity" class="absolute inset-0 z-40" @click.self="close">
     <div class="absolute inset-0 bg-black/30"></div>
     <section
-      class="absolute inset-x-0 bottom-0 flex max-h-[80vh] flex-col rounded-t-2xl bg-[var(--sm-bg)] shadow-2xl sm:inset-x-auto sm:top-1/2 sm:left-1/2 sm:max-h-[70vh] sm:w-[28rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl"
+      ref="panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="entity-popup-heading"
+      tabindex="-1"
+      class="absolute inset-x-0 bottom-0 flex max-h-[80vh] flex-col rounded-t-2xl bg-[var(--sm-bg)] shadow-2xl outline-none sm:inset-x-auto sm:top-1/2 sm:left-1/2 sm:max-h-[70vh] sm:w-[28rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl"
     >
       <header
         class="flex items-center justify-between gap-3 border-b border-[var(--sm-muted)]/15 px-5 py-3"
       >
         <div class="flex min-w-0 items-baseline gap-2">
-          <h2 class="truncate text-base font-semibold text-[var(--sm-fg)]">{{ heading }}</h2>
+          <h2
+            id="entity-popup-heading"
+            class="truncate text-base font-semibold text-[var(--sm-fg)]"
+          >
+            {{ heading }}
+          </h2>
           <EntityTypeBadge v-if="summary" :type="summary.entityType" />
         </div>
         <button

@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, toRef } from "vue";
 import type { SectionSummary } from "@storymark/shared-types";
 import type { StoredBookmark } from "@/db/storymark-db";
+import { useFocusTrap } from "@/composables/use-focus-trap";
 
 const props = defineProps<{
   open: boolean;
   bookmarks: readonly StoredBookmark[];
   manifest: readonly SectionSummary[];
 }>();
+
+const panel = ref<HTMLElement | null>(null);
+useFocusTrap(toRef(props, "open"), panel);
 
 defineEmits<{
   (e: "close"): void;
@@ -46,7 +50,12 @@ const groups = computed<readonly BookmarkGroup[]>(() => {
   <div v-if="open" class="absolute inset-0 z-30" @click.self="$emit('close')">
     <div class="absolute inset-0 bg-black/30"></div>
     <section
-      class="absolute inset-x-0 bottom-0 max-h-[70vh] overflow-y-auto rounded-t-2xl bg-[var(--sm-bg)] p-5 shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:w-96 sm:max-h-none sm:rounded-none"
+      ref="panel"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Bookmarks"
+      tabindex="-1"
+      class="absolute inset-x-0 bottom-0 max-h-[70vh] overflow-y-auto rounded-t-2xl bg-[var(--sm-bg)] p-5 shadow-2xl outline-none sm:inset-y-0 sm:right-0 sm:left-auto sm:w-96 sm:max-h-none sm:rounded-none"
     >
       <div class="mb-4 flex items-center justify-between">
         <h2 class="text-base font-semibold">Bookmarks</h2>

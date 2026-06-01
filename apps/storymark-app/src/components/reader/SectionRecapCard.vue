@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { MemorySnapshot, SectionSummary } from "@storymark/shared-types";
+import { useFocusTrap } from "@/composables/use-focus-trap";
 
 const props = withDefaults(
   defineProps<{
@@ -21,6 +22,11 @@ const boundaryLabel = computed<string>(() => {
   const title = props.manifest.find((s) => s.sectionIndex === props.snapshot.upToSection)?.title;
   return title ?? `section ${String(props.snapshot.upToSection)}`;
 });
+
+// The card only mounts while visible (parent `v-if`), so it's always the active
+// overlay for as long as it's on screen.
+const panel = ref<HTMLElement | null>(null);
+useFocusTrap(ref(true), panel);
 
 // Swipe-up to dismiss: track the vertical drag and dismiss past a small threshold.
 const SWIPE_DISMISS_PX = 48;
@@ -45,7 +51,12 @@ function onTouchEnd(event: TouchEvent): void {
     <div class="absolute inset-0 bg-black/30" @click="emit('dismiss')"></div>
 
     <section
-      class="relative mx-4 mt-[max(1rem,env(safe-area-inset-top))] max-h-[70vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-[var(--sm-bg)] p-5 shadow-2xl"
+      ref="panel"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="heading"
+      tabindex="-1"
+      class="relative mx-4 mt-[max(1rem,env(safe-area-inset-top))] max-h-[70vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-[var(--sm-bg)] p-5 shadow-2xl outline-none"
       @touchstart.passive="onTouchStart"
       @touchend.passive="onTouchEnd"
     >
