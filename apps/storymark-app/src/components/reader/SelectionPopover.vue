@@ -21,8 +21,8 @@ const emit = defineEmits<{
 const { isResolving, result, error, resolve, reset } = useSelectionHint();
 const { isOnline } = useOfflineSync();
 
-const POPOVER_WIDTH = 288;
-const GAP = 8;
+const POPOVER_WIDTH = 320;
+const GAP = 16;
 const ABOVE_THRESHOLD = 180;
 
 const root = ref<HTMLElement | null>(null);
@@ -90,7 +90,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="root"
-    class="fixed z-40 w-72 rounded-xl border border-[var(--sm-muted)]/20 bg-[var(--sm-bg)] p-3 shadow-2xl"
+    class="fixed z-40 w-80 rounded-xl border border-[var(--sm-muted)]/20 bg-[var(--sm-bg)] p-3 shadow-2xl"
     :style="style"
   >
     <div v-if="isResolving" class="space-y-2" aria-busy="true">
@@ -108,11 +108,11 @@ onBeforeUnmount(() => {
       @tell-me-more="emit('ask', selection.text)"
     />
 
-    <div v-else class="flex flex-wrap gap-1.5">
+    <div v-else class="flex flex-wrap gap-2">
       <button
         type="button"
         :disabled="!canIdentify"
-        class="rounded-full bg-[var(--sm-surface)] px-3 py-1 text-xs font-medium text-[var(--sm-fg)] hover:bg-[var(--sm-accent)] hover:text-white disabled:opacity-50 disabled:hover:bg-[var(--sm-surface)] disabled:hover:text-[var(--sm-fg)]"
+        class="rounded-full bg-[var(--sm-surface)] px-4 py-2 text-sm font-medium text-[var(--sm-fg)] hover:bg-[var(--sm-accent)] hover:text-white disabled:opacity-50 disabled:hover:bg-[var(--sm-surface)] disabled:hover:text-[var(--sm-fg)]"
         @click="identify"
       >
         Who/What is this?
@@ -120,21 +120,21 @@ onBeforeUnmount(() => {
       <button
         type="button"
         disabled
-        class="cursor-not-allowed rounded-full bg-[var(--sm-surface)] px-3 py-1 text-xs font-medium text-[var(--sm-muted)] opacity-50"
+        class="cursor-not-allowed rounded-full bg-[var(--sm-surface)] px-4 py-2 text-sm font-medium text-[var(--sm-muted)] opacity-50"
         title="Available in a later update"
       >
         Recap to here
       </button>
       <button
         type="button"
-        class="rounded-full bg-[var(--sm-surface)] px-3 py-1 text-xs font-medium text-[var(--sm-fg)] hover:bg-[var(--sm-accent)] hover:text-white"
+        class="rounded-full bg-[var(--sm-surface)] px-4 py-2 text-sm font-medium text-[var(--sm-fg)] hover:bg-[var(--sm-accent)] hover:text-white"
         @click="emit('ask', selection.text)"
       >
         Ask…
       </button>
       <button
         type="button"
-        class="rounded-full bg-[var(--sm-surface)] px-3 py-1 text-xs font-medium text-[var(--sm-fg)] hover:bg-[var(--sm-accent)] hover:text-white"
+        class="rounded-full bg-[var(--sm-surface)] px-4 py-2 text-sm font-medium text-[var(--sm-fg)] hover:bg-[var(--sm-accent)] hover:text-white"
         @click="copy"
       >
         Copy
