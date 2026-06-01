@@ -28,6 +28,14 @@ internal sealed class StorymarkDbContext(DbContextOptions<StorymarkDbContext> op
 
     public DbSet<BookEntity> BookEntities => Set<BookEntity>();
 
+    public DbSet<BookEntityMention> BookEntityMentions => Set<BookEntityMention>();
+
+    public DbSet<SectionSummary> SectionSummaries => Set<SectionSummary>();
+
+    public DbSet<BookEvent> BookEvents => Set<BookEvent>();
+
+    public DbSet<BookRelationship> BookRelationships => Set<BookRelationship>();
+
     public DbSet<LlmProvider> LlmProviders => Set<LlmProvider>();
 
     public DbSet<LlmModel> LlmModels => Set<LlmModel>();

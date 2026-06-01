@@ -159,27 +159,5 @@ internal sealed class SelectionHintService(
             string.Equals(Normalize(alias), needle, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string Normalize(string text)
-    {
-        var trimmed = text.Trim();
-        var start = 0;
-        var end = trimmed.Length - 1;
-        while (start <= end && !char.IsLetterOrDigit(trimmed[start]))
-        {
-            start++;
-        }
-
-        while (end >= start && !char.IsLetterOrDigit(trimmed[end]))
-        {
-            end--;
-        }
-
-        if (start > end)
-        {
-            return string.Empty;
-        }
-
-        var core = trimmed[start..(end + 1)];
-        return string.Join(' ', core.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-    }
+    private static string Normalize(string text) => EntityNameNormalizer.Normalize(text);
 }

@@ -66,10 +66,12 @@ try
     builder.Services.AddScoped<BookImportService>();
     builder.Services.AddScoped<BookCatalogService>();
     builder.Services.AddScoped<BookSectionService>();
+    builder.Services.AddScoped<BookExtractionService>();
     builder.Services.AddScoped<ReadingProgressService>();
     builder.Services.AddScoped<BookmarkService>();
     builder.Services.AddScoped<ProcessBookJob>();
     builder.Services.AddScoped<EmbeddingJob>();
+    builder.Services.AddScoped<SectionExtractionJob>();
     builder.Services.AddScoped<SpoilerSafeRetrievalService>();
     builder.Services.AddScoped<AssistantService>();
     builder.Services.AddScoped<SelectionHintService>();

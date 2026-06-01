@@ -1,0 +1,35 @@
+using FastEndpoints;
+using Storymark.Api.Services.Books;
+
+namespace Storymark.Api.Endpoints.Books;
+
+/// <summary>Relationships first seen at-or-before the reader's position
+/// (docs/plan.md §5.1, §19.2), spoiler-filtered server-side. Public. 404 if the
+/// book is unknown. <c>upToSection</c>/<c>upToLocation</c> are required query
+/// params — the spoiler boundary.</summary>
+internal sealed class GetRelationshipsEndpoint(BookExtractionService extraction)
+    : EndpointWithoutRequest<IReadOnlyList<RelationshipView>>
+{
+    public override void Configure()
+    {
+        Get("books/{id}/relationships");
+        AllowAnonymous();
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var relationships = await extraction.GetRelationshipsAsync(
+            Route<Guid>("id"),
+            Query<int>("upToSection", isRequired: true),
+            Query<int>("upToLocation", isRequired: true),
+            ct);
+
+        if (relationships is null)
+        {
+            await Send.NotFoundAsync(ct);
+            return;
+        }
+
+        await Send.OkAsync(relationships, ct);
+    }
+}

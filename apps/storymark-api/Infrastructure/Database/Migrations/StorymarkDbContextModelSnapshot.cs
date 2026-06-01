@@ -249,6 +249,105 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                     b.ToTable("book_entities", (string)null);
                 });
 
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookEntityMention", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BookId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("book_id");
+
+                    b.Property<decimal>("Confidence")
+                        .HasColumnType("numeric")
+                        .HasColumnName("confidence");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<int>("LocationEnd")
+                        .HasColumnType("integer")
+                        .HasColumnName("location_end");
+
+                    b.Property<int>("LocationStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("location_start");
+
+                    b.Property<string>("MentionText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("mention_text");
+
+                    b.Property<int>("SectionIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("section_index");
+
+                    b.Property<string>("SurroundingText")
+                        .HasColumnType("text")
+                        .HasColumnName("surrounding_text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntityId");
+
+                    b.HasIndex("BookId", "EntityId", "SectionIndex")
+                        .HasDatabaseName("book_entity_mentions_entity_pos");
+
+                    b.ToTable("book_entity_mentions", (string)null);
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BookId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("book_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<string>("EventType")
+                        .HasColumnType("text")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("InvolvedEntityIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("involved_entity_ids");
+
+                    b.Property<int>("LocationEnd")
+                        .HasColumnType("integer")
+                        .HasColumnName("location_end");
+
+                    b.Property<int>("LocationStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("location_start");
+
+                    b.Property<int>("SectionIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("section_index");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookId", "SectionIndex", "LocationStart")
+                        .HasDatabaseName("book_events_pos");
+
+                    b.ToTable("book_events", (string)null);
+                });
+
             modelBuilder.Entity("Storymark.Api.Domain.Books.BookParagraph", b =>
                 {
                     b.Property<Guid>("Id")
@@ -302,6 +401,70 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasDatabaseName("book_paragraphs_book_section_index");
 
                     b.ToTable("book_paragraphs", (string)null);
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookRelationship", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BookId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("book_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Evidence")
+                        .HasColumnType("text")
+                        .HasColumnName("evidence");
+
+                    b.Property<int>("FirstSeenLocation")
+                        .HasColumnType("integer")
+                        .HasColumnName("first_seen_location");
+
+                    b.Property<int>("FirstSeenSection")
+                        .HasColumnType("integer")
+                        .HasColumnName("first_seen_section");
+
+                    b.Property<Guid>("FromEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_entity_id");
+
+                    b.Property<int?>("LastSeenLocation")
+                        .HasColumnType("integer")
+                        .HasColumnName("last_seen_location");
+
+                    b.Property<int?>("LastSeenSection")
+                        .HasColumnType("integer")
+                        .HasColumnName("last_seen_section");
+
+                    b.Property<string>("Polarity")
+                        .HasColumnType("text")
+                        .HasColumnName("polarity");
+
+                    b.Property<string>("RelationshipType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("relationship_type");
+
+                    b.Property<Guid>("ToEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_entity_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromEntityId");
+
+                    b.HasIndex("ToEntityId");
+
+                    b.HasIndex("BookId", "FirstSeenSection")
+                        .HasDatabaseName("book_relationships_pos");
+
+                    b.ToTable("book_relationships", (string)null);
                 });
 
             modelBuilder.Entity("Storymark.Api.Domain.Books.BookSection", b =>
@@ -452,6 +615,54 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasDatabaseName("reading_progress_book_device");
 
                     b.ToTable("reading_progress", (string)null);
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.SectionSummary", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BookId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("book_id");
+
+                    b.Property<string>("EntitiesSeen")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("entities_seen");
+
+                    b.Property<DateTimeOffset>("GeneratedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("generated_at");
+
+                    b.Property<string>("ImportantEvents")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("important_events");
+
+                    b.Property<string>("OpenThreads")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("open_threads");
+
+                    b.Property<int>("SectionIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("section_index");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("summary");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookId", "SectionIndex")
+                        .IsUnique()
+                        .HasDatabaseName("section_summaries_book_section");
+
+                    b.ToTable("section_summaries", (string)null);
                 });
 
             modelBuilder.Entity("Storymark.Api.Domain.Llm.LlmModel", b =>
@@ -693,11 +904,56 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookEntityMention", b =>
+                {
+                    b.HasOne("Storymark.Api.Domain.Books.Book", null)
+                        .WithMany()
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Storymark.Api.Domain.Books.BookEntity", null)
+                        .WithMany()
+                        .HasForeignKey("EntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookEvent", b =>
+                {
+                    b.HasOne("Storymark.Api.Domain.Books.Book", null)
+                        .WithMany()
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Storymark.Api.Domain.Books.BookParagraph", b =>
                 {
                     b.HasOne("Storymark.Api.Domain.Books.BookSection", null)
                         .WithMany()
                         .HasForeignKey("SectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.BookRelationship", b =>
+                {
+                    b.HasOne("Storymark.Api.Domain.Books.Book", null)
+                        .WithMany()
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Storymark.Api.Domain.Books.BookEntity", null)
+                        .WithMany()
+                        .HasForeignKey("FromEntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Storymark.Api.Domain.Books.BookEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ToEntityId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -721,6 +977,15 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                 });
 
             modelBuilder.Entity("Storymark.Api.Domain.Books.ReadingProgress", b =>
+                {
+                    b.HasOne("Storymark.Api.Domain.Books.Book", null)
+                        .WithMany()
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.SectionSummary", b =>
                 {
                     b.HasOne("Storymark.Api.Domain.Books.Book", null)
                         .WithMany()
