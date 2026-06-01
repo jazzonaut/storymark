@@ -36,6 +36,8 @@ internal sealed class StorymarkDbContext(DbContextOptions<StorymarkDbContext> op
 
     public DbSet<BookRelationship> BookRelationships => Set<BookRelationship>();
 
+    public DbSet<BookMemorySnapshot> BookMemorySnapshots => Set<BookMemorySnapshot>();
+
     public DbSet<LlmProvider> LlmProviders => Set<LlmProvider>();
 
     public DbSet<LlmModel> LlmModels => Set<LlmModel>();

@@ -54,6 +54,10 @@ and so never re-extracts. This also matches §15.4's status order.
   from scratch — wasteful but correct at single-operator scale.
 - The plan's "per section" wording is now understood as the granularity of the LLM
   call and prompt unit, not of the Hangfire job.
+- **S5.2 follows the same shape.** `BookMemorySnapshotJob` (`BuildingMemorySnapshots`)
+  is inserted between extraction and embedding — it needs only the section summaries,
+  not vectors — so the chain becomes `ProcessBookJob → SectionExtractionJob →
+  BookMemorySnapshotJob → EmbeddingJob → Indexed`, with embedding still terminal.
 
 ## Alternatives considered
 

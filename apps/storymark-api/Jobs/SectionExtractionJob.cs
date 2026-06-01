@@ -24,10 +24,12 @@ namespace Storymark.Api.Jobs;
 /// jobs would race. One call per section still holds (ADR-0009).</para>
 ///
 /// <para>This is the <c>ExtractingPerSection</c> step of the pipeline; on completion
-/// it advances the book to <c>Embedding</c> and enqueues <see cref="EmbeddingJob"/>,
-/// the unchanged terminal step that finishes at <c>Indexed</c> (so an S3.4 reindex,
-/// which only re-runs <see cref="EmbeddingJob"/>, never re-extracts). Idempotent:
-/// a re-run clears this book's prior extraction first.</para>
+/// it advances the book to <c>BuildingMemorySnapshots</c> and enqueues
+/// <see cref="BookMemorySnapshotJob"/>, which composes the rolling memory and then
+/// chains to <see cref="EmbeddingJob"/> — the unchanged terminal step that finishes at
+/// <c>Indexed</c> (so an S3.4 reindex, which only re-runs <see cref="EmbeddingJob"/>,
+/// never re-extracts). Idempotent: a re-run clears this book's prior extraction
+/// first.</para>
 ///
 /// <para>Tolerant per ADR-0009: an unparseable section retries once with a stricter
 /// prompt, then is skipped (logged) with partial data preserved. A transient call
@@ -63,8 +65,11 @@ internal sealed class SectionExtractionJob(
             await ClearExistingExtractionAsync(bookId, ct);
             await ExtractAllAsync(book, ct);
 
-            await SetStatusAsync(book, ProcessingStatus.Embedding, ct);
-            jobs.Enqueue<EmbeddingJob>(j => j.RunAsync(book.Id, CancellationToken.None));
+            // Hand off to the memory pass (BuildingMemorySnapshots), which then chains
+            // to EmbeddingJob → Indexed. Memory needs only the section summaries just
+            // written, not vectors, so it runs before embedding (ADR-0018).
+            await SetStatusAsync(book, ProcessingStatus.BuildingMemorySnapshots, ct);
+            jobs.Enqueue<BookMemorySnapshotJob>(j => j.RunAsync(book.Id, CancellationToken.None));
         }
         catch (ModelNotFoundException ex)
         {
@@ -154,7 +159,7 @@ internal sealed class SectionExtractionJob(
         Book book, BookSection section, string instruction, string text, CancellationToken ct)
     {
         var first = await CompleteAsync(book, section, instruction, text, strict: false, ct);
-        var parsed = SectionExtractionParser.Parse(first);
+        var parsed = LooseJsonParser.Parse<SectionExtraction>(first);
         if (parsed is not null)
         {
             return parsed;
@@ -165,7 +170,7 @@ internal sealed class SectionExtractionJob(
             section.SectionIndex, book.Id);
 
         var second = await CompleteAsync(book, section, instruction, text, strict: true, ct);
-        parsed = SectionExtractionParser.Parse(second);
+        parsed = LooseJsonParser.Parse<SectionExtraction>(second);
         if (parsed is null)
         {
             logger.LogWarning(

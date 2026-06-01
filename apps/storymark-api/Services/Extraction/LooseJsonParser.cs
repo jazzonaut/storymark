@@ -2,12 +2,13 @@ using System.Text.Json;
 
 namespace Storymark.Api.Services.Extraction;
 
-/// <summary>Recovers the <see cref="SectionExtraction"/> JSON object from a raw model
-/// completion. Small local models wrap the object in markdown fences or prose, so we
+/// <summary>Recovers a typed JSON object from a raw model completion. Small local
+/// models wrap the object in markdown fences or prose, so we
 /// slice from the first <c>{</c> to its matching <c>}</c> (brace-balanced, skipping
-/// strings) before deserialising. Returns <c>null</c> when no valid object is found —
-/// the caller (docs/adr/0009) retries once with a stricter prompt, then skips.</summary>
-internal static class SectionExtractionParser
+/// strings) before deserialising case-insensitively. Returns <c>null</c> when no
+/// valid object is found — callers (docs/adr/0009) retry once with a stricter prompt,
+/// then degrade. Shared by the section-extraction and book-memory passes.</summary>
+internal static class LooseJsonParser
 {
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -15,7 +16,8 @@ internal static class SectionExtractionParser
         AllowTrailingCommas = true,
     };
 
-    public static SectionExtraction? Parse(string? raw)
+    public static T? Parse<T>(string? raw)
+        where T : class
     {
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -30,7 +32,7 @@ internal static class SectionExtractionParser
 
         try
         {
-            return JsonSerializer.Deserialize<SectionExtraction>(json, Options);
+            return JsonSerializer.Deserialize<T>(json, Options);
         }
         catch (JsonException)
         {
