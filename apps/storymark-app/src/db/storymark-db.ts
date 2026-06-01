@@ -119,3 +119,14 @@ db.version(4).stores({
 db.version(5).stores({
   bookOpens: "bookId",
 });
+
+// A release that adds a db.version() above upgrades the on-device database on
+// first open, and IndexedDB runs that upgrade only once every *other* connection
+// to it has closed. If a second tab — or the still-resident installed PWA — holds
+// the previous version open, the upgrade blocks indefinitely and every query
+// against `db` hangs with no error (a silent "stuck on first load" after a release
+// that adds a store). Closing on `versionchange` yields to the newer instance
+// instead of deadlocking against it.
+db.on("versionchange", () => {
+  db.close();
+});
