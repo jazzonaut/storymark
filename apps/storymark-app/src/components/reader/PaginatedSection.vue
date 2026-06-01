@@ -75,6 +75,11 @@ const MOVE_CANCEL_PX = 10;
 // While dragging a handle the finger sits on the knob, which is drawn off the
 // text line; probe this far toward the line so the caret lands on real text.
 const HANDLE_PROBE_PX = 18;
+// One swipe turns exactly one page (Readera-style page-flip): commit a turn when
+// the drag passes this fraction of the page width, or on a short quick flick.
+const SWIPE_COMMIT_FRACTION = 0.18;
+const FLICK_MAX_MS = 250;
+const FLICK_MIN_PX = 24;
 
 const scrollEl = ref<HTMLDivElement | null>(null);
 const contentEl = ref<HTMLDivElement | null>(null);
@@ -108,11 +113,23 @@ let pressTimer: number | undefined;
 let pressPointerId: number | null = null;
 let pressStartX = 0;
 let pressStartY = 0;
-let gestureMode: "idle" | "pressing" | "selecting" = "idle";
+let pressStartTime = 0;
+let gestureMode: "idle" | "pressing" | "selecting" | "swiping" = "idle";
 let draggingHandle: "start" | "end" | null = null;
+// Swipe (page-turn) gesture: the scroll position and page we started the drag
+// from, so a quick flick can be measured and snapped relative to the start.
+let swipeStartScrollLeft = 0;
+let swipeStartPage = 0;
+// A drag ends in a synthesised click; this swallows that one click so a swipe
+// (or any non-tap drag) never also pages via the edge-tap / chrome-toggle path.
+let swallowClick = false;
 // Locks scroll (touch-action: none) while we own the gesture, so an extend drag
 // pans the selection instead of paging.
 const scrollLocked = ref(false);
+// True while we drive a page-turn swipe ourselves: disables scroll-snap (so the
+// page tracks the finger instead of snapping per-increment) and suppresses the
+// settle handler (we snap to the chosen page on lift, not to the nearest).
+const swiping = ref(false);
 // Set during a handle drag: makes the handles ignore pointer hit-testing so
 // caretPositionFromPoint reads the text under the finger, not the handle itself.
 // The dragged handle keeps its captured pointer regardless.
@@ -249,6 +266,10 @@ function onSettle(): void {
 function onScroll(): void {
   // Paging dismisses any open selection popover.
   emit("dismiss-select");
+  // During an owned swipe the page tracks the finger; endSwipe settles it.
+  if (swiping.value) {
+    return;
+  }
   if (settleTimer !== undefined) {
     window.clearTimeout(settleTimer);
   }
@@ -469,14 +490,72 @@ function extendSelection(x: number, y: number): void {
   setCustomRange(base);
 }
 
+// --- Page-turn swipe (touch) ------------------------------------------------
+
+// Take over the gesture as a page-turn drag: the finger now pans the columns and
+// the page snaps to its destination on lift (see endSwipe).
+function beginSwipe(): void {
+  const scroll = scrollEl.value;
+  if (scroll === null || pressPointerId === null) {
+    gestureMode = "idle";
+    return;
+  }
+  gestureMode = "swiping";
+  swiping.value = true;
+  swipeStartScrollLeft = scroll.scrollLeft;
+  swipeStartPage = page.value;
+  scroll.setPointerCapture(pressPointerId);
+}
+
+// The page follows the finger 1:1, but never past the adjacent page in either
+// direction (nor the section's scroll range) — one swipe only ever reveals one
+// page, so it can never run on into the rest of the section.
+function dragSwipe(clientX: number): void {
+  const scroll = scrollEl.value;
+  if (scroll === null) {
+    return;
+  }
+  const width = pageWidth();
+  const max = Math.max(0, (totalPages.value - 1) * width);
+  const lower = Math.max(0, swipeStartScrollLeft - width);
+  const upper = Math.min(max, swipeStartScrollLeft + width);
+  const target = swipeStartScrollLeft - (clientX - pressStartX);
+  scroll.scrollLeft = Math.min(Math.max(target, lower), upper);
+}
+
+// Settle the swipe: commit a single page turn when the drag crossed the distance
+// threshold or was a short quick flick; otherwise snap back to where it started.
+function endSwipe(clientX: number, time: number): void {
+  const scroll = scrollEl.value;
+  if (scroll !== null && pressPointerId !== null && scroll.hasPointerCapture(pressPointerId)) {
+    scroll.releasePointerCapture(pressPointerId);
+  }
+  gestureMode = "idle";
+  pressPointerId = null;
+  swiping.value = false;
+  const dx = clientX - pressStartX;
+  const commit =
+    Math.abs(dx) >= pageWidth() * SWIPE_COMMIT_FRACTION ||
+    (Math.abs(dx) >= FLICK_MIN_PX && time - pressStartTime <= FLICK_MAX_MS);
+  if (commit && dx < 0) {
+    nextPage();
+  } else if (commit && dx > 0) {
+    prevPage();
+  } else {
+    goToPage(swipeStartPage, true);
+  }
+}
+
 function onPointerDown(event: PointerEvent): void {
   if (!coarsePointer || draggingHandle !== null || !event.isPrimary) {
     return;
   }
   cancelPress();
+  swallowClick = false;
   pressPointerId = event.pointerId;
   pressStartX = event.clientX;
   pressStartY = event.clientY;
+  pressStartTime = event.timeStamp;
   gestureMode = "pressing";
   pressTimer = window.setTimeout(beginSelection, LONG_PRESS_MS);
 }
@@ -486,9 +565,29 @@ function onPointerMove(event: PointerEvent): void {
     return;
   }
   if (gestureMode === "pressing") {
-    if (Math.hypot(event.clientX - pressStartX, event.clientY - pressStartY) > MOVE_CANCEL_PX) {
-      cancelPress();
+    const dx = event.clientX - pressStartX;
+    const dy = event.clientY - pressStartY;
+    if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) {
+      // The finger moved before the long-press fired: this is a drag, not a tap
+      // or a word-select, so cancel both the press and its trailing click. A
+      // horizontal drag turns the page; a vertical one has nothing to scroll.
+      if (pressTimer !== undefined) {
+        window.clearTimeout(pressTimer);
+        pressTimer = undefined;
+      }
+      swallowClick = true;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        beginSwipe();
+        dragSwipe(event.clientX);
+      } else {
+        gestureMode = "idle";
+        pressPointerId = null;
+      }
     }
+    return;
+  }
+  if (gestureMode === "swiping") {
+    dragSwipe(event.clientX);
     return;
   }
   if (gestureMode === "selecting") {
@@ -496,12 +595,16 @@ function onPointerMove(event: PointerEvent): void {
   }
 }
 
-function onPointerUp(): void {
+function onPointerUp(event: PointerEvent): void {
   if (!coarsePointer) {
     return;
   }
   if (gestureMode === "pressing") {
     cancelPress();
+    return;
+  }
+  if (gestureMode === "swiping") {
+    endSwipe(event.clientX, event.timeStamp);
     return;
   }
   if (gestureMode === "selecting") {
@@ -520,6 +623,13 @@ function onPointerUp(): void {
 
 function onPointerCancel(): void {
   if (!coarsePointer) {
+    return;
+  }
+  if (gestureMode === "swiping") {
+    gestureMode = "idle";
+    pressPointerId = null;
+    swiping.value = false;
+    goToPage(swipeStartPage, true);
     return;
   }
   if (gestureMode === "selecting") {
@@ -577,6 +687,12 @@ function onHandleUp(): void {
 }
 
 function onClick(event: MouseEvent): void {
+  // A swipe (or any drag) ends in a click; consume that one so it doesn't also
+  // page or toggle chrome via the edge-tap path below.
+  if (swallowClick) {
+    swallowClick = false;
+    return;
+  }
   // Tapping a highlighted entity opens its popup; never pages or toggles chrome.
   const entityEl =
     event.target instanceof Element ? event.target.closest<HTMLElement>("[data-entity-id]") : null;
@@ -629,7 +745,7 @@ function onKeydown(event: KeyboardEvent): void {
 // but the browser latches touch-action at touchstart, so cancel the in-flight
 // scroll for the gesture's own moves with a non-passive listener.
 function onTouchMove(event: TouchEvent): void {
-  if (gestureMode === "selecting" || draggingHandle !== null) {
+  if (gestureMode === "selecting" || gestureMode === "swiping" || draggingHandle !== null) {
     event.preventDefault();
   }
 }
@@ -752,7 +868,11 @@ onBeforeUnmount(() => {
   <div
     ref="scrollEl"
     class="reader-scroll"
-    :class="{ 'reader-scroll--coarse': coarsePointer, 'reader-scroll--locked': scrollLocked }"
+    :class="{
+      'reader-scroll--coarse': coarsePointer,
+      'reader-scroll--locked': scrollLocked,
+      'reader-scroll--swiping': swiping,
+    }"
     @scroll="onScroll"
     @click="onClick"
     @pointerdown="onPointerDown"
@@ -842,9 +962,22 @@ onBeforeUnmount(() => {
   -webkit-touch-callout: none;
 }
 
+/* Touch: own paging and selection ourselves. Native momentum scrolling flings
+   across several pages before snapping; instead we drive a one-page-per-swipe
+   drag from the pointer handlers (see beginSwipe / endSwipe). */
+.reader-scroll--coarse {
+  touch-action: none;
+}
+
 /* While we own the gesture, stop the page from paging under the drag. */
 .reader-scroll--locked {
   touch-action: none;
+}
+
+/* The page tracks the finger during a swipe, so mandatory snap (which would jump
+   it per page-increment) is disabled until the drag settles. */
+.reader-scroll--swiping {
+  scroll-snap-type: none;
 }
 
 .reader-scroll::-webkit-scrollbar {
