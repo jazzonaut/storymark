@@ -50,6 +50,9 @@ internal sealed class UploadBookEndpoint(BookImportService import)
             case BookImportError.TooLarge:
                 await SendErrorAsync(413, $"File exceeds the maximum upload size of {outcome.MaxBytes} bytes.");
                 return;
+            case BookImportError.DecompressedTooLarge:
+                await SendErrorAsync(413, "EPUB is too large or has too many entries when decompressed.");
+                return;
             case BookImportError.NotEpub:
                 await SendErrorAsync(400, "File is not a valid EPUB (bad signature).");
                 return;

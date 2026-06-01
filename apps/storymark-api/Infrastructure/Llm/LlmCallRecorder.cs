@@ -1,17 +1,24 @@
 using System.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Storymark.Api.Domain.LlmCalls;
 using Storymark.Api.Infrastructure.Database;
 
 namespace Storymark.Api.Infrastructure.Llm;
 
 /// <summary>The single persistence chokepoint every LLM call routes through:
-/// times the invocation, estimates cost from <c>llm.costRates</c>, and writes
-/// one <c>llm_calls</c> row per call — successful or failed. A failed invocation
+/// times the invocation, estimates cost from the model's rate, and writes one
+/// <c>llm_calls</c> row per call — successful or failed. A failed invocation
 /// records a row with <c>Succeeded = false</c> and the error, then rethrows, so
 /// failures surface in the admin call log instead of vanishing. The spoiler-safety
-/// audit (CLAUDE.md, docs/plan.md §17) depends on no call site bypassing this.</summary>
+/// audit (CLAUDE.md, docs/plan.md §17) depends on no call site bypassing this.
+///
+/// <para>The audit row is written through a <em>dedicated</em> short-lived
+/// <see cref="StorymarkDbContext"/> resolved from a child scope, not the caller's
+/// scoped context. Recording a call must never flush the caller's other pending
+/// changes (a shared <c>SaveChanges</c> is unit-of-work-wide), and a failed call's
+/// audit row must persist even when the caller's work is being abandoned.</para></summary>
 internal sealed class LlmCallRecorder(
-    StorymarkDbContext db,
+    IServiceScopeFactory scopeFactory,
     ILogger<LlmCallRecorder> logger)
 {
     public async Task<T> RecordAsync<T>(
@@ -40,7 +47,7 @@ internal sealed class LlmCallRecorder(
 
         stopwatch.Stop();
 
-        db.LlmCalls.Add(new LlmCall
+        var call = new LlmCall
         {
             Id = Guid.NewGuid(),
             Task = descriptor.Task,
@@ -56,8 +63,8 @@ internal sealed class LlmCallRecorder(
             SectionIndex = descriptor.SectionIndex,
             UsedFutureContent = descriptor.UsedFutureContent,
             CreatedAt = createdAt,
-        });
-        await db.SaveChangesAsync(ct);
+        };
+        await PersistAsync(call, ct);
 
         logger.LogInformation(
             "Recorded {Task} call to {Provider}:{Model} in {LatencyMs}ms",
@@ -72,7 +79,7 @@ internal sealed class LlmCallRecorder(
     private async Task RecordFailureAsync(
         LlmCallDescriptor descriptor, Exception ex, int latencyMs, DateTimeOffset createdAt)
     {
-        db.LlmCalls.Add(new LlmCall
+        var call = new LlmCall
         {
             Id = Guid.NewGuid(),
             Task = descriptor.Task,
@@ -90,15 +97,23 @@ internal sealed class LlmCallRecorder(
             Succeeded = false,
             Error = Truncate(ex.Message, 2000),
             CreatedAt = createdAt,
-        });
+        };
 
-        // The triggering call already failed; persist the audit row regardless of
-        // the original token so the failure isn't lost on a cancelled request.
-        await db.SaveChangesAsync(CancellationToken.None);
+        // The triggering call already failed; persist the audit row with a fresh token
+        // so the failure isn't lost when the original request is being cancelled.
+        await PersistAsync(call, CancellationToken.None);
 
         logger.LogWarning(
             ex, "LLM {Task} call to {Provider}:{Model} failed after {LatencyMs}ms",
             descriptor.Task, descriptor.Provider, descriptor.Model, latencyMs);
+    }
+
+    private async Task PersistAsync(LlmCall call, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<StorymarkDbContext>();
+        db.LlmCalls.Add(call);
+        await db.SaveChangesAsync(ct);
     }
 
     private static string Truncate(string value, int max) =>

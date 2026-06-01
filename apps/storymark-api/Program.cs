@@ -49,9 +49,13 @@ try
     builder.Services.AddHostedService<SettingsChangeListener>();
 
     // Base URL comes from the resolved provider per call (ADR-0016), so the typed
-    // clients carry no fixed BaseAddress.
-    builder.Services.AddHttpClient<OllamaClient>();
-    builder.Services.AddHttpClient<OpenAiCompatibleClient>();
+    // clients carry no fixed BaseAddress. The timeout is generous: local CPU
+    // inference of a long section can take minutes, and the default 100s would cut
+    // it off (silently dropping an extraction section). Override via
+    // `Llm:HttpTimeoutSeconds`. Transient blips are retried in HttpResilience.
+    var llmTimeout = TimeSpan.FromSeconds(builder.Configuration.GetValue<int?>("Llm:HttpTimeoutSeconds") ?? 300);
+    builder.Services.AddHttpClient<OllamaClient>(c => c.Timeout = llmTimeout);
+    builder.Services.AddHttpClient<OpenAiCompatibleClient>(c => c.Timeout = llmTimeout);
     builder.Services.AddTransient<IChatModelClient>(sp => sp.GetRequiredService<OllamaClient>());
     builder.Services.AddTransient<IChatModelClient>(sp => sp.GetRequiredService<OpenAiCompatibleClient>());
     builder.Services.AddScoped<LlmCallRecorder>();

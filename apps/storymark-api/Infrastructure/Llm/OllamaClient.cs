@@ -20,7 +20,8 @@ internal sealed class OllamaClient(HttpClient http) : IChatModelClient
             Messages = WireChatMessage.From(request.Messages),
         };
 
-        using var response = await http.PostAsJsonAsync(endpoint.ResolveUri("api/chat"), payload, ct);
+        using var response = await HttpResilience.SendWithRetryAsync(
+            token => http.PostAsJsonAsync(endpoint.ResolveUri("api/chat"), payload, token), ct);
         ThrowIfModelMissing(response, request.Model);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<ChatBody>(ct)
@@ -38,7 +39,8 @@ internal sealed class OllamaClient(HttpClient http) : IChatModelClient
     {
         var payload = new WireEmbedRequest { Model = request.Model, Input = request.Input };
 
-        using var response = await http.PostAsJsonAsync(endpoint.ResolveUri("api/embed"), payload, ct);
+        using var response = await HttpResilience.SendWithRetryAsync(
+            token => http.PostAsJsonAsync(endpoint.ResolveUri("api/embed"), payload, token), ct);
         ThrowIfModelMissing(response, request.Model);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<EmbedBody>(ct)

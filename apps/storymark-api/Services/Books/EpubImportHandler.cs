@@ -1,4 +1,7 @@
+using System.IO.Compression;
+using Microsoft.Extensions.Options;
 using Storymark.Api.Domain.Books;
+using Storymark.Api.Infrastructure.Storage;
 using VersOne.Epub;
 
 namespace Storymark.Api.Services.Books;
@@ -6,14 +9,19 @@ namespace Storymark.Api.Services.Books;
 /// <summary>Reads EPUBs via VersOne.Epub. <see cref="SniffMetadataAsync"/> sniffs
 /// title/author/language at upload time (S1.1); <see cref="ParseAsync"/> reads the
 /// cover, reading order, per-section XHTML, and embedded images for the background
-/// processing job (S2.1).</summary>
-internal sealed class EpubImportHandler : IBookImportHandler
+/// processing job (S2.1). Both reject an over-large archive before reading it into
+/// memory (<see cref="EnsureWithinLimits"/>), so a zip bomb can't OOM the worker.</summary>
+internal sealed class EpubImportHandler(IOptions<StorageOptions> options) : IBookImportHandler
 {
+    private readonly long _maxDecompressedBytes = options.Value.MaxDecompressedBytes;
+    private readonly int _maxEntries = options.Value.MaxArchiveEntries;
+
     public bool CanHandle(string format) =>
         string.Equals(format, "epub", StringComparison.OrdinalIgnoreCase);
 
     public async Task<BookMetadata> SniffMetadataAsync(string filePath, CancellationToken ct)
     {
+        EnsureWithinLimits(filePath);
         var epub = await EpubReader.ReadBookAsync(filePath);
 
         var author = string.IsNullOrWhiteSpace(epub.Author) ? null : epub.Author;
@@ -31,6 +39,7 @@ internal sealed class EpubImportHandler : IBookImportHandler
 
     public async Task<BookContent> ParseAsync(string filePath, CancellationToken ct)
     {
+        EnsureWithinLimits(filePath);
         var epub = await EpubReader.ReadBookAsync(filePath);
         var titles = BuildTitleMap(epub.Navigation);
 
@@ -56,6 +65,32 @@ internal sealed class EpubImportHandler : IBookImportHandler
             Sections = sections,
             ImagesByPath = images,
         };
+    }
+
+    /// <summary>Rejects an archive whose declared uncompressed size or entry count
+    /// exceeds the configured limits, reading only the zip central directory (no
+    /// decompression) so the check happens before the book is loaded into memory.</summary>
+    private void EnsureWithinLimits(string filePath)
+    {
+        using var archive = ZipFile.OpenRead(filePath);
+        long totalUncompressed = 0;
+        var entryCount = 0;
+        foreach (var entry in archive.Entries)
+        {
+            entryCount++;
+            if (entryCount > _maxEntries)
+            {
+                throw new InvalidDataException(
+                    $"EPUB has more than {_maxEntries} archive entries; refusing to process.");
+            }
+
+            totalUncompressed += entry.Length;
+            if (totalUncompressed > _maxDecompressedBytes)
+            {
+                throw new InvalidDataException(
+                    $"EPUB decompresses to more than {_maxDecompressedBytes} bytes; refusing to process.");
+            }
+        }
     }
 
     private static ParsedCover? ExtractCover(EpubBook epub)

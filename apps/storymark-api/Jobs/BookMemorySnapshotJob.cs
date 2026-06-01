@@ -63,6 +63,20 @@ internal sealed class BookMemorySnapshotJob(
             book.ProcessingError = ex.Message;
             await SetStatusAsync(book, ProcessingStatus.Failed, ct);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // An unparseable composition already degrades to a deterministic merge, so an
+            // exception escaping here is a setup/persistence error. Land the book on Failed
+            // with the reason rather than wedging it in "BuildingMemorySnapshots" after
+            // Hangfire exhausts its retries.
+            logger.LogError(ex, "BookMemorySnapshotJob failed for book {BookId}: unexpected error", bookId);
+            book.ProcessingError = ex.Message;
+            await SetStatusAsync(book, ProcessingStatus.Failed, CancellationToken.None);
+        }
     }
 
     private async Task BuildAllAsync(Book book, CancellationToken ct)

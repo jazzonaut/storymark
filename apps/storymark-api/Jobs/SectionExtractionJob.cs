@@ -80,6 +80,20 @@ internal sealed class SectionExtractionJob(
             book.ProcessingError = ex.Message;
             await SetStatusAsync(book, ProcessingStatus.Failed, ct);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Per-section transient failures are already swallowed inside the loop, so an
+            // exception escaping here is a setup/persistence error. Land the book on Failed
+            // with the reason rather than letting Hangfire retry into a permanent
+            // intermediate ("ExtractingPerSection") status with nothing to act on.
+            logger.LogError(ex, "SectionExtractionJob failed for book {BookId}: unexpected error", bookId);
+            book.ProcessingError = ex.Message;
+            await SetStatusAsync(book, ProcessingStatus.Failed, CancellationToken.None);
+        }
     }
 
     private async Task ExtractAllAsync(Book book, CancellationToken ct)

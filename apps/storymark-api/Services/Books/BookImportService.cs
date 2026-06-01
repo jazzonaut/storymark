@@ -1,5 +1,6 @@
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Storymark.Api.Domain.Books;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Infrastructure.Storage;
@@ -14,6 +15,7 @@ internal enum BookImportError
     Empty,
     NotEpub,
     TooLarge,
+    DecompressedTooLarge,
 }
 
 internal sealed record BookImportOutcome
@@ -72,8 +74,26 @@ internal sealed class BookImportService(
             return BookImportOutcome.Ok(existing);
         }
 
+        return await CreateBookAsync(fileName, contentHash, filePath, maxBytes, ct);
+    }
+
+    private async Task<BookImportOutcome> CreateBookAsync(
+        string fileName, string contentHash, string filePath, long maxBytes, CancellationToken ct)
+    {
         var handler = handlers.First(h => h.CanHandle(Format));
-        var metadata = await handler.SniffMetadataAsync(filePath, ct);
+
+        BookMetadata metadata;
+        try
+        {
+            metadata = await handler.SniffMetadataAsync(filePath, ct);
+        }
+        catch (InvalidDataException)
+        {
+            // The archive's declared decompressed size/entry count exceeds the safety
+            // limits (zip-bomb guard). The original is already stored under its hash;
+            // leave it as a bounded, recoverable orphan and reject the upload cleanly.
+            return BookImportOutcome.Failed(BookImportError.DecompressedTooLarge, maxBytes);
+        }
 
         var title = string.IsNullOrWhiteSpace(metadata.Title)
             ? Path.GetFileNameWithoutExtension(fileName)
@@ -95,11 +115,32 @@ internal sealed class BookImportService(
         };
 
         db.Books.Add(book);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            // A concurrent upload of identical content won the race on the unique
+            // books_content_hash index between the dedup check above and this insert.
+            // Return its row (the same outcome the dedup branch would) instead of
+            // surfacing the constraint violation as a 500. It already enqueued the job.
+            db.Entry(book).State = EntityState.Detached;
+            var winner = await db.Books.FirstOrDefaultAsync(b => b.ContentHash == contentHash, ct);
+            if (winner is not null)
+            {
+                return BookImportOutcome.Ok(winner);
+            }
+
+            throw;
+        }
 
         // Only newly-created books are enqueued; the dedup path above returns the
         // existing row (already processed or in flight) without re-queuing.
         jobs.Enqueue<ProcessBookJob>(j => j.RunAsync(book.Id, CancellationToken.None));
         return BookImportOutcome.Ok(book);
     }
+
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 }

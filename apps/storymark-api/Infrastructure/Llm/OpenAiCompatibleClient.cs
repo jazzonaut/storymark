@@ -20,8 +20,8 @@ internal sealed class OpenAiCompatibleClient(HttpClient http) : IChatModelClient
             Messages = WireChatMessage.From(request.Messages),
         };
 
-        using var message = BuildRequest(endpoint, "chat/completions", payload);
-        using var response = await http.SendAsync(message, ct);
+        using var response = await HttpResilience.SendWithRetryAsync(
+            token => http.SendAsync(BuildRequest(endpoint, "chat/completions", payload), token), ct);
         await EnsureSuccessAsync(response, ct);
         var body = await response.Content.ReadFromJsonAsync<ChatBody>(ct)
             ?? throw new InvalidOperationException("OpenAI-compatible API returned an empty chat response.");
@@ -41,8 +41,8 @@ internal sealed class OpenAiCompatibleClient(HttpClient http) : IChatModelClient
     {
         var payload = new WireEmbedRequest { Model = request.Model, Input = request.Input };
 
-        using var message = BuildRequest(endpoint, "embeddings", payload);
-        using var response = await http.SendAsync(message, ct);
+        using var response = await HttpResilience.SendWithRetryAsync(
+            token => http.SendAsync(BuildRequest(endpoint, "embeddings", payload), token), ct);
         await EnsureSuccessAsync(response, ct);
         var body = await response.Content.ReadFromJsonAsync<EmbedBody>(ct)
             ?? throw new InvalidOperationException("OpenAI-compatible API returned an empty embedding response.");
