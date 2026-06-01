@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import type { AssistantSource } from "@storymark/shared-types";
 import BookmarksPanel from "@/components/reader/BookmarksPanel.vue";
+import ContentsPanel from "@/components/reader/ContentsPanel.vue";
 import EntityPopup from "@/components/reader/EntityPopup.vue";
 import MemoryPanel from "@/components/reader/MemoryPanel.vue";
 import PaginatedSection from "@/components/reader/PaginatedSection.vue";
@@ -26,6 +27,9 @@ import { useSectionRecap } from "@/composables/use-section-recap";
 import { sectionLabel } from "@/utils/section-label";
 
 const CHROME_IDLE_MS = 3500;
+// Average adult silent-reading speed; drives the "time left" estimate. A rough
+// constant is fine — the figure is a guide, not a promise.
+const WORDS_PER_MINUTE = 230;
 
 const route = useRoute();
 const bookId = String(route.params.id);
@@ -41,7 +45,6 @@ const {
   currentSectionIndex,
   currentParagraphIndex,
   entryParagraph,
-  sectionCount,
   currentSectionTitle,
   nextSection,
   prevSection,
@@ -80,6 +83,7 @@ const phase = ref<"loading" | "ready" | "error">("loading");
 const chromeVisible = ref(true);
 const settingsOpen = ref(false);
 const bookmarksOpen = ref(false);
+const contentsOpen = ref(false);
 const memoryPanelOpen = ref(false);
 const selection = ref<ReaderSelection | null>(null);
 const highlight = ref<{ paragraphIndex: number; nonce: number } | null>(null);
@@ -103,15 +107,44 @@ const isCurrentBookmarked = computed<boolean>(() =>
 
 const bookTitle = ref("");
 
-const positionLabel = computed<string>(
-  () => `${String(currentPosition.value + 1)} / ${String(sectionCount.value)}`,
-);
 const returnLabel = computed<string>(() =>
   returnPoint.value === null ? "" : sectionLabel(manifest.value, returnPoint.value.sectionIndex),
 );
 const sectionProgress = computed<number>(() =>
   pageInfo.value.total > 0 ? (pageInfo.value.page + 1) / pageInfo.value.total : 0,
 );
+const totalWords = computed<number>(() =>
+  manifest.value.reduce((sum, section) => sum + section.wordCount, 0),
+);
+// Word-weighted progress through the whole book: every word in sections already
+// read, plus the within-section page fraction of the current one. Word counts (not
+// section index) because section lengths vary wildly — a one-line title page next
+// to a long chapter — so a section-index percent would lurch.
+const bookProgress = computed<number>(() => {
+  const total = totalWords.value;
+  if (total === 0) {
+    return 0;
+  }
+  let read = 0;
+  for (let i = 0; i < currentPosition.value; i++) {
+    read += manifest.value[i]?.wordCount ?? 0;
+  }
+  read += sectionProgress.value * (manifest.value[currentPosition.value]?.wordCount ?? 0);
+  return Math.min(read / total, 1);
+});
+const bookPercentLabel = computed<string>(() => `${String(Math.round(bookProgress.value * 100))}%`);
+const timeLeftLabel = computed<string>(() => {
+  const minutes = Math.ceil((totalWords.value * (1 - bookProgress.value)) / WORDS_PER_MINUTE);
+  if (minutes <= 0) {
+    return "Finished";
+  }
+  if (minutes < 60) {
+    return `${String(minutes)} min left`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins === 0 ? `${String(hours)} hr left` : `${String(hours)} hr ${String(mins)} min left`;
+});
 // What the assistant treats as "read so far" in the current section: the end
 // offset of the paragraph at the top of the page (the spoiler boundary).
 const currentLocation = computed<number>(
@@ -136,7 +169,12 @@ function scheduleHide(): void {
     window.clearTimeout(idleTimer);
   }
   idleTimer = window.setTimeout(() => {
-    if (!settingsOpen.value && !bookmarksOpen.value && !memoryPanelOpen.value) {
+    if (
+      !settingsOpen.value &&
+      !bookmarksOpen.value &&
+      !contentsOpen.value &&
+      !memoryPanelOpen.value
+    ) {
       chromeVisible.value = false;
     }
   }, CHROME_IDLE_MS);
@@ -166,6 +204,18 @@ function openSettings(): void {
 function openBookmarks(): void {
   bookmarksOpen.value = true;
   chromeVisible.value = true;
+}
+
+function openContents(): void {
+  contentsOpen.value = true;
+  chromeVisible.value = true;
+}
+
+// Jump to the start of a section chosen from the contents list.
+async function jumpToSection(sectionIndex: number): Promise<void> {
+  returnPoint.value = null;
+  contentsOpen.value = false;
+  await goTo(sectionIndex, 0);
 }
 
 // The toolbar entry opens the Memory panel to the tab the reader left it on
@@ -435,13 +485,15 @@ onBeforeUnmount(() => {
       <ReaderToolbar
         :title="bookTitle"
         :section-title="currentSectionTitle"
-        :position="positionLabel"
+        :book-percent="bookPercentLabel"
+        :time-left="timeLeftLabel"
         :visible="chromeVisible"
         :offline="!isOnline"
         :bookmarked="isCurrentBookmarked"
         @open-settings="openSettings"
         @open-bookmarks="openBookmarks"
         @open-memory="openMemoryPanel"
+        @open-contents="openContents"
         @toggle-bookmark="toggleBookmark"
       />
 
@@ -506,6 +558,14 @@ onBeforeUnmount(() => {
         @close="bookmarksOpen = false"
         @jump="(bookmark) => jumpToBookmark(bookmark.sectionIndex, bookmark.paragraphIndex)"
         @remove="removeById"
+      />
+
+      <ContentsPanel
+        :open="contentsOpen"
+        :manifest="manifest"
+        :current-section-index="currentSectionIndex"
+        @close="contentsOpen = false"
+        @jump="jumpToSection"
       />
 
       <MemoryPanel

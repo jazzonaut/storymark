@@ -5,7 +5,8 @@ import BookmarkButton from "@/components/reader/BookmarkButton.vue";
 defineProps<{
   title: string;
   sectionTitle: string | null;
-  position: string;
+  bookPercent: string;
+  timeLeft: string;
   visible: boolean;
   offline: boolean;
   bookmarked: boolean;
@@ -15,6 +16,7 @@ defineEmits<{
   (e: "open-settings"): void;
   (e: "open-bookmarks"): void;
   (e: "open-memory"): void;
+  (e: "open-contents"): void;
   (e: "toggle-bookmark"): void;
 }>();
 </script>
@@ -31,12 +33,18 @@ defineEmits<{
     >
       ‹ Library
     </RouterLink>
-    <div class="min-w-0 flex-1 text-center">
-      <p class="truncate text-sm font-medium" :title="title">{{ title }}</p>
-      <p class="truncate text-xs text-[var(--sm-muted)]">
-        {{ sectionTitle ?? "Untitled section" }} · {{ position }}
-      </p>
-    </div>
+    <button
+      type="button"
+      class="min-w-0 flex-1 rounded px-2 py-1 text-center hover:bg-[var(--sm-surface)]"
+      aria-label="Open contents"
+      @click="$emit('open-contents')"
+    >
+      <span class="block truncate text-sm font-medium" :title="title">{{ title }}</span>
+      <span class="flex min-w-0 items-baseline justify-center gap-1 text-xs text-[var(--sm-muted)]">
+        <span class="min-w-0 truncate">{{ sectionTitle ?? "Untitled section" }}</span>
+        <span class="shrink-0 whitespace-nowrap">· {{ bookPercent }} · {{ timeLeft }}</span>
+      </span>
+    </button>
     <span
       v-if="offline"
       class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900 dark:text-amber-200"

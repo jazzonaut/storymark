@@ -1,13 +1,9 @@
 <script setup lang="ts">
-import { defineAsyncComponent, ref, shallowRef, watch } from "vue";
-import type { BookEvent, SectionSummary } from "@storymark/shared-types";
-import EventDetailCard from "@/components/reader/EventDetailCard.vue";
+import { watch } from "vue";
+import type { SectionSummary } from "@storymark/shared-types";
 import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
+import TimelineList from "@/components/reader/TimelineList.vue";
 import { useTimeline } from "@/composables/use-timeline";
-import { sectionLabel } from "@/utils/section-label";
-
-// ECharts is heavy; load it only when the timeline tab is actually opened.
-const TimelineChart = defineAsyncComponent(() => import("@/components/reader/TimelineChart.vue"));
 
 const props = defineProps<{
   bookId: string;
@@ -22,16 +18,10 @@ const emit = defineEmits<{
 }>();
 
 const { events, entityNames, isLoading, error, load } = useTimeline();
-const selected = shallowRef<BookEvent | null>(null);
-
-function onSelect(event: BookEvent): void {
-  selected.value = event;
-}
 
 watch(
   () => [props.bookId, props.currentSection] as const,
   () => {
-    selected.value = null;
     if (props.currentSection !== null) {
       void load(props.bookId, props.currentSection, props.currentLocation);
     }
@@ -52,18 +42,12 @@ watch(
       idle="No events yet — they appear here as you read through the story."
     />
 
-    <template v-else>
-      <TimelineChart :events="events" :entity-names="entityNames" @select="onSelect" />
-      <p v-if="selected === null" class="text-center text-xs text-[var(--sm-muted)]">
-        Tap a point to see the event.
-      </p>
-      <EventDetailCard
-        v-else
-        :event="selected"
-        :entity-names="entityNames"
-        :section-label="sectionLabel(manifest, selected.sectionIndex)"
-        @jump="(payload) => emit('jump', payload)"
-      />
-    </template>
+    <TimelineList
+      v-else
+      :events="events"
+      :entity-names="entityNames"
+      :manifest="manifest"
+      @jump="(payload) => emit('jump', payload)"
+    />
   </div>
 </template>

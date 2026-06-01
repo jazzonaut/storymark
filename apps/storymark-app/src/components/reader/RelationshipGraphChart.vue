@@ -38,13 +38,6 @@ const emit = defineEmits<{
 const { settings } = useReaderSettings();
 const labelColors = computed(() => LABEL_COLORS[settings.theme]);
 
-// Edges reference entities by id; ECharts links resolve against node names, so
-// translate through this map (every endpoint is a known node — the composable
-// dropped dangling edges).
-const nameById = computed<ReadonlyMap<string, string>>(
-  () => new Map(props.nodes.map((node) => [node.entityId, node.name])),
-);
-
 // Mention count isn't on the entity DTO, so node size reflects how connected the
 // entity is (incident relationships); isolated nodes keep a legible minimum.
 function symbolSize(degree: number): number {
@@ -63,21 +56,15 @@ function polarityColor(polarity: string | null): string {
 }
 
 const option = computed<ChartOption>(() => {
-  const links = props.edges.flatMap((edge) => {
-    const source = nameById.value.get(edge.source);
-    const target = nameById.value.get(edge.target);
-    if (source === undefined || target === undefined) {
-      return [];
-    }
-    return [
-      {
-        source,
-        target,
-        label: { formatter: edge.relationshipType },
-        lineStyle: { color: polarityColor(edge.polarity), width: 1.5, opacity: 0.7 },
-      },
-    ];
-  });
+  // Links reference nodes by id: each node is registered with `id: entityId`, and
+  // ECharts keys graph nodes by `id` when present (not by name). The composable has
+  // already dropped any edge whose endpoints aren't among the visible nodes.
+  const links = props.edges.map((edge) => ({
+    source: edge.source,
+    target: edge.target,
+    label: { formatter: edge.relationshipType },
+    lineStyle: { color: polarityColor(edge.polarity), width: 1.5, opacity: 0.7 },
+  }));
   return {
     tooltip: { trigger: "item", confine: true },
     series: [
@@ -118,5 +105,7 @@ function onClick(params: ECElementEvent): void {
 </script>
 
 <template>
-  <VChart :option="option" autoresize class="h-72 w-full" @click="onClick" />
+  <div class="h-72 w-full">
+    <VChart :option="option" autoresize class="h-full w-full" @click="onClick" />
+  </div>
 </template>
