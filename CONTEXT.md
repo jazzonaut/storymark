@@ -78,6 +78,7 @@ Resolved:
 
 Newest first. Full record in `docs/adr/`.
 
+- ADR-0017 — Fully custom touch selection (supersedes ADR-0015's mechanics). On coarse pointers `PaginatedSection.vue` owns the whole gesture (`user-select:none` + long-press word-snap via `Intl.Segmenter` + `caretPositionFromPoint` extend + custom drag-handles), removing the native-selection flash and making selections resizable; clamped to the current page, multiline within it. Popover gains **Copy**. Desktop keeps native selection.
 - ADR-0014 — In-place reindex, dimensionless `vector` column, no HNSW (supersedes ADR-0010's coexistence mechanics; the no-silent-degradation intent stands). Enables any-dimension model swaps at single-operator scale.
 - ADR-0013 — SPA served by the API as static files (same-origin, single image); the API image now carries the built Vue app in `wwwroot`.
 - ADR-0012 — Automated tests deferred until after Phase 6.

@@ -53,7 +53,22 @@ function identify(): void {
   void resolve(props.bookId, props.selection.text, props.currentSection, props.currentLocation);
 }
 
+// On touch the custom selection has no native copy; offer it here. Best-effort —
+// the clipboard can reject (denied permission), and there's nothing actionable
+// to show for that, so close either way.
+function copy(): void {
+  const close = (): void => {
+    emit("close");
+  };
+  void navigator.clipboard.writeText(props.selection.text).then(close).catch(close);
+}
+
 function onPointerDown(event: PointerEvent): void {
+  // A custom selection handle drag starts with a pointerdown outside the
+  // popover; it must not be read as a dismissal.
+  if (event.target instanceof Element && event.target.closest("[data-sm-selection-handle]")) {
+    return;
+  }
   if (event.target instanceof Node && root.value && !root.value.contains(event.target)) {
     emit("close");
   }
@@ -116,6 +131,13 @@ onBeforeUnmount(() => {
         @click="emit('ask', selection.text)"
       >
         Ask…
+      </button>
+      <button
+        type="button"
+        class="rounded-full bg-[var(--sm-surface)] px-3 py-1 text-xs font-medium text-[var(--sm-fg)] hover:bg-[var(--sm-accent)] hover:text-white"
+        @click="copy"
+      >
+        Copy
       </button>
     </div>
   </div>

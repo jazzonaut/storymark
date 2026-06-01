@@ -1,7 +1,13 @@
 # 0015 — Custom selection repaint to suppress the mobile selection toolbar
 
-**Status:** accepted
+**Status:** superseded by ADR 0017
 **Date:** 2026-06-01
+
+> Superseded by [ADR 0017](0017-fully-custom-touch-selection.md): the "let native
+> selection form, then steal it" mechanic below caused a visible selection flash
+> and left no way to resize the selection. ADR 0017 owns the touch gesture end to
+> end instead. The toolbar-overlap problem and the touch/desktop split it
+> identified still stand.
 
 ## Context
 
