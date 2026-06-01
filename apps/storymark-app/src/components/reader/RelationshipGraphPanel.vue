@@ -73,7 +73,7 @@ watch(
       <MemoryStaleBadge v-if="isStale" />
       <RelationshipGraphChart :nodes="nodes" :edges="edges" @node-tap="onNodeTap" />
       <p class="text-center text-xs text-[var(--sm-muted)]">
-        Drag to rearrange · pinch or scroll to zoom · tap a name to learn more.
+        Drag to rearrange · pinch or scroll to zoom · tap a name, then the card, for details.
       </p>
     </template>
   </div>

@@ -1,6 +1,7 @@
-import { createRouter, createWebHistory } from "vue-router";
+import { createRouter, createWebHistory, START_LOCATION } from "vue-router";
 import type { RouteRecordRaw } from "vue-router";
 import LibraryView from "@/views/LibraryView.vue";
+import { getLastOpenedBookId } from "@/db/storymark-db";
 
 const routes: readonly RouteRecordRaw[] = [
   { path: "/", name: "library", component: LibraryView },
@@ -51,4 +52,18 @@ const routes: readonly RouteRecordRaw[] = [
 export const router = createRouter({
   history: createWebHistory(),
   routes: [...routes],
+});
+
+// On a cold app load only — the very first navigation, where `from` is still the
+// sentinel START_LOCATION — resume the book the reader last had open instead of
+// dropping them on the library. Later visits to "/" (tapping "Back to library")
+// are left alone, so the library stays reachable.
+router.beforeEach(async (to, from) => {
+  if (from === START_LOCATION && to.name === "library") {
+    const bookId = await getLastOpenedBookId();
+    if (bookId !== null) {
+      return { name: "reader", params: { id: bookId } };
+    }
+  }
+  return true;
 });

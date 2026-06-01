@@ -2,6 +2,7 @@
 import { ref, toRef } from "vue";
 import RangeControl from "@/components/reader/RangeControl.vue";
 import SegmentedControl from "@/components/reader/SegmentedControl.vue";
+import ToggleSwitch from "@/components/reader/ToggleSwitch.vue";
 import CloseButton from "@/components/reader/CloseButton.vue";
 import { useClearLocalData, UnsyncedChangesError } from "@/composables/use-clear-local-data";
 import { useFocusTrap } from "@/composables/use-focus-trap";
@@ -51,6 +52,7 @@ const FONTS: readonly { value: ReaderFontFamily; label: string }[] = [
   { value: "sans", label: "Sans" },
   { value: "mono", label: "Mono" },
   { value: "dyslexic", label: "Dyslexic" },
+  { value: "lexend", label: "Lexend" },
 ];
 
 const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [
@@ -136,6 +138,16 @@ const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [
           @update:model-value="(value) => update('contentWidthPx', value)"
         />
 
+        <RangeControl
+          label="Page margins"
+          :model-value="settings.pageMarginPx"
+          :min="0"
+          :max="80"
+          :step="4"
+          unit="px"
+          @update:model-value="(value) => update('pageMarginPx', value)"
+        />
+
         <div>
           <p class="mb-1 text-sm font-medium">Entity highlight</p>
           <SegmentedControl
@@ -145,24 +157,17 @@ const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [
           />
         </div>
 
-        <div class="flex items-center justify-between">
-          <p class="text-sm font-medium">Story-so-far recaps</p>
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="settings.recapCardOnSectionEntry"
-            class="relative h-6 w-11 shrink-0 rounded-full transition-colors"
-            :class="
-              settings.recapCardOnSectionEntry ? 'bg-[var(--sm-accent)]' : 'bg-[var(--sm-muted)]/30'
-            "
-            @click="update('recapCardOnSectionEntry', !settings.recapCardOnSectionEntry)"
-          >
-            <span
-              class="absolute top-0.5 left-0.5 size-5 rounded-full bg-white transition-transform"
-              :class="settings.recapCardOnSectionEntry ? 'translate-x-5' : 'translate-x-0'"
-            ></span>
-          </button>
-        </div>
+        <ToggleSwitch
+          label="Fullscreen"
+          :model-value="settings.fullscreen"
+          @update:model-value="(value) => update('fullscreen', value)"
+        />
+
+        <ToggleSwitch
+          label="Story-so-far recaps"
+          :model-value="settings.recapCardOnSectionEntry"
+          @update:model-value="(value) => update('recapCardOnSectionEntry', value)"
+        />
 
         <button
           type="button"

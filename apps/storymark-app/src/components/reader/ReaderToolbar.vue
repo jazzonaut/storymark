@@ -19,7 +19,7 @@ defineEmits<{
 
 <template>
   <header
-    class="absolute inset-x-0 top-0 z-20 flex items-center gap-3 border-b border-[var(--sm-muted)]/20 bg-[var(--sm-bg)]/95 px-4 py-3 backdrop-blur transition-transform duration-200"
+    class="absolute inset-x-0 top-0 z-20 flex items-center gap-3 border-b border-[var(--sm-muted)]/20 bg-[var(--sm-bg)]/95 px-4 py-2 backdrop-blur transition-transform duration-200"
     :class="visible ? 'translate-y-0' : '-translate-y-full'"
   >
     <RouterLink
@@ -52,18 +52,18 @@ defineEmits<{
     <button
       type="button"
       class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
-      aria-label="Bookmarks"
-      @click="$emit('open-bookmarks')"
-    >
-      ☰
-    </button>
-    <button
-      type="button"
-      class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
       aria-label="Reader settings"
       @click="$emit('open-settings')"
     >
       Aa
+    </button>
+    <button
+      type="button"
+      class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
+      aria-label="Bookmarks"
+      @click="$emit('open-bookmarks')"
+    >
+      ☰
     </button>
     <button
       type="button"

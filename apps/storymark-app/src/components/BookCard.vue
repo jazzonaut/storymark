@@ -76,7 +76,7 @@ const coverFailed = ref(false);
       :class="isReadable ? 'group cursor-pointer' : ''"
     >
       <div
-        class="flex aspect-[2/3] items-center justify-center overflow-hidden rounded-lg bg-zinc-100 transition group-hover:opacity-90 dark:bg-zinc-800"
+        class="relative flex aspect-[2/3] items-center justify-center overflow-hidden rounded-lg bg-zinc-100 transition group-hover:opacity-90 dark:bg-zinc-800"
       >
         <img
           v-if="!coverFailed"
@@ -86,15 +86,15 @@ const coverFailed = ref(false);
           @error="coverFailed = true"
         />
         <span v-else class="px-2 text-center text-xs text-[var(--sm-muted)]">{{ book.title }}</span>
+        <span
+          class="absolute bottom-1 left-1 inline-block w-fit rounded-sm px-1.5 py-px text-[10px] font-medium opacity-90"
+          :class="statusClass"
+        >
+          {{ statusLabel }}
+        </span>
       </div>
       <h2 class="mt-2 line-clamp-2 text-sm font-medium" :title="book.title">{{ book.title }}</h2>
       <p class="text-xs text-[var(--sm-muted)]">{{ book.author ?? "Unknown author" }}</p>
-      <span
-        class="mt-1 inline-block w-fit rounded-full px-2 py-0.5 text-xs font-medium"
-        :class="statusClass"
-      >
-        {{ statusLabel }}
-      </span>
       <p
         v-if="book.processingError"
         class="mt-1 text-xs text-red-700 dark:text-red-300"

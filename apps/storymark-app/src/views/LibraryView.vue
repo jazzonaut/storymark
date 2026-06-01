@@ -79,6 +79,7 @@ onUnmounted(() => {
   <main class="min-h-screen p-6">
     <header class="mb-6 flex items-center justify-between gap-3">
       <h1 class="flex items-center gap-2 text-2xl font-semibold">
+        <img src="/favicon.svg" alt="" class="h-7 w-7 rounded-md" />
         Storymark
         <span
           v-if="apiUnreachable"

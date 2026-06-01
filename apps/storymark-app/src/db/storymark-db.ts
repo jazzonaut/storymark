@@ -108,12 +108,14 @@ export interface StoredReaderSettings {
   readonly lineHeight: number;
   readonly paragraphSpacingEm: number;
   readonly contentWidthPx: number;
+  readonly pageMarginPx: number;
   readonly theme: ReaderTheme;
   readonly entityHighlight: EntityHighlightMode;
   readonly recapCardOnSectionEntry: boolean;
+  readonly fullscreen: boolean;
 }
 
-export type ReaderFontFamily = "serif" | "sans" | "mono" | "dyslexic";
+export type ReaderFontFamily = "serif" | "sans" | "mono" | "dyslexic" | "lexend";
 export type ReaderTheme = "light" | "sepia" | "dark";
 export type EntityHighlightMode = "off" | "subtle" | "always";
 
@@ -263,6 +265,19 @@ export async function purgeBookData(bookId: string): Promise<void> {
       .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
       .delete(),
   ]);
+}
+
+/** The most recently opened book on this device, or null if none has been opened.
+ * Drives the cold-load redirect that resumes the reader's last book instead of the
+ * library. `lastOpenedAt` is an ISO 8601 string, so a lexicographic max is also the
+ * chronological one; with a handful of books an in-memory scan beats indexing it. */
+export async function getLastOpenedBookId(): Promise<string | null> {
+  const opens = await db.bookOpens.toArray();
+  if (opens.length === 0) {
+    return null;
+  }
+  return opens.reduce((latest, row) => (row.lastOpenedAt > latest.lastOpenedAt ? row : latest))
+    .bookId;
 }
 
 /** True if any locally-queued reading-position or bookmark write hasn't reached the

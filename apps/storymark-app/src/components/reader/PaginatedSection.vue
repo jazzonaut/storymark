@@ -1068,7 +1068,7 @@ onBeforeUnmount(() => {
 .reader-para {
   max-width: var(--reader-content-width);
   margin-inline: auto;
-  padding-inline: 1.5rem;
+  padding-inline: var(--reader-page-margin);
 }
 
 .reader-para + .reader-para {
