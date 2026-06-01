@@ -109,3 +109,30 @@ export interface AssistantAnswer {
   readonly sources: readonly AssistantSource[];
   readonly usedFutureContent: boolean;
 }
+
+/** The spoiler-safe entity card returned by the selection-hint entity
+ * short-circuit. Mirrors EntityCard. */
+export interface SelectionEntityCard {
+  readonly canonicalName: string;
+  readonly entityType: string;
+  readonly aliases: readonly string[];
+  readonly firstSeenSection: number | null;
+}
+
+/** One evidence chunk behind a selection hint. Mirrors HintSource. */
+export interface SelectionHintSource {
+  readonly sectionIndex: number;
+  readonly locationStart: number;
+  readonly locationEnd: number;
+}
+
+/** The tiered result of a selection (`POST /api/books/{id}/selection/hint`):
+ * either a cached entity card (instant, zero LLM cost) or a generated hint.
+ * Discriminated on `kind`. Mirrors SelectionHintResponse. */
+export type SelectionHintResult =
+  | { readonly kind: "entity"; readonly entityId: string; readonly card: SelectionEntityCard }
+  | {
+      readonly kind: "hint";
+      readonly hint: string;
+      readonly sources: readonly SelectionHintSource[];
+    };

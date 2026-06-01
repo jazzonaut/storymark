@@ -9,12 +9,15 @@ const isAsking = ref(false);
 const lastQuestion = ref<string | null>(null);
 const answer = shallowRef<AssistantAnswer | null>(null);
 const error = ref<string | null>(null);
+// The shared question-input model, so the selection popover can pre-fill it.
+const draft = ref("");
 
 interface UseAssistant {
   readonly isAsking: Ref<boolean>;
   readonly lastQuestion: Ref<string | null>;
   readonly answer: ShallowRef<AssistantAnswer | null>;
   readonly error: Ref<string | null>;
+  readonly draft: Ref<string>;
   ask: (
     bookId: string,
     question: string,
@@ -61,7 +64,8 @@ export function useAssistant(): UseAssistant {
     lastQuestion.value = null;
     answer.value = null;
     error.value = null;
+    draft.value = "";
   }
 
-  return { isAsking, lastQuestion, answer, error, ask, reset };
+  return { isAsking, lastQuestion, answer, error, draft, ask, reset };
 }

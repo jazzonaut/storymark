@@ -7,6 +7,9 @@ import MemoryPanel from "@/components/reader/MemoryPanel.vue";
 import PaginatedSection from "@/components/reader/PaginatedSection.vue";
 import ReaderSettingsDrawer from "@/components/reader/ReaderSettingsDrawer.vue";
 import ReaderToolbar from "@/components/reader/ReaderToolbar.vue";
+import SelectionPopover from "@/components/reader/SelectionPopover.vue";
+import { useAssistant } from "@/composables/use-assistant";
+import type { ReaderSelection } from "@/composables/use-selection-hint";
 import { useBookCache } from "@/composables/use-book-cache";
 import { useBookmarks } from "@/composables/use-bookmarks";
 import { useBooks } from "@/composables/use-books";
@@ -42,12 +45,14 @@ const {
 } = useReader();
 const { record, resume, flush } = useReadingProgress();
 const { bookmarks, load: loadBookmarks, toggle, removeById, isBookmarked } = useBookmarks();
+const { draft: assistantDraft } = useAssistant();
 
 const phase = ref<"loading" | "ready" | "error">("loading");
 const chromeVisible = ref(true);
 const settingsOpen = ref(false);
 const bookmarksOpen = ref(false);
 const assistantOpen = ref(false);
+const selection = ref<ReaderSelection | null>(null);
 const highlight = ref<{ paragraphIndex: number; nonce: number } | null>(null);
 let highlightNonce = 0;
 const pageInfo = ref<{ page: number; total: number }>({ page: 0, total: 1 });
@@ -117,6 +122,15 @@ function openBookmarks(): void {
 }
 
 function openAssistant(): void {
+  assistantOpen.value = true;
+  chromeVisible.value = true;
+}
+
+// "Ask…" / "Tell me more" from the selection popover: pre-fill the assistant
+// input with the selection and open the panel.
+function onAskFromSelection(text: string): void {
+  assistantDraft.value = text;
+  selection.value = null;
   assistantOpen.value = true;
   chromeVisible.value = true;
 }
@@ -272,6 +286,8 @@ onBeforeUnmount(() => {
         @next-section="goNext"
         @prev-section="goPrev"
         @toggle-chrome="toggleChrome"
+        @select="(payload) => (selection = payload)"
+        @dismiss-select="selection = null"
       />
 
       <div class="absolute inset-x-0 bottom-0 z-10 h-0.5 bg-[var(--sm-muted)]/15">
@@ -300,6 +316,16 @@ onBeforeUnmount(() => {
         :manifest="manifest"
         @close="assistantOpen = false"
         @jump="onJumpToSource"
+      />
+
+      <SelectionPopover
+        v-if="selection"
+        :selection="selection"
+        :book-id="bookId"
+        :current-section="currentSectionIndex"
+        :current-location="currentLocation"
+        @ask="onAskFromSelection"
+        @close="selection = null"
       />
     </template>
   </main>

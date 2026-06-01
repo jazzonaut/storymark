@@ -23,11 +23,17 @@ const emit = defineEmits<{
   (e: "next-section"): void;
   (e: "prev-section"): void;
   (e: "toggle-chrome"): void;
+  (
+    e: "select",
+    payload: { text: string; rect: { top: number; bottom: number; left: number; width: number } },
+  ): void;
+  (e: "dismiss-select"): void;
 }>();
 
 const SETTLE_MS = 120;
 const TAP_EDGE_FRACTION = 0.28;
 const FLASH_MS = 2000;
+const SELECTION_DEBOUNCE_MS = 250;
 
 const scrollEl = ref<HTMLDivElement | null>(null);
 const contentEl = ref<HTMLDivElement | null>(null);
@@ -41,6 +47,7 @@ let settleTimer: number | undefined;
 let resizeObserver: ResizeObserver | undefined;
 let flashTimer: number | undefined;
 let flashedEl: HTMLElement | null = null;
+let selectionTimer: number | undefined;
 
 function pageWidth(): number {
   return scrollEl.value?.clientWidth ?? 1;
@@ -168,10 +175,53 @@ function onSettle(): void {
 }
 
 function onScroll(): void {
+  // Paging dismisses any open selection popover.
+  emit("dismiss-select");
   if (settleTimer !== undefined) {
     window.clearTimeout(settleTimer);
   }
   settleTimer = window.setTimeout(onSettle, SETTLE_MS);
+}
+
+// Report a settled, non-collapsed selection inside the reader so the popover can
+// anchor to it; a collapsed/empty selection dismisses it. Covers mouse drag and
+// touch long-press without a page-turn (see the guard in onClick).
+function readSelection(): void {
+  const scroll = scrollEl.value;
+  if (!scroll) {
+    return;
+  }
+  const selection = document.getSelection();
+  if (selection === null || selection.isCollapsed || selection.rangeCount === 0) {
+    emit("dismiss-select");
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  if (!scroll.contains(range.startContainer) || !scroll.contains(range.endContainer)) {
+    return;
+  }
+  const text = selection.toString().trim();
+  if (text.length === 0) {
+    emit("dismiss-select");
+    return;
+  }
+  const rect = range.getBoundingClientRect();
+  emit("select", {
+    text,
+    rect: { top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width },
+  });
+}
+
+function onSelectionChange(): void {
+  if (selectionTimer !== undefined) {
+    window.clearTimeout(selectionTimer);
+  }
+  selectionTimer = window.setTimeout(readSelection, SELECTION_DEBOUNCE_MS);
+}
+
+function hasActiveSelection(): boolean {
+  const selection = document.getSelection();
+  return selection !== null && !selection.isCollapsed && selection.toString().trim().length > 0;
 }
 
 function onClick(event: MouseEvent): void {
@@ -180,6 +230,10 @@ function onClick(event: MouseEvent): void {
   // and don't treat it as a page tap.
   if (event.target instanceof Element && event.target.closest("a")) {
     event.preventDefault();
+    return;
+  }
+  // A drag-select ends in a click; don't let it turn the page or toggle chrome.
+  if (hasActiveSelection()) {
     return;
   }
   const scroll = scrollEl.value;
@@ -269,6 +323,7 @@ watch(
 onMounted(() => {
   void reposition();
   window.addEventListener("keydown", onKeydown);
+  document.addEventListener("selectionchange", onSelectionChange);
   // Observe both: contentEl catches typography reflow (column count changes),
   // scrollEl catches viewport resize (which leaves the JS-pinned columnWidth
   // stale until we re-measure). Either way, keep the tracked paragraph in view.
@@ -287,9 +342,13 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
+  document.removeEventListener("selectionchange", onSelectionChange);
   resizeObserver?.disconnect();
   if (settleTimer !== undefined) {
     window.clearTimeout(settleTimer);
+  }
+  if (selectionTimer !== undefined) {
+    window.clearTimeout(selectionTimer);
   }
   clearFlash();
 });

@@ -1,26 +1,27 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { useAssistant } from "@/composables/use-assistant";
 
 const props = defineProps<{ disabled: boolean; pending: boolean }>();
 
 const emit = defineEmits<{ (e: "ask", question: string): void }>();
 
-const question = ref("");
+// Shared so the selection popover's "Ask…" / "Tell me more" can pre-fill it.
+const { draft } = useAssistant();
 
 function submit(): void {
-  const value = question.value.trim();
+  const value = draft.value.trim();
   if (value.length === 0 || props.disabled || props.pending) {
     return;
   }
   emit("ask", value);
-  question.value = "";
+  draft.value = "";
 }
 </script>
 
 <template>
   <form class="flex gap-2" @submit.prevent="submit">
     <input
-      v-model="question"
+      v-model="draft"
       type="text"
       :disabled="disabled"
       :placeholder="disabled ? 'Q&A is unavailable offline' : 'Ask about this book…'"
