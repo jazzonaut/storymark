@@ -90,10 +90,13 @@ export interface ReadingProgress {
  * strength of the retrieved evidence. */
 export type AnswerConfidence = "low" | "medium" | "high";
 
-/** One evidence chunk a Q&A answer cited. `locationStart`/`locationEnd` are
- * offsets into the section's plain text (the shared coordinate space), so a
- * source can be navigated to in the reader. Mirrors QuestionSource. */
+/** One evidence chunk a Q&A answer cited. `index` is the 1-based citation
+ * number the answer text refers to inline (e.g. `[2]`), letting the UI link a
+ * marker to its passage. `locationStart`/`locationEnd` are offsets into the
+ * section's plain text (the shared coordinate space), so a source can be
+ * navigated to in the reader. Mirrors QuestionSource. */
 export interface AssistantSource {
+  readonly index: number;
   readonly sectionIndex: number;
   readonly locationStart: number;
   readonly locationEnd: number;

@@ -11,7 +11,7 @@ const props = defineProps<{
   manifest: readonly SectionSummary[];
 }>();
 
-defineEmits<{ (e: "select-source", source: AssistantAnswer["sources"][number]): void }>();
+const emit = defineEmits<{ (e: "select-source", source: AssistantAnswer["sources"][number]): void }>();
 
 const confidenceClass = computed<string>(() => {
   const map: Record<AnswerConfidence, string> = {
@@ -21,6 +21,38 @@ const confidenceClass = computed<string>(() => {
   };
   return props.answer ? map[props.answer.confidence] : "";
 });
+
+type Segment = { readonly text: string } | { readonly cite: number };
+
+// Split the answer on [n] markers so each marker can render as a chip that
+// jumps to the passage it cites; plain text renders between them.
+const segments = computed<readonly Segment[]>(() => {
+  const text = props.answer?.answer ?? "";
+  const parts: Segment[] = [];
+  const marker = /\[(\d+)\]/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+  while ((match = marker.exec(text)) !== null) {
+    if (match.index > last) {
+      parts.push({ text: text.slice(last, match.index) });
+    }
+    parts.push({ cite: Number(match[1]) });
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) {
+    parts.push({ text: text.slice(last) });
+  }
+  return parts;
+});
+
+const hasCitations = computed<boolean>(() => segments.value.some((s) => "cite" in s));
+
+function onCite(index: number): void {
+  const source = props.answer?.sources.find((s) => s.index === index);
+  if (source) {
+    emit("select-source", source);
+  }
+}
 </script>
 
 <template>
@@ -42,12 +74,26 @@ const confidenceClass = computed<string>(() => {
         >
           {{ answer.confidence }}
         </span>
-        <p class="text-sm whitespace-pre-line text-[var(--sm-fg)]">{{ answer.answer }}</p>
+        <p class="text-sm whitespace-pre-line text-[var(--sm-fg)]">
+          <template v-for="(seg, i) in segments" :key="i">
+            <button
+              v-if="'cite' in seg"
+              type="button"
+              class="mx-0.5 align-super text-[0.65rem] font-semibold text-[var(--sm-accent)] hover:underline"
+              @click="onCite(seg.cite)"
+            >
+              {{ seg.cite }}
+            </button>
+            <span v-else>{{ seg.text }}</span>
+          </template>
+        </p>
       </div>
       <SourceList
         :sources="answer.sources"
         :manifest="manifest"
-        @select="(source) => $emit('select-source', source)"
+        :title="hasCitations ? 'Sources' : 'Related passages'"
+        :open="hasCitations"
+        @select="(source) => emit('select-source', source)"
       />
     </div>
 

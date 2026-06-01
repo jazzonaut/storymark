@@ -21,7 +21,9 @@ internal static class PromptDefaults
           "That has not been revealed yet."
         - If the context is incomplete, say what is known so far.
         - Keep the answer concise and helpful.
-        - Include section references when useful.
+        - The context passages are numbered. When a statement is supported by a
+          passage, cite it inline using its number in square brackets, e.g. [1].
+          Cite only the passages you actually relied on.
 
         Question:
         {question}
