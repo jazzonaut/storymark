@@ -51,7 +51,7 @@ internal sealed class LlmCallLogService(StorymarkDbContext db)
         // of priced rows so an all-unpriced group collapses back to null.
         var grouped = await db.LlmCalls
             .AsNoTracking()
-            .Where(c => c.CreatedAt >= since)
+            .Where(c => c.CreatedAt >= since && c.Succeeded)
             .GroupBy(c => c.Task)
             .Select(g => new
             {

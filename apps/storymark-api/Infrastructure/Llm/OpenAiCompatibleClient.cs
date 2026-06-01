@@ -24,7 +24,7 @@ internal sealed class OpenAiCompatibleClient(HttpClient http, ISettingsService s
 
         using var message = BuildRequest("chat/completions", payload);
         using var response = await http.SendAsync(message, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, ct);
         var body = await response.Content.ReadFromJsonAsync<ChatBody>(ct)
             ?? throw new InvalidOperationException("OpenAI-compatible API returned an empty chat response.");
 
@@ -45,7 +45,7 @@ internal sealed class OpenAiCompatibleClient(HttpClient http, ISettingsService s
 
         using var message = BuildRequest("embeddings", payload);
         using var response = await http.SendAsync(message, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, ct);
         var body = await response.Content.ReadFromJsonAsync<EmbedBody>(ct)
             ?? throw new InvalidOperationException("OpenAI-compatible API returned an empty embedding response.");
 
@@ -58,6 +58,22 @@ internal sealed class OpenAiCompatibleClient(HttpClient http, ISettingsService s
                 ?? throw new InvalidOperationException("OpenAI-compatible embedding vector was null."),
             Tokens = body.Usage?.PromptTokens,
         };
+    }
+
+    // EnsureSuccessStatusCode discards the response body, but OpenAI-compatible
+    // providers put the actionable reason there ("Incorrect API key provided",
+    // "model not found"). Surface it so the recorded failure is diagnosable.
+    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        var detail = string.IsNullOrWhiteSpace(body) ? string.Empty : $": {body.Trim()}";
+        throw new HttpRequestException(
+            $"OpenAI-compatible API returned {(int)response.StatusCode} {response.ReasonPhrase}{detail}");
     }
 
     private HttpRequestMessage BuildRequest<TPayload>(string path, TPayload payload)

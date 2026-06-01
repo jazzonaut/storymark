@@ -473,6 +473,10 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
                     b.Property<int?>("LatencyMs")
                         .HasColumnType("integer")
                         .HasColumnName("latency_ms");
@@ -499,6 +503,12 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                     b.Property<int?>("SectionIndex")
                         .HasColumnType("integer")
                         .HasColumnName("section_index");
+
+                    b.Property<bool>("Succeeded")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("succeeded");
 
                     b.Property<string>("Task")
                         .IsRequired()

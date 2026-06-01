@@ -30,5 +30,13 @@ internal sealed class LlmCall
 
     public bool UsedFutureContent { get; set; }
 
+    /// <summary>False when the invocation threw (provider error, bad key, timeout).
+    /// A failed row captures what was attempted plus <see cref="Error"/>, so the
+    /// admin call log shows failures instead of them vanishing silently.</summary>
+    public bool Succeeded { get; set; } = true;
+
+    /// <summary>The failure reason when <see cref="Succeeded"/> is false; null otherwise.</summary>
+    public string? Error { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 }

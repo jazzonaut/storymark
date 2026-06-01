@@ -37,6 +37,8 @@ export interface LlmCallItem {
   readonly bookId: string | null;
   readonly sectionIndex: number | null;
   readonly usedFutureContent: boolean;
+  readonly succeeded: boolean;
+  readonly error: string | null;
   readonly createdAt: string;
 }
 

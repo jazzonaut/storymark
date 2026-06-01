@@ -18,6 +18,7 @@ const { report } = useAdminError();
 
 const taskFilter = ref<string>(ALL_TASKS);
 const futureOnly = ref<boolean>(false);
+const errorsOnly = ref<boolean>(false);
 const expandedRows = ref<Record<string, boolean>>({});
 
 const distinctTasks = computed<readonly string[]>(() =>
@@ -36,7 +37,8 @@ const filtered = computed<readonly LlmCallItem[]>(() =>
   llmCalls.value.filter(
     (call) =>
       (taskFilter.value === ALL_TASKS || call.task === taskFilter.value) &&
-      (!futureOnly.value || call.usedFutureContent),
+      (!futureOnly.value || call.usedFutureContent) &&
+      (!errorsOnly.value || !call.succeeded),
   ),
 );
 
@@ -60,6 +62,10 @@ function formatModel(call: LlmCallItem): string {
 
 function formatLatency(call: LlmCallItem): string {
   return call.latencyMs === null ? "—" : `${call.latencyMs} ms`;
+}
+
+function rowClass(call: LlmCallItem): string {
+  return call.succeeded ? "" : "bg-red-50 dark:bg-red-950/40";
 }
 
 async function refresh(): Promise<void> {
@@ -95,12 +101,14 @@ onMounted(refresh);
         off-label="Future content only"
         size="small"
       />
+      <ToggleButton v-model="errorsOnly" on-label="Errors only" off-label="Errors only" size="small" />
     </div>
 
     <DataTable
       v-model:expanded-rows="expandedRows"
       :value="[...filtered]"
       :loading="isLoading"
+      :row-class="rowClass"
       data-key="id"
       paginator
       :rows="20"
@@ -122,6 +130,12 @@ onMounted(refresh);
       <Column field="task" header="Task">
         <template #body="{ data }">
           <Tag :value="(data as LlmCallItem).task" severity="secondary" />
+          <Tag
+            v-if="!(data as LlmCallItem).succeeded"
+            value="failed"
+            severity="danger"
+            class="ml-1"
+          />
           <Tag
             v-if="(data as LlmCallItem).usedFutureContent"
             value="future"
@@ -153,6 +167,13 @@ onMounted(refresh);
 
       <template #expansion="{ data }">
         <div class="space-y-3 p-3">
+          <div v-if="(data as LlmCallItem).error">
+            <div class="mb-1 text-xs font-medium text-red-700 dark:text-red-300">Error</div>
+            <pre
+              class="max-h-64 overflow-auto rounded bg-red-50 p-3 font-mono text-xs whitespace-pre-wrap text-red-800 dark:bg-red-950/40 dark:text-red-200"
+              >{{ (data as LlmCallItem).error }}</pre
+            >
+          </div>
           <div>
             <div class="mb-1 text-xs font-medium opacity-70">Prompt</div>
             <pre

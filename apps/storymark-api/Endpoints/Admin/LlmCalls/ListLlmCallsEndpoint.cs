@@ -32,6 +32,10 @@ internal sealed record LlmCallItem
 
     public required bool UsedFutureContent { get; init; }
 
+    public required bool Succeeded { get; init; }
+
+    public string? Error { get; init; }
+
     public required DateTimeOffset CreatedAt { get; init; }
 }
 
@@ -72,6 +76,8 @@ internal sealed class ListLlmCallsEndpoint(LlmCallLogService log)
                 BookId = c.BookId,
                 SectionIndex = c.SectionIndex,
                 UsedFutureContent = c.UsedFutureContent,
+                Succeeded = c.Succeeded,
+                Error = c.Error,
                 CreatedAt = c.CreatedAt,
             })
             .ToList();

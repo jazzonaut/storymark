@@ -23,6 +23,8 @@ internal sealed class LlmCallConfiguration : IEntityTypeConfiguration<LlmCall>
         builder.Property(c => c.BookId).HasColumnName("book_id");
         builder.Property(c => c.SectionIndex).HasColumnName("section_index");
         builder.Property(c => c.UsedFutureContent).HasColumnName("used_future_content").HasDefaultValue(false);
+        builder.Property(c => c.Succeeded).HasColumnName("succeeded").HasDefaultValue(true);
+        builder.Property(c => c.Error).HasColumnName("error");
         builder.Property(c => c.CreatedAt).HasColumnName("created_at");
 
         builder.HasIndex(c => new { c.Task, c.CreatedAt })
