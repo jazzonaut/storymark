@@ -23,6 +23,7 @@ If a decision is small enough that "look at the code" answers it, it's not an AD
 | 0013 | [SPA served by the API (same-origin, single image)](0013-spa-served-by-api.md) | accepted |
 | 0014 | [In-place reindex, dimensionless vectors, no HNSW](0014-in-place-reindex-dimensionless-vectors.md) | accepted |
 | 0015 | [Custom selection repaint to suppress mobile toolbar](0015-custom-selection-highlight.md) | accepted |
+| 0016 | [Provider/model registry for LLM routing](0016-provider-model-registry.md) | accepted |
 
 ## When to write one
 

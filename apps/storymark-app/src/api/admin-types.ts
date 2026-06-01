@@ -60,6 +60,42 @@ export interface CostSummary {
   readonly tasks: readonly TaskCostItem[];
 }
 
+export type LlmProviderKind = "ollama" | "openai_compatible";
+
+export interface ProviderItem {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: LlmProviderKind;
+  readonly baseUrl: string;
+  /** Whether a key is stored; the key itself is never returned (write-only). */
+  readonly hasApiKey: boolean;
+}
+
+export interface ProviderUpsertBody {
+  readonly name: string;
+  readonly kind: LlmProviderKind;
+  readonly baseUrl: string;
+  /** A new key, or null to leave the stored one unchanged. */
+  readonly apiKey: string | null;
+}
+
+export interface ModelItem {
+  readonly id: string;
+  readonly label: string;
+  readonly providerId: string;
+  readonly modelName: string;
+  readonly inputPerMillion: number | null;
+  readonly outputPerMillion: number | null;
+}
+
+export interface ModelUpsertBody {
+  readonly label: string;
+  readonly providerId: string;
+  readonly modelName: string;
+  readonly inputPerMillion: number | null;
+  readonly outputPerMillion: number | null;
+}
+
 export interface EmbeddingImpactPreview {
   readonly booksAffected: number;
   readonly chunkCount: number;

@@ -66,9 +66,6 @@ internal sealed class SettingsSeeder(
         {
             Scalar("upload.maxBytes", options.UploadMaxBytes, SettingValueType.Int),
             Scalar("features.recapCardOnSectionEntry", options.RecapCardOnSectionEntry, SettingValueType.Bool),
-            Text("llm.embedding.modelId", options.Llm.EmbeddingModelId),
-            Text("llm.openai.baseUrl", options.Llm.OpenAi.BaseUrl),
-            Json("llm.costRates", options.Llm.CostRates),
             Json("search.synonyms", options.Search.Synonyms),
             Scalar("assistant.evidence.trimLocal", options.Assistant.TrimLocal, SettingValueType.Bool),
             Scalar("assistant.evidence.maxChunks", options.Assistant.MaxChunks, SettingValueType.Int),
@@ -80,13 +77,8 @@ internal sealed class SettingsSeeder(
             Text("prompts.bookMemory", PromptDefaults.BookMemory),
         };
 
-        foreach (var (task, model) in options.Llm.ChatTaskMap)
-        {
-            seeds.Add(Text($"llm.chat.taskMap.{task}", model));
-        }
-
-        seeds.Add(Secret("llm.openai.apiKey", options.Llm.OpenAi.ApiKey));
-
+        // LLM routing (providers, models, task assignments) is seeded by
+        // LlmRegistrySeeder, not here — see ADR-0016.
         var bearerSeed = configuration["Auth:BearerTokenSeed"];
         if (!string.IsNullOrWhiteSpace(bearerSeed))
         {

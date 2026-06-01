@@ -2,6 +2,7 @@ using System.Text.Json;
 using FastEndpoints;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
+using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Auth;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Jobs;
@@ -31,8 +32,6 @@ internal sealed class ApplySwapEndpoint(
     IBackgroundJobClient jobs)
     : Endpoint<ApplySwapRequest, ApplySwapResponse>
 {
-    private const string ModelSettingKey = "llm.embedding.modelId";
-
     public override void Configure()
     {
         Post("embedding/apply-swap");
@@ -42,14 +41,13 @@ internal sealed class ApplySwapEndpoint(
     public override async Task HandleAsync(ApplySwapRequest req, CancellationToken ct)
     {
         var modelId = req.ModelId.Trim();
-        var separator = modelId.IndexOf(':', StringComparison.Ordinal);
-        if (separator <= 0 || separator == modelId.Length - 1)
+        if (!Guid.TryParse(modelId, out var modelGuid) || !await db.LlmModels.AnyAsync(m => m.Id == modelGuid, ct))
         {
-            ThrowError(r => r.ModelId, "modelId must be in 'provider:model' form.");
+            ThrowError(r => r.ModelId, "modelId must be the id of a configured model.");
         }
 
         var updatedBy = HttpContext.Items[AdminAuthPreProcessor.FingerprintItemKey] as string ?? "admin";
-        await settings.UpdateAsync(ModelSettingKey, JsonSerializer.Serialize(modelId), updatedBy, ct);
+        await settings.UpdateAsync(LlmSettingKeys.EmbeddingModelId, JsonSerializer.Serialize(modelId), updatedBy, ct);
 
         var bookIds = await db.BookChunks.Select(c => c.BookId).Distinct().ToListAsync(ct);
         foreach (var bookId in bookIds)

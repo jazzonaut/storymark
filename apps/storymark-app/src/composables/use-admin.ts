@@ -6,8 +6,12 @@ import type {
   CostSummary,
   EmbeddingImpactPreview,
   LlmCallItem,
+  ModelItem,
+  ModelUpsertBody,
   PatchSettingBody,
   PromptItem,
+  ProviderItem,
+  ProviderUpsertBody,
   SettingItem,
 } from "@/api/admin-types";
 
@@ -22,6 +26,8 @@ const settings = shallowRef<readonly SettingItem[]>([]);
 const prompts = shallowRef<readonly PromptItem[]>([]);
 const llmCalls = shallowRef<readonly LlmCallItem[]>([]);
 const costSummary = shallowRef<CostSummary | null>(null);
+const providers = shallowRef<readonly ProviderItem[]>([]);
+const models = shallowRef<readonly ModelItem[]>([]);
 const isLoading = ref(false);
 
 interface UseAdmin {
@@ -30,6 +36,8 @@ interface UseAdmin {
   readonly prompts: ShallowRef<readonly PromptItem[]>;
   readonly llmCalls: ShallowRef<readonly LlmCallItem[]>;
   readonly costSummary: ShallowRef<CostSummary | null>;
+  readonly providers: ShallowRef<readonly ProviderItem[]>;
+  readonly models: ShallowRef<readonly ModelItem[]>;
   readonly llmCallsWindow: number;
   readonly isLoading: ShallowRef<boolean>;
   authenticate: (candidate: string) => Promise<boolean>;
@@ -46,6 +54,12 @@ interface UseAdmin {
   loadCostSummary: () => Promise<void>;
   previewEmbeddingSwap: () => Promise<EmbeddingImpactPreview>;
   applyEmbeddingSwap: (modelId: string) => Promise<ApplySwapResult>;
+  loadProviders: () => Promise<void>;
+  saveProvider: (id: string | null, body: ProviderUpsertBody) => Promise<void>;
+  deleteProvider: (id: string) => Promise<void>;
+  loadModels: () => Promise<void>;
+  saveModel: (id: string | null, body: ModelUpsertBody) => Promise<void>;
+  deleteModel: (id: string) => Promise<void>;
 }
 
 export function useAdmin(): UseAdmin {
@@ -65,6 +79,8 @@ export function useAdmin(): UseAdmin {
     prompts.value = [];
     llmCalls.value = [];
     costSummary.value = null;
+    providers.value = [];
+    models.value = [];
   }
 
   async function authenticate(candidate: string): Promise<boolean> {
@@ -144,12 +160,50 @@ export function useAdmin(): UseAdmin {
     return result;
   }
 
+  async function loadProviders(): Promise<void> {
+    providers.value = await adminApi.listProviders(requireToken());
+  }
+
+  async function saveProvider(id: string | null, body: ProviderUpsertBody): Promise<void> {
+    if (id === null) {
+      await adminApi.createProvider(requireToken(), body);
+    } else {
+      await adminApi.updateProvider(requireToken(), id, body);
+    }
+    await loadProviders();
+  }
+
+  async function deleteProvider(id: string): Promise<void> {
+    await adminApi.deleteProvider(requireToken(), id);
+    await loadProviders();
+  }
+
+  async function loadModels(): Promise<void> {
+    models.value = await adminApi.listModels(requireToken());
+  }
+
+  async function saveModel(id: string | null, body: ModelUpsertBody): Promise<void> {
+    if (id === null) {
+      await adminApi.createModel(requireToken(), body);
+    } else {
+      await adminApi.updateModel(requireToken(), id, body);
+    }
+    await loadModels();
+  }
+
+  async function deleteModel(id: string): Promise<void> {
+    await adminApi.deleteModel(requireToken(), id);
+    await loadModels();
+  }
+
   return {
     hasToken,
     settings,
     prompts,
     llmCalls,
     costSummary,
+    providers,
+    models,
     llmCallsWindow: LLM_CALLS_WINDOW,
     isLoading,
     authenticate,
@@ -162,5 +216,11 @@ export function useAdmin(): UseAdmin {
     loadCostSummary,
     previewEmbeddingSwap,
     applyEmbeddingSwap,
+    loadProviders,
+    saveProvider,
+    deleteProvider,
+    loadModels,
+    saveModel,
+    deleteModel,
   };
 }

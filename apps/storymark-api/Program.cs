@@ -44,16 +44,17 @@ try
     builder.Services.AddSingleton<ISettingsEncryptor, AesGcmSettingsEncryptor>();
     builder.Services.AddSingleton<ISettingsService, SettingsService>();
     builder.Services.AddSingleton<SettingsSeeder>();
+    builder.Services.AddSingleton<LlmRegistrySeeder>();
     builder.Services.AddHostedService<SettingsChangeListener>();
 
-    var ollamaUrl = builder.Configuration["Ollama:Url"]
-        ?? throw new InvalidOperationException("Ollama:Url is not configured.");
-    builder.Services.AddHttpClient<OllamaClient>(client =>
-        client.BaseAddress = new Uri(ollamaUrl.TrimEnd('/') + "/"));
+    // Base URL comes from the resolved provider per call (ADR-0016), so the typed
+    // clients carry no fixed BaseAddress.
+    builder.Services.AddHttpClient<OllamaClient>();
     builder.Services.AddHttpClient<OpenAiCompatibleClient>();
     builder.Services.AddTransient<IChatModelClient>(sp => sp.GetRequiredService<OllamaClient>());
     builder.Services.AddTransient<IChatModelClient>(sp => sp.GetRequiredService<OpenAiCompatibleClient>());
     builder.Services.AddScoped<LlmCallRecorder>();
+    builder.Services.AddScoped<LlmRegistryService>();
     builder.Services.AddScoped<ChatModelRouter>();
     builder.Services.AddScoped<LlmCallLogService>();
 
@@ -99,6 +100,7 @@ try
     }
 
     await app.Services.GetRequiredService<SettingsSeeder>().SeedAsync(CancellationToken.None);
+    await app.Services.GetRequiredService<LlmRegistrySeeder>().SeedAsync(CancellationToken.None);
     await app.Services.GetRequiredService<ISettingsService>().LoadAllAsync(CancellationToken.None);
 
     app.UseSerilogRequestLogging();

@@ -1,27 +1,27 @@
 using System.Text.Json;
 using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Llm;
-using Storymark.Api.Services.Settings;
 
 namespace Storymark.Api.Services.Llm;
 
-/// <summary>Resolves a task to its configured <c>provider:model</c> from settings
-/// — read live, so a model swap takes effect on the next call without a restart —
-/// then runs the call through <see cref="LlmCallRecorder"/>. The only entry point
-/// other services use for chat and embeddings. See docs/plan.md §20.</summary>
+/// <summary>Resolves a task (or the embedding setting) to its model via the
+/// <see cref="LlmRegistryService"/> — read live, so a reassignment takes effect on
+/// the next call without a restart — then runs the call through
+/// <see cref="LlmCallRecorder"/>. The only entry point other services use for chat
+/// and embeddings. See docs/plan.md §20 and ADR-0016.</summary>
 internal sealed class ChatModelRouter
 {
-    private readonly Dictionary<string, IChatModelClient> _clients;
-    private readonly ISettingsService _settings;
+    private readonly Dictionary<LlmProviderKind, IChatModelClient> _clients;
+    private readonly LlmRegistryService _registry;
     private readonly LlmCallRecorder _recorder;
 
     public ChatModelRouter(
         IEnumerable<IChatModelClient> clients,
-        ISettingsService settings,
+        LlmRegistryService registry,
         LlmCallRecorder recorder)
     {
-        _clients = clients.ToDictionary(c => c.ProviderName, StringComparer.Ordinal);
-        _settings = settings;
+        _clients = clients.ToDictionary(c => c.Kind);
+        _registry = registry;
         _recorder = recorder;
     }
 
@@ -31,26 +31,18 @@ internal sealed class ChatModelRouter
         LlmCallMetadata metadata,
         CancellationToken ct)
     {
-        var (provider, model) = Resolve($"llm.chat.taskMap.{task}");
-        var client = ClientFor(provider);
-        var request = new ChatRequest { Model = model, Messages = messages };
+        var model = await _registry.ResolveTaskAsync(task, ct);
+        var client = ClientFor(model.Kind);
+        var request = new ChatRequest { Model = model.ModelName, Messages = messages };
+        var endpoint = EndpointFor(model);
 
-        var descriptor = new LlmCallDescriptor
-        {
-            Task = task,
-            Provider = provider,
-            Model = model,
-            Prompt = SerializePrompt(messages),
-            BookId = metadata.BookId,
-            SectionIndex = metadata.SectionIndex,
-            UsedFutureContent = metadata.UsedFutureContent,
-        };
+        var descriptor = Describe(task, model, SerializePrompt(messages), metadata);
 
         var response = await _recorder.RecordAsync(
             descriptor,
             async token =>
             {
-                var chat = await client.CompleteAsync(request, token);
+                var chat = await client.CompleteAsync(request, endpoint, token);
                 return new LlmCallResult<ChatResponse>
                 {
                     Value = chat,
@@ -63,8 +55,8 @@ internal sealed class ChatModelRouter
 
         return new ChatCompletion
         {
-            Provider = provider,
-            Model = model,
+            Provider = model.ProviderName,
+            Model = model.ModelName,
             Content = response.Content,
             TokensIn = response.TokensIn,
             TokensOut = response.TokensOut,
@@ -76,26 +68,18 @@ internal sealed class ChatModelRouter
         LlmCallMetadata metadata,
         CancellationToken ct)
     {
-        var (provider, model) = Resolve("llm.embedding.modelId");
-        var client = ClientFor(provider);
-        var request = new EmbeddingRequest { Model = model, Input = text };
+        var model = await _registry.ResolveEmbeddingAsync(ct);
+        var client = ClientFor(model.Kind);
+        var request = new EmbeddingRequest { Model = model.ModelName, Input = text };
+        var endpoint = EndpointFor(model);
 
-        var descriptor = new LlmCallDescriptor
-        {
-            Task = "embed",
-            Provider = provider,
-            Model = model,
-            Prompt = text,
-            BookId = metadata.BookId,
-            SectionIndex = metadata.SectionIndex,
-            UsedFutureContent = metadata.UsedFutureContent,
-        };
+        var descriptor = Describe("embed", model, text, metadata);
 
         var response = await _recorder.RecordAsync(
             descriptor,
             async token =>
             {
-                var embedding = await client.EmbedAsync(request, token);
+                var embedding = await client.EmbedAsync(request, endpoint, token);
                 return new LlmCallResult<EmbeddingResponse>
                 {
                     Value = embedding,
@@ -109,31 +93,34 @@ internal sealed class ChatModelRouter
         return response.Embedding;
     }
 
-    /// <summary>Resolves a chat task to its configured <c>(provider, model)</c>
-    /// without making a call, so a caller can branch on where the task runs (local
-    /// vs hosted) before building the request — e.g. to size the prompt.</summary>
-    public (string Provider, string Model) ResolveTask(string task) =>
-        Resolve($"llm.chat.taskMap.{task}");
+    /// <summary>The provider kind a task currently resolves to, without making a
+    /// call — lets a caller branch on local vs hosted (e.g. to size the prompt).</summary>
+    public async Task<LlmProviderKind> ResolveTaskKindAsync(string task, CancellationToken ct) =>
+        (await _registry.ResolveTaskAsync(task, ct)).Kind;
 
-    private (string Provider, string Model) Resolve(string settingKey)
-    {
-        var value = _settings.GetString(settingKey);
-        var separator = value.IndexOf(':', StringComparison.Ordinal);
-        if (separator <= 0 || separator == value.Length - 1)
+    private static LlmCallDescriptor Describe(
+        string task, ResolvedModel model, string prompt, LlmCallMetadata metadata) =>
+        new()
         {
-            throw new InvalidOperationException(
-                $"Setting '{settingKey}' must be 'provider:model'; got '{value}'.");
-        }
+            Task = task,
+            Provider = model.ProviderName,
+            Model = model.ModelName,
+            Prompt = prompt,
+            BookId = metadata.BookId,
+            SectionIndex = metadata.SectionIndex,
+            UsedFutureContent = metadata.UsedFutureContent,
+            InputPerMillion = model.InputPerMillion,
+            OutputPerMillion = model.OutputPerMillion,
+        };
 
-        return (value[..separator], value[(separator + 1)..]);
-    }
+    private static LlmEndpoint EndpointFor(ResolvedModel model) =>
+        new() { BaseUrl = model.BaseUrl, ApiKey = model.ApiKey };
 
-    private IChatModelClient ClientFor(string provider)
+    private IChatModelClient ClientFor(LlmProviderKind kind)
     {
-        if (!_clients.TryGetValue(provider, out var client))
+        if (!_clients.TryGetValue(kind, out var client))
         {
-            throw new InvalidOperationException(
-                $"No chat model client is registered for provider '{provider}'.");
+            throw new InvalidOperationException($"No chat model client is registered for kind '{kind}'.");
         }
 
         return client;

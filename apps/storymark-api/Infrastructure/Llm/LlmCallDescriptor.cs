@@ -17,4 +17,10 @@ internal sealed record LlmCallDescriptor
     public int? SectionIndex { get; init; }
 
     public bool UsedFutureContent { get; init; }
+
+    /// <summary>Per-million-token pricing of the resolved model (ADR-0016), used by
+    /// <see cref="LlmCallRecorder"/> to estimate cost. Null for an unpriced model.</summary>
+    public decimal? InputPerMillion { get; init; }
+
+    public decimal? OutputPerMillion { get; init; }
 }

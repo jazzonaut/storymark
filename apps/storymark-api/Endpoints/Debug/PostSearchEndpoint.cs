@@ -4,7 +4,6 @@ using Pgvector;
 using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Services.Llm;
-using Storymark.Api.Services.Settings;
 
 namespace Storymark.Api.Endpoints.Debug;
 
@@ -40,7 +39,7 @@ internal sealed class PostSearchEndpoint(
     IConfiguration configuration,
     StorymarkDbContext db,
     ChatModelRouter router,
-    ISettingsService settings)
+    LlmRegistryService registry)
     : EndpointWithoutRequest<PostSearchResponse>
 {
     private const int DefaultK = 5;
@@ -70,7 +69,7 @@ internal sealed class PostSearchEndpoint(
 
         var requestedK = Query<int>("k", isRequired: false);
         var k = Math.Clamp(requestedK > 0 ? requestedK : DefaultK, 1, MaxK);
-        var modelId = settings.GetString("llm.embedding.modelId");
+        var modelId = await registry.ResolveEmbeddingIdentityAsync(ct);
 
         var embedding = await router.EmbedAsync(q, new LlmCallMetadata { BookId = bookId }, ct);
         var queryVector = new Vector(embedding.ToArray());

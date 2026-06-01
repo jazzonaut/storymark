@@ -1,9 +1,8 @@
-using Storymark.Api.Infrastructure.Llm;
-
 namespace Storymark.Api.Infrastructure.Settings;
 
 /// <summary>Non-prompt seed defaults, bound from the <c>SettingsDefaults</c>
-/// configuration section. Prompt defaults live in Prompts/PromptDefaults.cs.</summary>
+/// configuration section. Prompt defaults live in Prompts/PromptDefaults.cs.
+/// LLM provider/model defaults live in the registry seeder (ADR-0016).</summary>
 internal sealed class SettingsDefaultsOptions
 {
     public const string SectionName = "SettingsDefaults";
@@ -11,8 +10,6 @@ internal sealed class SettingsDefaultsOptions
     public int UploadMaxBytes { get; init; } = 209715200;
 
     public bool RecapCardOnSectionEntry { get; init; } = true;
-
-    public LlmSettingsDefaults Llm { get; init; } = new();
 
     public SearchSettingsDefaults Search { get; init; } = new();
 
@@ -41,20 +38,3 @@ internal sealed class SearchSettingsDefaults
     public Dictionary<string, List<string>> Synonyms { get; init; } = new(StringComparer.Ordinal);
 }
 
-internal sealed class LlmSettingsDefaults
-{
-    public string EmbeddingModelId { get; init; } = "ollama:nomic-embed-text";
-
-    public Dictionary<string, string> ChatTaskMap { get; init; } = new(StringComparer.Ordinal);
-
-    public OpenAiSettingsDefaults OpenAi { get; init; } = new();
-
-    public Dictionary<string, LlmCostRate> CostRates { get; init; } = new(StringComparer.Ordinal);
-}
-
-internal sealed class OpenAiSettingsDefaults
-{
-    public string BaseUrl { get; init; } = string.Empty;
-
-    public string ApiKey { get; init; } = string.Empty;
-}

@@ -6,7 +6,6 @@ using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Infrastructure.Llm;
 using Storymark.Api.Services.Llm;
-using Storymark.Api.Services.Settings;
 
 namespace Storymark.Api.Jobs;
 
@@ -32,7 +31,7 @@ namespace Storymark.Api.Jobs;
 internal sealed class EmbeddingJob(
     StorymarkDbContext db,
     ChatModelRouter router,
-    ISettingsService settings,
+    LlmRegistryService registry,
     ILogger<EmbeddingJob> logger)
 {
     private const int BatchSize = 32;
@@ -46,8 +45,9 @@ internal sealed class EmbeddingJob(
             return;
         }
 
-        var modelId = settings.GetString("llm.embedding.modelId");
-        var modelVersion = modelId[(modelId.IndexOf(':', StringComparison.Ordinal) + 1)..];
+        var embeddingModel = await registry.ResolveEmbeddingAsync(ct);
+        var modelId = embeddingModel.EmbeddingIdentity;
+        var modelVersion = embeddingModel.ModelName;
 
         // Chunks needing the current model: never embedded, or embedded under a
         // different model. The latter case is exactly a reindex (S3.4) — the model

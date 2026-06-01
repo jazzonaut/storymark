@@ -44,7 +44,7 @@ internal sealed class AssistantService(
             return null;
         }
 
-        var maxEvidence = ResolveMaxEvidence();
+        var maxEvidence = await ResolveMaxEvidenceAsync(ct);
         var evidence = await GatherEvidenceAsync(
             bookId, question, currentSection, currentLocation, maxEvidence, ct);
 
@@ -107,7 +107,7 @@ internal sealed class AssistantService(
     /// or the smaller <c>maxChunksLocal</c> when <c>trimLocal</c> is on and the qa
     /// model is local (Ollama) — a shorter prompt for slow CPU inference. Hosted
     /// models always get the full set.</summary>
-    private int ResolveMaxEvidence()
+    private async Task<int> ResolveMaxEvidenceAsync(CancellationToken ct)
     {
         var max = settings.GetInt("assistant.evidence.maxChunks");
         if (!settings.GetBool("assistant.evidence.trimLocal"))
@@ -115,8 +115,8 @@ internal sealed class AssistantService(
             return max;
         }
 
-        var (provider, _) = router.ResolveTask("qa");
-        return string.Equals(provider, "ollama", StringComparison.Ordinal)
+        var kind = await router.ResolveTaskKindAsync("qa", ct);
+        return kind == LlmProviderKind.Ollama
             ? settings.GetInt("assistant.evidence.maxChunksLocal")
             : max;
     }

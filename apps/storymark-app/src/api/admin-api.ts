@@ -3,8 +3,12 @@ import type {
   CostSummary,
   EmbeddingImpactPreview,
   LlmCallItem,
+  ModelItem,
+  ModelUpsertBody,
   PatchSettingBody,
   PromptItem,
+  ProviderItem,
+  ProviderUpsertBody,
   SettingItem,
 } from "@/api/admin-types";
 
@@ -19,7 +23,7 @@ export class AdminApiError extends Error {
   }
 }
 
-async function request<T>(token: string, path: string, init?: RequestInit): Promise<T> {
+async function send(token: string, path: string, init?: RequestInit): Promise<Response> {
   const response = await fetch(`/api/admin/${path}`, {
     ...init,
     headers: {
@@ -32,7 +36,16 @@ async function request<T>(token: string, path: string, init?: RequestInit): Prom
     throw new AdminApiError(response.status, `Admin request failed (${response.status}).`);
   }
 
+  return response;
+}
+
+async function request<T>(token: string, path: string, init?: RequestInit): Promise<T> {
+  const response = await send(token, path, init);
   return (await response.json()) as T;
+}
+
+async function requestVoid(token: string, path: string, init: RequestInit): Promise<void> {
+  await send(token, path, init);
 }
 
 export const adminApi = {
@@ -62,4 +75,27 @@ export const adminApi = {
       method: "POST",
       body: JSON.stringify({ modelId }),
     }),
+
+  listProviders: (token: string): Promise<readonly ProviderItem[]> =>
+    request(token, "models/providers"),
+
+  createProvider: (token: string, body: ProviderUpsertBody): Promise<ProviderItem> =>
+    request(token, "models/providers", { method: "POST", body: JSON.stringify(body) }),
+
+  updateProvider: (token: string, id: string, body: ProviderUpsertBody): Promise<ProviderItem> =>
+    request(token, `models/providers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+
+  deleteProvider: (token: string, id: string): Promise<void> =>
+    requestVoid(token, `models/providers/${id}`, { method: "DELETE" }),
+
+  listModels: (token: string): Promise<readonly ModelItem[]> => request(token, "models"),
+
+  createModel: (token: string, body: ModelUpsertBody): Promise<ModelItem> =>
+    request(token, "models", { method: "POST", body: JSON.stringify(body) }),
+
+  updateModel: (token: string, id: string, body: ModelUpsertBody): Promise<ModelItem> =>
+    request(token, `models/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+
+  deleteModel: (token: string, id: string): Promise<void> =>
+    requestVoid(token, `models/${id}`, { method: "DELETE" }),
 } as const;

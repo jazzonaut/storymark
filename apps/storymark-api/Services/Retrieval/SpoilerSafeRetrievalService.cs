@@ -3,7 +3,6 @@ using Pgvector;
 using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Services.Llm;
-using Storymark.Api.Services.Settings;
 
 namespace Storymark.Api.Services.Retrieval;
 
@@ -17,7 +16,7 @@ namespace Storymark.Api.Services.Retrieval;
 internal sealed class SpoilerSafeRetrievalService(
     StorymarkDbContext db,
     ChatModelRouter router,
-    ISettingsService settings)
+    LlmRegistryService registry)
 {
     private const int PerPassLimit = 20;
 
@@ -34,7 +33,7 @@ internal sealed class SpoilerSafeRetrievalService(
             return [];
         }
 
-        var modelId = settings.GetString("llm.embedding.modelId");
+        var modelId = await registry.ResolveEmbeddingIdentityAsync(ct);
         var embedding = await router.EmbedAsync(queryText, new LlmCallMetadata { BookId = bookId }, ct);
         var queryVector = new Vector(embedding.ToArray());
 

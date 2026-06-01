@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Storymark.Api.Domain.LlmCalls;
 using Storymark.Api.Infrastructure.Database;
-using Storymark.Api.Services.Settings;
 
 namespace Storymark.Api.Infrastructure.Llm;
 
@@ -13,7 +12,6 @@ namespace Storymark.Api.Infrastructure.Llm;
 /// audit (CLAUDE.md, docs/plan.md §17) depends on no call site bypassing this.</summary>
 internal sealed class LlmCallRecorder(
     StorymarkDbContext db,
-    ISettingsService settings,
     ILogger<LlmCallRecorder> logger)
 {
     public async Task<T> RecordAsync<T>(
@@ -106,10 +104,9 @@ internal sealed class LlmCallRecorder(
     private static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max];
 
-    private decimal? EstimateCost(LlmCallDescriptor descriptor, int? tokensIn, int? tokensOut)
+    private static decimal? EstimateCost(LlmCallDescriptor descriptor, int? tokensIn, int? tokensOut)
     {
-        var rates = settings.GetJson<Dictionary<string, LlmCostRate>>("llm.costRates");
-        if (!rates.TryGetValue($"{descriptor.Provider}:{descriptor.Model}", out var rate))
+        if (descriptor.InputPerMillion is null && descriptor.OutputPerMillion is null)
         {
             return null;
         }
@@ -119,8 +116,8 @@ internal sealed class LlmCallRecorder(
             return null;
         }
 
-        var input = (tokensIn ?? 0) / 1_000_000m * rate.InputPerMillion;
-        var output = (tokensOut ?? 0) / 1_000_000m * rate.OutputPerMillion;
+        var input = (tokensIn ?? 0) / 1_000_000m * (descriptor.InputPerMillion ?? 0m);
+        var output = (tokensOut ?? 0) / 1_000_000m * (descriptor.OutputPerMillion ?? 0m);
         return input + output;
     }
 }

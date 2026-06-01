@@ -5,13 +5,13 @@ using Storymark.Api.Domain.Llm;
 
 namespace Storymark.Api.Infrastructure.Llm;
 
-/// <summary>Talks to a local Ollama server (base address from <c>Ollama:Url</c>).
+/// <summary>Talks to a local Ollama server (base address from the resolved provider).
 /// Chat via <c>/api/chat</c>, embeddings via <c>/api/embed</c>, both non-streaming.</summary>
 internal sealed class OllamaClient(HttpClient http) : IChatModelClient
 {
-    public string ProviderName => "ollama";
+    public LlmProviderKind Kind => LlmProviderKind.Ollama;
 
-    public async Task<ChatResponse> CompleteAsync(ChatRequest request, CancellationToken ct)
+    public async Task<ChatResponse> CompleteAsync(ChatRequest request, LlmEndpoint endpoint, CancellationToken ct)
     {
         var payload = new ChatPayload
         {
@@ -20,7 +20,7 @@ internal sealed class OllamaClient(HttpClient http) : IChatModelClient
             Messages = WireChatMessage.From(request.Messages),
         };
 
-        using var response = await http.PostAsJsonAsync("api/chat", payload, ct);
+        using var response = await http.PostAsJsonAsync(endpoint.ResolveUri("api/chat"), payload, ct);
         ThrowIfModelMissing(response, request.Model);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<ChatBody>(ct)
@@ -34,11 +34,11 @@ internal sealed class OllamaClient(HttpClient http) : IChatModelClient
         };
     }
 
-    public async Task<EmbeddingResponse> EmbedAsync(EmbeddingRequest request, CancellationToken ct)
+    public async Task<EmbeddingResponse> EmbedAsync(EmbeddingRequest request, LlmEndpoint endpoint, CancellationToken ct)
     {
         var payload = new WireEmbedRequest { Model = request.Model, Input = request.Input };
 
-        using var response = await http.PostAsJsonAsync("api/embed", payload, ct);
+        using var response = await http.PostAsJsonAsync(endpoint.ResolveUri("api/embed"), payload, ct);
         ThrowIfModelMissing(response, request.Model);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<EmbedBody>(ct)

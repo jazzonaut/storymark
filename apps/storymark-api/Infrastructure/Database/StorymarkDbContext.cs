@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Storymark.Api.Domain.Books;
+using Storymark.Api.Domain.Llm;
 using Storymark.Api.Domain.LlmCalls;
 using Storymark.Api.Domain.Settings;
 
@@ -26,6 +27,10 @@ internal sealed class StorymarkDbContext(DbContextOptions<StorymarkDbContext> op
     public DbSet<QuestionAnswer> QuestionAnswers => Set<QuestionAnswer>();
 
     public DbSet<BookEntity> BookEntities => Set<BookEntity>();
+
+    public DbSet<LlmProvider> LlmProviders => Set<LlmProvider>();
+
+    public DbSet<LlmModel> LlmModels => Set<LlmModel>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

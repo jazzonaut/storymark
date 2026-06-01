@@ -1,13 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Storymark.Api.Domain.Books;
 using Storymark.Api.Infrastructure.Database;
-using Storymark.Api.Services.Settings;
+using Storymark.Api.Services.Llm;
 
 namespace Storymark.Api.Services.Books;
 
 /// <summary>Read access to the book catalogue for the library list and cover
 /// endpoint. Aggregation/queries live here, not in the endpoints (layering).</summary>
-internal sealed class BookCatalogService(StorymarkDbContext db, ISettingsService settings)
+internal sealed class BookCatalogService(StorymarkDbContext db, LlmRegistryService registry)
 {
     public async Task<IReadOnlyList<BookCatalogEntry>> GetAllAsync(CancellationToken ct)
     {
@@ -21,7 +21,7 @@ internal sealed class BookCatalogService(StorymarkDbContext db, ISettingsService
         // uses (docs/plan.md §15.5), so a mid-reindex book counts honestly. Two plain
         // grouped counts rather than one filtered aggregate, to keep the SQL trivially
         // translatable.
-        var modelId = settings.GetString("llm.embedding.modelId");
+        var modelId = await registry.ResolveEmbeddingIdentityAsync(ct);
         var totalByBook = await CountByBookAsync(db.BookChunks, ct);
         var embeddedByBook = await CountByBookAsync(
             db.BookChunks.Where(c => c.Embedding != null && c.EmbeddingModelId == modelId), ct);

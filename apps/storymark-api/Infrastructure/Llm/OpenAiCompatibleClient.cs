@@ -2,18 +2,16 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Storymark.Api.Domain.Llm;
-using Storymark.Api.Services.Settings;
 
 namespace Storymark.Api.Infrastructure.Llm;
 
-/// <summary>Talks to any OpenAI-compatible chat/embeddings API. Base URL
-/// (<c>llm.openai.baseUrl</c>) and API key (<c>llm.openai.apiKey</c>, a secret)
-/// are read from settings per call, so they rotate without a restart.</summary>
-internal sealed class OpenAiCompatibleClient(HttpClient http, ISettingsService settings) : IChatModelClient
+/// <summary>Talks to any OpenAI-compatible chat/embeddings API. The base URL and
+/// API key come from the resolved model's provider (ADR-0016), passed per call.</summary>
+internal sealed class OpenAiCompatibleClient(HttpClient http) : IChatModelClient
 {
-    public string ProviderName => "openai_compatible";
+    public LlmProviderKind Kind => LlmProviderKind.OpenAiCompatible;
 
-    public async Task<ChatResponse> CompleteAsync(ChatRequest request, CancellationToken ct)
+    public async Task<ChatResponse> CompleteAsync(ChatRequest request, LlmEndpoint endpoint, CancellationToken ct)
     {
         var payload = new ChatPayload
         {
@@ -22,7 +20,7 @@ internal sealed class OpenAiCompatibleClient(HttpClient http, ISettingsService s
             Messages = WireChatMessage.From(request.Messages),
         };
 
-        using var message = BuildRequest("chat/completions", payload);
+        using var message = BuildRequest(endpoint, "chat/completions", payload);
         using var response = await http.SendAsync(message, ct);
         await EnsureSuccessAsync(response, ct);
         var body = await response.Content.ReadFromJsonAsync<ChatBody>(ct)
@@ -39,11 +37,11 @@ internal sealed class OpenAiCompatibleClient(HttpClient http, ISettingsService s
         };
     }
 
-    public async Task<EmbeddingResponse> EmbedAsync(EmbeddingRequest request, CancellationToken ct)
+    public async Task<EmbeddingResponse> EmbedAsync(EmbeddingRequest request, LlmEndpoint endpoint, CancellationToken ct)
     {
         var payload = new WireEmbedRequest { Model = request.Model, Input = request.Input };
 
-        using var message = BuildRequest("embeddings", payload);
+        using var message = BuildRequest(endpoint, "embeddings", payload);
         using var response = await http.SendAsync(message, ct);
         await EnsureSuccessAsync(response, ct);
         var body = await response.Content.ReadFromJsonAsync<EmbedBody>(ct)
@@ -76,25 +74,22 @@ internal sealed class OpenAiCompatibleClient(HttpClient http, ISettingsService s
             $"OpenAI-compatible API returned {(int)response.StatusCode} {response.ReasonPhrase}{detail}");
     }
 
-    private HttpRequestMessage BuildRequest<TPayload>(string path, TPayload payload)
+    private static HttpRequestMessage BuildRequest<TPayload>(LlmEndpoint endpoint, string path, TPayload payload)
     {
-        var baseUrl = settings.GetString("llm.openai.baseUrl");
-        if (string.IsNullOrWhiteSpace(baseUrl))
+        if (string.IsNullOrWhiteSpace(endpoint.BaseUrl))
         {
-            throw new InvalidOperationException("Setting 'llm.openai.baseUrl' is not configured.");
+            throw new InvalidOperationException("The provider has no base URL configured.");
         }
 
-        var apiKey = settings.GetString("llm.openai.apiKey");
-        if (string.IsNullOrWhiteSpace(apiKey))
+        if (string.IsNullOrWhiteSpace(endpoint.ApiKey))
         {
-            throw new InvalidOperationException("Setting 'llm.openai.apiKey' is not configured.");
+            throw new InvalidOperationException("The provider has no API key configured.");
         }
 
-        var uri = new Uri(new Uri(baseUrl.TrimEnd('/') + "/"), path);
-        return new HttpRequestMessage(HttpMethod.Post, uri)
+        return new HttpRequestMessage(HttpMethod.Post, endpoint.ResolveUri(path))
         {
             Content = JsonContent.Create(payload),
-            Headers = { Authorization = new AuthenticationHeaderValue("Bearer", apiKey) },
+            Headers = { Authorization = new AuthenticationHeaderValue("Bearer", endpoint.ApiKey) },
         };
     }
 
