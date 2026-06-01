@@ -148,7 +148,7 @@ internal sealed class ProcessBookJob(
                 Id = Guid.NewGuid(),
                 BookId = book.Id,
                 SectionIndex = sectionIndex,
-                Title = parsed.Title,
+                Title = parsed.Title ?? result.HeadingTitle,
                 SourceHref = parsed.SourceHref,
                 HtmlPath = htmlPath,
                 TextPath = textPath,

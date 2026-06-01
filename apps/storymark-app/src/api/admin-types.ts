@@ -106,3 +106,7 @@ export interface ApplySwapResult {
   readonly modelId: string;
   readonly booksQueued: number;
 }
+
+export interface BackfillSectionTitlesResult {
+  readonly sectionsToBackfill: number;
+}

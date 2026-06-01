@@ -16,8 +16,9 @@ internal sealed record SanitizedParagraph
 /// <summary>The result of sanitising one section's XHTML: the full sanitised HTML
 /// (written to <c>NNNN.xhtml</c> and served by the reader), the plain-text
 /// rendering (written to <c>NNNN.txt</c> and the coordinate space for offsets),
-/// the paragraph blocks, and the set of inline image paths actually referenced
-/// (so the job stores only those).</summary>
+/// the paragraph blocks, the set of inline image paths actually referenced (so the
+/// job stores only those), and the section's first heading (a title fallback for
+/// spine files the EPUB's table of contents doesn't name).</summary>
 internal sealed record SanitizedSection
 {
     public required string SanitizedHtml { get; init; }
@@ -29,4 +30,6 @@ internal sealed record SanitizedSection
     public required IReadOnlyList<SanitizedParagraph> Paragraphs { get; init; }
 
     public required IReadOnlySet<string> UsedImagePaths { get; init; }
+
+    public string? HeadingTitle { get; init; }
 }

@@ -82,6 +82,7 @@ try
     builder.Services.AddScoped<EmbeddingJob>();
     builder.Services.AddScoped<SectionExtractionJob>();
     builder.Services.AddScoped<BookMemorySnapshotJob>();
+    builder.Services.AddScoped<BackfillSectionTitlesJob>();
     builder.Services.AddScoped<SpoilerSafeRetrievalService>();
     builder.Services.AddScoped<AssistantService>();
     builder.Services.AddScoped<SelectionHintService>();

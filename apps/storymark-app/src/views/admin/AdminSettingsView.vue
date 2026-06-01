@@ -22,10 +22,39 @@ interface SettingRow extends SettingItem {
 // dialog instead of the normal inline save.
 const EMBEDDING_MODEL_KEY = "llm.embedding.modelId";
 
-const { settings, isLoading, loadSettings, saveSetting, previewEmbeddingSwap, applyEmbeddingSwap } =
-  useAdmin();
+const {
+  settings,
+  isLoading,
+  loadSettings,
+  saveSetting,
+  previewEmbeddingSwap,
+  applyEmbeddingSwap,
+  backfillSectionTitles,
+} = useAdmin();
 const { report } = useAdminError();
 const toast = useToast();
+
+const backfilling = ref(false);
+
+async function runBackfillTitles(): Promise<void> {
+  backfilling.value = true;
+  try {
+    const result = await backfillSectionTitles();
+    toast.add({
+      severity: "success",
+      summary: "Backfill started",
+      detail:
+        result.sectionsToBackfill === 0
+          ? "No untitled sections — nothing to do."
+          : `${result.sectionsToBackfill} untitled section(s) queued; titles are filled from each section's first heading.`,
+      life: 4000,
+    });
+  } catch (error) {
+    report(error);
+  } finally {
+    backfilling.value = false;
+  }
+}
 
 const editingKey = ref<string | null>(null);
 const draftText = ref("");
@@ -268,6 +297,21 @@ onMounted(() => {
         </template>
       </Column>
     </DataTable>
+
+    <h2 class="mb-2 mt-8 text-lg font-semibold">Maintenance</h2>
+    <div class="flex items-center gap-3">
+      <Button
+        label="Backfill section titles"
+        size="small"
+        :loading="backfilling"
+        @click="runBackfillTitles"
+      />
+      <span class="text-sm opacity-70">
+        Names untitled sections from their first heading. Display-only — no re-parse,
+        LLM, or re-embedding.
+        <a href="/hangfire" target="_blank" rel="noopener" class="underline">Track in jobs</a>.
+      </span>
+    </div>
 
     <Dialog
       v-model:visible="swap.visible"

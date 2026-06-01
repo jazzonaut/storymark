@@ -1,6 +1,7 @@
 import { apiFetch } from "@/api/http";
 import type {
   ApplySwapResult,
+  BackfillSectionTitlesResult,
   CostSummary,
   EmbeddingImpactPreview,
   LlmCallItem,
@@ -76,6 +77,9 @@ export const adminApi = {
       method: "POST",
       body: JSON.stringify({ modelId }),
     }),
+
+  backfillSectionTitles: (token: string): Promise<BackfillSectionTitlesResult> =>
+    request(token, "books/backfill-section-titles", { method: "POST" }),
 
   listProviders: (token: string): Promise<readonly ProviderItem[]> =>
     request(token, "models/providers"),

@@ -3,6 +3,7 @@ import type { ComputedRef, ShallowRef } from "vue";
 import { adminApi, AdminApiError } from "@/api/admin-api";
 import type {
   ApplySwapResult,
+  BackfillSectionTitlesResult,
   CostSummary,
   EmbeddingImpactPreview,
   LlmCallItem,
@@ -54,6 +55,7 @@ interface UseAdmin {
   loadCostSummary: () => Promise<void>;
   previewEmbeddingSwap: () => Promise<EmbeddingImpactPreview>;
   applyEmbeddingSwap: (modelId: string) => Promise<ApplySwapResult>;
+  backfillSectionTitles: () => Promise<BackfillSectionTitlesResult>;
   loadProviders: () => Promise<void>;
   saveProvider: (id: string | null, body: ProviderUpsertBody) => Promise<void>;
   deleteProvider: (id: string) => Promise<void>;
@@ -160,6 +162,10 @@ export function useAdmin(): UseAdmin {
     return result;
   }
 
+  function backfillSectionTitles(): Promise<BackfillSectionTitlesResult> {
+    return adminApi.backfillSectionTitles(requireToken());
+  }
+
   async function loadProviders(): Promise<void> {
     providers.value = await adminApi.listProviders(requireToken());
   }
@@ -216,6 +222,7 @@ export function useAdmin(): UseAdmin {
     loadCostSummary,
     previewEmbeddingSwap,
     applyEmbeddingSwap,
+    backfillSectionTitles,
     loadProviders,
     saveProvider,
     deleteProvider,

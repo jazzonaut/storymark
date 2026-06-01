@@ -15,6 +15,10 @@ namespace Storymark.Api.Services.Books;
 /// anything external or unresolved is dropped.</summary>
 internal sealed class ContentSanitizationService
 {
+    // A heading longer than this is prose styled as a heading, not a section title;
+    // we'd rather fall back to "Untitled" than show a truncated sentence.
+    private const int MaxHeadingTitleLength = 200;
+
     private static readonly HashSet<string> AllowedTags = new(StringComparer.Ordinal)
     {
         "p", "div", "span", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote",
@@ -69,6 +73,7 @@ internal sealed class ContentSanitizationService
             WordCount = wordCount,
             Paragraphs = paragraphs,
             UsedImagePaths = used,
+            HeadingTitle = ExtractHeadingTitle(body),
         };
     }
 
@@ -259,6 +264,31 @@ internal sealed class ContentSanitizationService
 
         var plainText = builder.ToString().TrimEnd('\n');
         return (plainText, paragraphs, CountWords(plainText));
+    }
+
+    /// <summary>Extracts the first-heading title from already-sanitised section HTML,
+    /// applying the same rule as <see cref="Sanitize"/>. Backfills a title for sections
+    /// stored before heading-fallback existed, without re-parsing the source EPUB.</summary>
+    public string? ExtractHeadingTitle(string sanitizedHtml)
+    {
+        var document = _parser.ParseDocument(sanitizedHtml);
+        return document.Body is { } body ? ExtractHeadingTitle(body) : null;
+    }
+
+    /// <summary>The section's first heading, used as a title for spine files the
+    /// EPUB's table of contents doesn't name. Returns <c>null</c> when there is no
+    /// heading or it reads as prose rather than a title (longer than
+    /// <see cref="MaxHeadingTitleLength"/>), so the caller keeps its own fallback.</summary>
+    private static string? ExtractHeadingTitle(IElement body)
+    {
+        var heading = body.QuerySelector("h1, h2, h3, h4, h5, h6");
+        if (heading is null)
+        {
+            return null;
+        }
+
+        var text = NormalizeWhitespace(heading.TextContent);
+        return text.Length is > 0 and <= MaxHeadingTitleLength ? text : null;
     }
 
     private static SanitizedSection Empty(IReadOnlySet<string> used) => new()
