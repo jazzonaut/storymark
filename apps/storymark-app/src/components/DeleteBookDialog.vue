@@ -27,12 +27,11 @@ function onConfirm(): void {
     @click.self="!busy && emit('cancel')"
   >
     <div class="absolute inset-0 bg-black/40"></div>
-    <section
-      class="relative w-full max-w-md rounded-2xl bg-[var(--sm-bg)] p-6 shadow-2xl"
-    >
+    <section class="relative w-full max-w-md rounded-2xl bg-[var(--sm-bg)] p-6 shadow-2xl">
       <h2 class="text-lg font-semibold">Delete this book?</h2>
       <p class="mt-2 text-sm text-[var(--sm-muted)]">
-        This permanently removes <span class="font-medium text-[var(--sm-fg)]">{{ book.title }}</span>
+        This permanently removes
+        <span class="font-medium text-[var(--sm-fg)]">{{ book.title }}</span>
         and all of its data — sections, bookmarks, reading progress, and everything Storymark
         extracted. This cannot be undone.
       </p>
