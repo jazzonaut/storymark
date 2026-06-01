@@ -9,10 +9,14 @@ import type {
   StoryGuideEntity,
 } from "@storymark/shared-types";
 
-/** A book's section manifest, cached for offline reading. */
+/** A book's section manifest, cached for offline reading. `cachedAt` (epoch ms)
+ * drives a short TTL: a fresh row is served directly, a stale one is refreshed
+ * online but still rendered offline — so server-side title changes (e.g. a
+ * section-title backfill) surface without the reader having to clear storage. */
 export interface CachedManifest {
   readonly bookId: string;
   readonly sections: readonly SectionSummary[];
+  readonly cachedAt: number;
 }
 
 /** Full section content, cached and keyed by [bookId+sectionIndex]. */

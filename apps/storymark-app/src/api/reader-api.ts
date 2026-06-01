@@ -1,23 +1,28 @@
 import type { Section, SectionSummary } from "@storymark/shared-types";
 import { fetchJson } from "@/api/http";
+import { readThroughCache } from "@/api/read-through-cache";
 import { db } from "@/db/storymark-db";
 
 // The single read path for reader content. Reads through IndexedDB first, falls
 // back to the API, and writes back — so once a book is prefetched the reader is
 // fully offline-capable (the offline-detection/service-worker layer lands in S2.3).
 export const readerApi = {
-  getManifest: async (bookId: string): Promise<readonly SectionSummary[]> => {
-    const cached = await db.manifests.get(bookId);
-    if (cached) {
-      return cached.sections;
-    }
-    const sections = await fetchJson<readonly SectionSummary[]>(
-      `/api/books/${encodeURIComponent(bookId)}/sections`,
-      "Failed to load sections",
-    );
-    await db.manifests.put({ bookId, sections });
-    return sections;
-  },
+  // TTL read-through (not cache-forever): the manifest carries section titles, which
+  // the server can change after the fact (a title backfill), so a stale row is
+  // refreshed when online and still served offline.
+  getManifest: (bookId: string): Promise<readonly SectionSummary[]> =>
+    readThroughCache({
+      readCached: async () => {
+        const row = await db.manifests.get(bookId);
+        return row ? { value: row.sections, cachedAt: row.cachedAt } : undefined;
+      },
+      fetchFresh: () =>
+        fetchJson<readonly SectionSummary[]>(
+          `/api/books/${encodeURIComponent(bookId)}/sections`,
+          "Failed to load sections",
+        ),
+      writeBack: (sections) => db.manifests.put({ bookId, sections, cachedAt: Date.now() }),
+    }),
 
   getSection: async (bookId: string, sectionIndex: number): Promise<Section> => {
     const cached = await db.sections.get([bookId, sectionIndex]);
