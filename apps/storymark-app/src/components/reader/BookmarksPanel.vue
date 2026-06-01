@@ -3,11 +3,13 @@ import { computed, ref, toRef } from "vue";
 import type { SectionSummary } from "@storymark/shared-types";
 import type { StoredBookmark } from "@/db/storymark-db";
 import { useFocusTrap } from "@/composables/use-focus-trap";
+import BookmarkButton from "@/components/reader/BookmarkButton.vue";
 
 const props = defineProps<{
   open: boolean;
   bookmarks: readonly StoredBookmark[];
   manifest: readonly SectionSummary[];
+  currentBookmarked: boolean;
 }>();
 
 const panel = ref<HTMLElement | null>(null);
@@ -17,6 +19,7 @@ defineEmits<{
   (e: "close"): void;
   (e: "jump", bookmark: StoredBookmark): void;
   (e: "remove", id: string): void;
+  (e: "toggle-bookmark"): void;
 }>();
 
 interface BookmarkGroup {
@@ -59,17 +62,20 @@ const groups = computed<readonly BookmarkGroup[]>(() => {
     >
       <div class="mb-4 flex items-center justify-between">
         <h2 class="text-base font-semibold">Bookmarks</h2>
-        <button
-          type="button"
-          class="rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
-          @click="$emit('close')"
-        >
-          Done
-        </button>
+        <div class="flex items-center gap-1">
+          <BookmarkButton :active="currentBookmarked" @toggle="$emit('toggle-bookmark')" />
+          <button
+            type="button"
+            class="rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
+            @click="$emit('close')"
+          >
+            Done
+          </button>
+        </div>
       </div>
 
       <p v-if="groups.length === 0" class="text-sm text-[var(--sm-muted)]">
-        No bookmarks yet. Tap the bookmark button while reading to save a spot.
+        No bookmarks yet. Tap the bookmark icon above to save your current spot.
       </p>
 
       <div v-for="group in groups" :key="group.sectionIndex" class="mb-4">

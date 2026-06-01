@@ -512,12 +512,10 @@ onBeforeUnmount(() => {
         :time-left="timeLeftLabel"
         :visible="chromeVisible"
         :offline="!isOnline"
-        :bookmarked="isCurrentBookmarked"
         @open-settings="openSettings"
         @open-bookmarks="openBookmarks"
         @open-memory="openMemoryPanel"
         @open-contents="openContents"
-        @toggle-bookmark="toggleBookmark"
       />
 
       <PaginatedSection
@@ -579,9 +577,11 @@ onBeforeUnmount(() => {
         :open="bookmarksOpen"
         :bookmarks="bookmarks"
         :manifest="manifest"
+        :current-bookmarked="isCurrentBookmarked"
         @close="bookmarksOpen = false"
         @jump="(bookmark) => jumpToBookmark(bookmark.sectionIndex, bookmark.paragraphIndex)"
         @remove="removeById"
+        @toggle-bookmark="toggleBookmark"
       />
 
       <ContentsPanel

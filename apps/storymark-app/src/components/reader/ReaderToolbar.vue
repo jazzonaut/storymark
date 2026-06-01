@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
-import BookmarkButton from "@/components/reader/BookmarkButton.vue";
 
 defineProps<{
   title: string;
@@ -9,7 +8,6 @@ defineProps<{
   timeLeft: string;
   visible: boolean;
   offline: boolean;
-  bookmarked: boolean;
 }>();
 
 defineEmits<{
@@ -17,7 +15,6 @@ defineEmits<{
   (e: "open-bookmarks"): void;
   (e: "open-memory"): void;
   (e: "open-contents"): void;
-  (e: "toggle-bookmark"): void;
 }>();
 </script>
 
@@ -51,7 +48,6 @@ defineEmits<{
     >
       Offline
     </span>
-    <BookmarkButton :active="bookmarked" @toggle="$emit('toggle-bookmark')" />
     <button
       type="button"
       class="shrink-0 rounded px-2 py-1 text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
