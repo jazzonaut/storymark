@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Storymark.Api.Domain.Books;
 using Storymark.Api.Domain.Llm;
@@ -24,6 +25,14 @@ internal sealed class AssistantService(
 {
     private const int PerQueryK = 8;
     private const int SnippetMaxChars = 240;
+
+    // Matches a bare numeric citation marker like [2]. The context labels its
+    // passage numbers the same way and tells the model to cite with them; the
+    // "(Section N)" label uses parens so it never collides with this.
+    private static readonly Regex CitationMarker = new(
+        @"\[(?<n>\d+)\]",
+        RegexOptions.Compiled | RegexOptions.ExplicitCapture | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     // A chunk scores up to ~2.0 only when it surfaces in both the semantic and the
     // keyword pass (see SpoilerSafeRetrievalService.Rerank); that double hit is the
@@ -67,15 +76,7 @@ internal sealed class AssistantService(
         var completion = await router.CompleteAsync("qa", messages, metadata, ct);
         var answer = completion.Content.Trim();
 
-        var sources = evidence
-            .Select(e => new QuestionSource
-            {
-                SectionIndex = e.SectionIndex,
-                LocationStart = e.LocationStart,
-                LocationEnd = e.LocationEnd,
-                Snippet = Snippet(e.Text),
-            })
-            .ToList();
+        var sources = BuildSources(answer, evidence);
 
         db.QuestionAnswers.Add(new QuestionAnswer
         {
@@ -156,14 +157,17 @@ internal sealed class AssistantService(
         List<EvidenceChunk> evidence)
     {
         var context = new StringBuilder();
-        foreach (var chunk in evidence)
+        for (var i = 0; i < evidence.Count; i++)
         {
             if (context.Length > 0)
             {
                 context.Append("\n\n");
             }
 
-            context.Append(CultureInfo.InvariantCulture, $"[Section {chunk.SectionIndex}]\n{chunk.Text}");
+            var chunk = evidence[i];
+            context.Append(
+                CultureInfo.InvariantCulture,
+                $"[{i + 1}] (Section {chunk.SectionIndex})\n{chunk.Text}");
         }
 
         return settings.GetString("prompts.qa")
@@ -183,6 +187,47 @@ internal sealed class AssistantService(
         return evidence.Max(e => e.Score) >= HighConfidenceScore
             ? AnswerConfidence.High
             : AnswerConfidence.Medium;
+    }
+
+    /// <summary>Maps the answer's inline <c>[n]</c> markers back to the numbered
+    /// evidence so the UI shows only what the answer actually leaned on, in the
+    /// order it was first cited. When the model cites nothing (common on weaker
+    /// local models), falls back to the full evidence set — the UI presents that
+    /// as "related passages" rather than citations.</summary>
+    private static List<QuestionSource> BuildSources(string answer, List<EvidenceChunk> evidence)
+    {
+        var cited = ParseCitations(answer, evidence.Count);
+        var numbered = cited.Count > 0
+            ? cited.Select(n => (Index: n, Chunk: evidence[n - 1]))
+            : evidence.Select((chunk, i) => (Index: i + 1, Chunk: chunk));
+
+        return numbered
+            .Select(x => new QuestionSource
+            {
+                Index = x.Index,
+                SectionIndex = x.Chunk.SectionIndex,
+                LocationStart = x.Chunk.LocationStart,
+                LocationEnd = x.Chunk.LocationEnd,
+                Snippet = Snippet(x.Chunk.Text),
+            })
+            .ToList();
+    }
+
+    private static List<int> ParseCitations(string answer, int evidenceCount)
+    {
+        var seen = new List<int>();
+        foreach (Match match in CitationMarker.Matches(answer))
+        {
+            if (int.TryParse(match.Groups["n"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var n)
+                && n >= 1
+                && n <= evidenceCount
+                && !seen.Contains(n))
+            {
+                seen.Add(n);
+            }
+        }
+
+        return seen;
     }
 
     private static string Snippet(string text)
