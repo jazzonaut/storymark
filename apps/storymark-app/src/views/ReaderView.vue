@@ -12,6 +12,7 @@ import SectionRecapCard from "@/components/reader/SectionRecapCard.vue";
 import SelectionPopover from "@/components/reader/SelectionPopover.vue";
 import { useAssistant } from "@/composables/use-assistant";
 import { useEntitySummary } from "@/composables/use-entity-summary";
+import { useMemoryPanel } from "@/composables/use-memory-panel";
 import type { ReaderSelection } from "@/composables/use-selection-hint";
 import { useBookCache } from "@/composables/use-book-cache";
 import { useBookmarks } from "@/composables/use-bookmarks";
@@ -54,6 +55,12 @@ const { bookmarks, load: loadBookmarks, toggle, removeById, isBookmarked } = use
 const { draft: assistantDraft } = useAssistant();
 const { open: openEntitySummary, close: closeEntitySummary } = useEntitySummary();
 const {
+  restore: restoreMemoryTab,
+  setTab: setMemoryTab,
+  selectByIndex: selectMemoryTab,
+  tabCount: memoryTabCount,
+} = useMemoryPanel();
+const {
   snapshot: recapSnapshot,
   visible: recapVisible,
   reset: resetRecap,
@@ -73,7 +80,7 @@ const phase = ref<"loading" | "ready" | "error">("loading");
 const chromeVisible = ref(true);
 const settingsOpen = ref(false);
 const bookmarksOpen = ref(false);
-const assistantOpen = ref(false);
+const memoryPanelOpen = ref(false);
 const selection = ref<ReaderSelection | null>(null);
 const highlight = ref<{ paragraphIndex: number; nonce: number } | null>(null);
 let highlightNonce = 0;
@@ -115,6 +122,12 @@ const currentLocation = computed<number>(
 const cachingLabel = computed<string>(() =>
   progress.value ? `${String(progress.value.cached)}/${String(progress.value.total)}` : "",
 );
+// While the book is still being processed, the AI tabs legitimately have no data
+// yet — drives a "still processing" empty state instead of "nothing here".
+const isMemoryProcessing = computed<boolean>(() => {
+  const status = books.value.find((book) => book.bookId === bookId)?.processingStatus;
+  return status !== undefined && status !== "Indexed" && status !== "Failed";
+});
 
 let idleTimer: number | undefined;
 
@@ -123,7 +136,7 @@ function scheduleHide(): void {
     window.clearTimeout(idleTimer);
   }
   idleTimer = window.setTimeout(() => {
-    if (!settingsOpen.value && !bookmarksOpen.value && !assistantOpen.value) {
+    if (!settingsOpen.value && !bookmarksOpen.value && !memoryPanelOpen.value) {
       chromeVisible.value = false;
     }
   }, CHROME_IDLE_MS);
@@ -155,17 +168,21 @@ function openBookmarks(): void {
   chromeVisible.value = true;
 }
 
-function openAssistant(): void {
-  assistantOpen.value = true;
+// The toolbar entry opens the Memory panel to the tab the reader left it on
+// (restored on book open). The selection popover's ask flow forces the Assistant
+// tab below, since that's an explicit "ask" intent.
+function openMemoryPanel(): void {
+  memoryPanelOpen.value = true;
   chromeVisible.value = true;
 }
 
 // "Ask…" / "Tell me more" from the selection popover: pre-fill the assistant
-// input with the selection and open the panel.
+// input, switch to the Assistant tab, and open the panel.
 function onAskFromSelection(text: string): void {
   assistantDraft.value = text;
   selection.value = null;
-  assistantOpen.value = true;
+  setMemoryTab("assistant");
+  memoryPanelOpen.value = true;
   chromeVisible.value = true;
 }
 
@@ -200,7 +217,7 @@ async function jumpToLocation(sectionIndex: number, locationStart: number): Prom
   if (here !== null && returnPoint.value === null) {
     returnPoint.value = { sectionIndex: here, paragraphIndex: currentParagraphIndex.value };
   }
-  assistantOpen.value = false;
+  memoryPanelOpen.value = false;
   const paragraphIndex = await goToLocation(sectionIndex, locationStart);
   if (paragraphIndex !== null) {
     flashParagraph(paragraphIndex);
@@ -318,6 +335,7 @@ async function load(): Promise<void> {
     phase.value = "ready";
     revealChrome();
     void loadBookmarks(bookId);
+    void restoreMemoryTab(bookId);
     // After a >24h gap, recap the story up to where the reader is resuming.
     if (currentSectionIndex.value !== null) {
       void maybeShowPreviously(bookId, currentSectionIndex.value, currentLocation.value);
@@ -327,11 +345,57 @@ async function load(): Promise<void> {
   }
 }
 
+// Desktop shortcuts: `g m` opens the Memory panel; number keys switch tabs while
+// it's open; Esc closes it. Ignored while typing in an input (the question box,
+// the Story Guide search) so they never hijack text entry.
+let awaitingPanelKey = false;
+let panelKeyTimer: number | undefined;
+
+function onReaderKeydown(event: KeyboardEvent): void {
+  if (event.key === "Escape" && memoryPanelOpen.value) {
+    memoryPanelOpen.value = false;
+    return;
+  }
+  const target = event.target;
+  const typing =
+    target instanceof HTMLElement &&
+    (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+  if (typing || event.metaKey || event.ctrlKey || event.altKey) {
+    return;
+  }
+  if (awaitingPanelKey) {
+    awaitingPanelKey = false;
+    window.clearTimeout(panelKeyTimer);
+    if (event.key === "m") {
+      event.preventDefault();
+      openMemoryPanel();
+      return;
+    }
+  }
+  if (event.key === "g") {
+    awaitingPanelKey = true;
+    panelKeyTimer = window.setTimeout(() => {
+      awaitingPanelKey = false;
+    }, 700);
+    return;
+  }
+  if (memoryPanelOpen.value && /^[1-9]$/.test(event.key)) {
+    const index = Number(event.key);
+    if (index <= memoryTabCount) {
+      event.preventDefault();
+      selectMemoryTab(index);
+    }
+  }
+}
+
 onMounted(() => {
+  window.addEventListener("keydown", onReaderKeydown);
   void load();
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onReaderKeydown);
+  window.clearTimeout(panelKeyTimer);
   if (idleTimer !== undefined) {
     window.clearTimeout(idleTimer);
   }
@@ -377,7 +441,7 @@ onBeforeUnmount(() => {
         :bookmarked="isCurrentBookmarked"
         @open-settings="openSettings"
         @open-bookmarks="openBookmarks"
-        @open-assistant="openAssistant"
+        @open-memory="openMemoryPanel"
         @toggle-bookmark="toggleBookmark"
       />
 
@@ -445,12 +509,13 @@ onBeforeUnmount(() => {
       />
 
       <MemoryPanel
-        :open="assistantOpen"
+        :open="memoryPanelOpen"
         :book-id="bookId"
         :current-section="currentSectionIndex"
         :current-location="currentLocation"
         :manifest="manifest"
-        @close="assistantOpen = false"
+        :is-processing="isMemoryProcessing"
+        @close="memoryPanelOpen = false"
         @jump="onJumpToSource"
         @jump-location="onJumpToTimeline"
       />

@@ -2,6 +2,7 @@
 import { defineAsyncComponent, ref, shallowRef, watch } from "vue";
 import type { BookEvent, SectionSummary } from "@storymark/shared-types";
 import EventDetailCard from "@/components/reader/EventDetailCard.vue";
+import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
 import { useTimeline } from "@/composables/use-timeline";
 import { sectionLabel } from "@/utils/section-label";
 
@@ -13,6 +14,7 @@ const props = defineProps<{
   currentSection: number | null;
   currentLocation: number;
   manifest: readonly SectionSummary[];
+  isProcessing: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -44,9 +46,11 @@ watch(
 
     <p v-else-if="error" class="text-sm text-[var(--sm-muted)]">{{ error }}</p>
 
-    <p v-else-if="events.length === 0" class="text-sm text-[var(--sm-muted)]">
-      No events yet — they appear here as you read through the story.
-    </p>
+    <MemoryEmptyState
+      v-else-if="events.length === 0"
+      :processing="isProcessing"
+      idle="No events yet — they appear here as you read through the story."
+    />
 
     <template v-else>
       <TimelineChart :events="events" :entity-names="entityNames" @select="onSelect" />

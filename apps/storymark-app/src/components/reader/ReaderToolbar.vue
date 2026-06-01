@@ -14,7 +14,7 @@ defineProps<{
 defineEmits<{
   (e: "open-settings"): void;
   (e: "open-bookmarks"): void;
-  (e: "open-assistant"): void;
+  (e: "open-memory"): void;
   (e: "toggle-bookmark"): void;
 }>();
 </script>
@@ -47,10 +47,10 @@ defineEmits<{
     <button
       type="button"
       class="shrink-0 rounded px-2 py-1 text-sm text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
-      aria-label="Ask the assistant"
-      @click="$emit('open-assistant')"
+      aria-label="Open the Memory panel"
+      @click="$emit('open-memory')"
     >
-      Ask
+      Memory
     </button>
     <button
       type="button"

@@ -102,6 +102,15 @@ export interface StoredBookOpen {
   readonly lastOpenedAt: string;
 }
 
+/** The last-active Memory panel tab for a book (one row per book), so reopening
+ * the panel lands on the tab the reader left it on. `lastTab` is stored loosely as
+ * a string and validated against the known tabs on read (the tab set can change
+ * between releases). */
+export interface StoredPanelState {
+  readonly bookId: string;
+  readonly lastTab: string;
+}
+
 // The `as Dexie & { … }` pattern types the tables without subclassing Dexie,
 // which would force definite-assignment (`!`) fields the no-non-null-assertion
 // rule forbids. The schema string below is the source of truth for indexes.
@@ -115,6 +124,7 @@ type StorymarkDb = Dexie & {
   bookOpens: Table<StoredBookOpen, string>;
   timelines: Table<CachedTimeline, [string, number]>;
   graphs: Table<CachedGraph, [string, number]>;
+  panelState: Table<StoredPanelState, string>;
 };
 
 export const db = new Dexie("storymark") as StorymarkDb;
@@ -161,6 +171,11 @@ db.version(7).stores({
   graphs: "[bookId+upToSection]",
 });
 
+// v8 adds the per-book last-active Memory panel tab, keyed by bookId.
+db.version(8).stores({
+  panelState: "bookId",
+});
+
 // A release that adds a db.version() above upgrades the on-device database on
 // first open, and IndexedDB runs that upgrade only once every *other* connection
 // to it has closed. If a second tab — or the still-resident installed PWA — holds
@@ -180,6 +195,7 @@ export async function purgeBookData(bookId: string): Promise<void> {
     db.manifests.delete(bookId),
     db.progress.delete(bookId),
     db.bookOpens.delete(bookId),
+    db.panelState.delete(bookId),
     db.bookmarks.where("bookId").equals(bookId).delete(),
     db.sections
       .where("[bookId+sectionIndex]")

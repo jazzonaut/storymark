@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { defineAsyncComponent, watch } from "vue";
+import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
 import { useRelationshipGraph } from "@/composables/use-relationship-graph";
 import { useEntitySummary } from "@/composables/use-entity-summary";
 
@@ -12,6 +13,7 @@ const props = defineProps<{
   bookId: string;
   currentSection: number | null;
   currentLocation: number;
+  isProcessing: boolean;
 }>();
 
 const { nodes, edges, isLoading, error, load } = useRelationshipGraph();
@@ -48,9 +50,11 @@ watch(
 
     <p v-else-if="error" class="text-sm text-[var(--sm-muted)]">{{ error }}</p>
 
-    <p v-else-if="nodes.length === 0" class="text-sm text-[var(--sm-muted)]">
-      No one to map yet — characters and how they connect appear here as you read.
-    </p>
+    <MemoryEmptyState
+      v-else-if="nodes.length === 0"
+      :processing="isProcessing"
+      idle="No one to map yet — characters and how they connect appear here as you read."
+    />
 
     <template v-else>
       <RelationshipGraphChart :nodes="nodes" :edges="edges" @node-tap="onNodeTap" />

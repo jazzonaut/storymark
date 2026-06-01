@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import type { StoryGuideEntity } from "@storymark/shared-types";
 import EntityTypeBadge from "@/components/reader/EntityTypeBadge.vue";
+import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
 import { entitiesApi } from "@/api/entities-api";
 import { useEntitySummary } from "@/composables/use-entity-summary";
 import { ApiError } from "@/api/api-error";
@@ -10,6 +11,7 @@ const props = defineProps<{
   bookId: string;
   currentSection: number | null;
   currentLocation: number;
+  isProcessing: boolean;
 }>();
 
 const { open } = useEntitySummary();
@@ -99,10 +101,11 @@ watch(
 
     <p v-else-if="error" class="text-sm text-[var(--sm-muted)]">{{ error }}</p>
 
-    <p v-else-if="entities.length === 0" class="text-sm text-[var(--sm-muted)]">
-      Nothing in the Story Guide yet — keep reading and people, places, and things you meet will
-      appear here.
-    </p>
+    <MemoryEmptyState
+      v-else-if="entities.length === 0"
+      :processing="isProcessing"
+      idle="Nothing in the Story Guide yet — keep reading and people, places, and things you meet will appear here."
+    />
 
     <p v-else-if="filtered.length === 0" class="text-sm text-[var(--sm-muted)]">
       No matches for “{{ search }}”.
