@@ -518,24 +518,27 @@ onBeforeUnmount(() => {
         @open-contents="openContents"
       />
 
+      <!-- PaginatedSection is a fragment (scroll div + teleported handles), which
+           <Transition> can't animate; the single-root wrapper gives it one element
+           to slide. -->
       <Transition :name="sectionTransition">
-        <PaginatedSection
-          v-if="currentSection"
-          :key="currentSectionIndex ?? -1"
-          :section="currentSection"
-          :entry-paragraph="entryParagraph"
-          :entry-page="entryPage"
-          :highlight="highlight"
-          :selection-active="selection !== null"
-          @update:paragraph="onParagraph"
-          @page-change="onPageChange"
-          @next-section="goNext"
-          @prev-section="goPrev"
-          @toggle-chrome="toggleChrome"
-          @select="(payload) => (selection = payload)"
-          @dismiss-select="selection = null"
-          @entity-tap="onEntityTap"
-        />
+        <div v-if="currentSection" :key="currentSectionIndex ?? -1" class="reader-section">
+          <PaginatedSection
+            :section="currentSection"
+            :entry-paragraph="entryParagraph"
+            :entry-page="entryPage"
+            :highlight="highlight"
+            :selection-active="selection !== null"
+            @update:paragraph="onParagraph"
+            @page-change="onPageChange"
+            @next-section="goNext"
+            @prev-section="goPrev"
+            @toggle-chrome="toggleChrome"
+            @select="(payload) => (selection = payload)"
+            @dismiss-select="selection = null"
+            @entity-tap="onEntityTap"
+          />
+        </div>
       </Transition>
 
       <Transition
@@ -681,6 +684,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.reader-section {
+  height: 100%;
+}
+
 /* Chapter-change slide. During the turn both sections are absolutely stacked so
    the old one slides out as the new one slides in; the duration/easing mirror the
    within-chapter page-flip (SWIPE_ANIM_MS / easeOutCubic in PaginatedSection) so a
