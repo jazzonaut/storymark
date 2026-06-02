@@ -20,10 +20,13 @@ internal sealed class BookExtractionService(StorymarkDbContext db)
             return null;
         }
 
+        // Gate on LocationEnd, not LocationStart: an event is only revealed once the
+        // reader has passed its *end*, so a span that runs deep into the section can't
+        // surface its outcome before the reader has read it (spoiler-safety invariant).
         return await db.BookEvents.AsNoTracking()
             .Where(e => e.BookId == bookId
                 && (e.SectionIndex < upToSection
-                    || (e.SectionIndex == upToSection && e.LocationStart <= upToLocation)))
+                    || (e.SectionIndex == upToSection && e.LocationEnd <= upToLocation)))
             .OrderBy(e => e.SectionIndex)
             .ThenBy(e => e.LocationStart)
             .Select(e => new EventView

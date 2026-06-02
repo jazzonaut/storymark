@@ -23,9 +23,11 @@ internal sealed record ExtractedEvent
 
     public string? EventType { get; init; }
 
-    public int LocationStart { get; init; }
-
-    public int LocationEnd { get; init; }
+    /// <summary>A short verbatim quote from the section where the event occurs. The
+    /// event is positioned by locating this in the section text (small models can't
+    /// produce reliable character offsets); an event whose quote can't be found is
+    /// anchored to the section end so it never reveals before it has been read.</summary>
+    public string? Evidence { get; init; }
 
     public IReadOnlyList<string>? InvolvedEntityNames { get; init; }
 }

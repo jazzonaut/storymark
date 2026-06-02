@@ -2,7 +2,7 @@ namespace Storymark.Api.Prompts;
 
 /// <summary>Seeded defaults for the <c>prompts.*</c> settings. Once seeded, the
 /// live values are edited from the admin panel; these are only the first-run text.
-/// Mirrors docs/plan.md §19.</summary>
+/// Covers the prompt set described in docs/plan.md §19.</summary>
 internal static class PromptDefaults
 {
     public const string Qa =
@@ -17,9 +17,11 @@ internal static class PromptDefaults
         - Use only the provided context.
         - Do not use outside knowledge of the book.
         - Do not reveal, imply, foreshadow or hint at future events.
-        - If the answer is not available from the provided context, say:
+        - Answer from the context when any provided passage supports a useful answer.
+        - If the provided context supports only a partial answer, state only what is
+          known so far.
+        - If no provided passage supports an answer, say exactly:
           "That has not been revealed yet."
-        - If the context is incomplete, say what is known so far.
         - Keep the answer concise and helpful.
         - The context passages are numbered. When a statement is supported by a
           passage, cite it inline using its number in square brackets, e.g. [1].
@@ -42,16 +44,15 @@ internal static class PromptDefaults
           "importantEvents": [
             {
               "description": "...",
-              "eventType": "arrival | departure | death | betrayal | reveal | conflict | reconciliation | discovery | promise | other",
-              "locationStart": 0,
-              "locationEnd": 0,
+              "eventType": "arrival",
+              "evidence": "...",
               "involvedEntityNames": ["..."]
             }
           ],
           "entitiesIntroduced": [
             {
               "canonicalName": "...",
-              "entityType": "Person | Place | Organization | Object | Event | Concept | Creature | Title | Unknown",
+              "entityType": "Person",
               "aliases": ["..."],
               "firstSeenEvidence": "..."
             }
@@ -60,8 +61,8 @@ internal static class PromptDefaults
             {
               "fromName": "...",
               "toName": "...",
-              "type": "parent | sibling | friend | enemy | lover | ally | rival | mentor | servant | other",
-              "polarity": "positive | negative | neutral | complex",
+              "type": "friend",
+              "polarity": "positive",
               "evidence": "..."
             }
           ],
@@ -70,6 +71,16 @@ internal static class PromptDefaults
 
         Use only this section.
         Do not infer future events.
+        Allowed eventType values: arrival, departure, death, betrayal, reveal,
+        conflict, reconciliation, discovery, promise, other.
+        Allowed entityType values: Person, Place, Organization, Object, Event,
+        Concept, Creature, Title, Unknown.
+        Allowed relationship type values: parent, sibling, friend, enemy, lover,
+        ally, rival, mentor, servant, other.
+        Allowed polarity values: positive, negative, neutral, complex.
+        Each event's evidence must be a short verbatim quote copied exactly from SECTION
+        TEXT at the point the event occurs — it is used to locate the event in the text.
+        Do not paraphrase, summarise, or invent the quote; copy it character for character.
         """;
 
     public const string EntitySummary =
@@ -110,17 +121,20 @@ internal static class PromptDefaults
 
     public const string BookMemory =
         """
-        Update the book-so-far memory using the existing memory and the latest section summary.
+        Update the book-so-far memory using the existing memory summary and the latest
+        section summary. This memory is shown to a reader as "the story so far", so it
+        should be concise, chronological, and spoiler-safe.
 
-        Return JSON:
-        - summarySoFar
-        - timeline
-        - openThreads
-        - resolvedThreads
-        - keyEntities
-        - importantObjects
-        - readerReminders
+        Return one JSON object only, with this shape:
+        {
+          "summarySoFar": "a concise cumulative summary of the story so far",
+          "timeline": ["major events in reading order"],
+          "openThreads": ["unresolved questions, mysteries, promises, or tensions"]
+        }
 
-        Do not include anything beyond the supplied section summaries.
+        Preserve important prior facts from the existing memory.
+        Add only information supported by the latest section summary.
+        Do not include anything beyond the supplied summaries.
+        Do not use markdown fences, commentary, or bullet lists outside the JSON.
         """;
 }

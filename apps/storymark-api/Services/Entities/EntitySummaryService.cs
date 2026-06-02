@@ -48,7 +48,12 @@ internal sealed class EntitySummaryService(
         }
 
         var cached = await GetCachedAsync(entityId, section, location, ct);
-        if (cached is not null)
+        // Reuse the cached summary only while the reader hasn't advanced far past where it
+        // was built; once they're more than the threshold beyond it, regenerate so a long
+        // chapter's summary keeps up instead of staying pinned to the first tap's position.
+        // Always spoiler-safe: regeneration uses the current (already-read) location.
+        if (cached is not null
+            && location - cached.UpToLocation <= settings.GetInt("entitySummary.refreshThresholdChars"))
         {
             return ToView(entity, cached.ShortSummary, cached.KnownFacts, cached.Relationships, cached.OpenQuestions);
         }

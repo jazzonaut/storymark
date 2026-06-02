@@ -14,6 +14,17 @@ internal sealed class SettingsDefaultsOptions
     public SearchSettingsDefaults Search { get; init; } = new();
 
     public AssistantSettingsDefaults Assistant { get; init; } = new();
+
+    public EntitySummarySettingsDefaults EntitySummary { get; init; } = new();
+}
+
+internal sealed class EntitySummarySettingsDefaults
+{
+    /// <summary>How far (in section characters) a reader may advance past a cached entity
+    /// summary before the next tap regenerates it, so a long chapter's summary keeps up
+    /// with the reader instead of staying pinned to the first tap's position. ~3000 chars
+    /// is roughly two minutes of reading.</summary>
+    public int RefreshThresholdChars { get; init; } = 3000;
 }
 
 internal sealed class AssistantSettingsDefaults

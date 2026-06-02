@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Storymark.Api.Domain.Books;
@@ -45,6 +46,26 @@ internal sealed class SectionExtractionJob(
     ILogger<SectionExtractionJob> logger)
 {
     private const int SurroundingMaxChars = 160;
+    private const int MinTermLength = 2;
+    private static readonly TimeSpan FirstSeenScanTimeout = TimeSpan.FromSeconds(5);
+    private static readonly Regex TermSeparators = new(@"[.\s]+", RegexOptions.CultureInvariant, FirstSeenScanTimeout);
+
+    // Honorifics, pronouns, and generic role words: an alias built solely from these is a
+    // role label, not a name, so it must not anchor first-seen (keys are lowercase to match
+    // EntityNameNormalizer.MatchKey output).
+    private static readonly HashSet<string> GenericAliasWords = new(StringComparer.Ordinal)
+    {
+        "i", "you", "he", "she", "it", "we", "they", "him", "her", "them", "his", "hers",
+        "its", "their", "theirs", "the", "a", "an", "this", "that", "these", "those",
+        "mr", "mrs", "ms", "miss", "mister", "mistress", "sir", "madam", "madame", "lady",
+        "lord", "dr", "doctor", "prof", "professor", "reverend", "saint", "st",
+        "captain", "commander", "general", "major", "colonel", "sergeant", "lieutenant",
+        "admiral", "king", "queen", "prince", "princess", "duke", "duchess", "count",
+        "countess", "baron", "baroness", "father", "mother", "brother", "sister", "son",
+        "daughter", "uncle", "aunt", "cousin", "master", "boy", "girl", "man", "woman",
+        "child", "kid", "lad", "lass", "guard", "soldier", "servant", "maid", "stranger",
+        "figure", "old", "young",
+    };
 
     public async Task RunAsync(Guid bookId, CancellationToken ct)
     {
@@ -64,6 +85,7 @@ internal sealed class SectionExtractionJob(
 
             await ClearExistingExtractionAsync(bookId, ct);
             await ExtractAllAsync(book, ct);
+            await TryBackfillFirstSeenAsync(book, ct);
 
             // Hand off to the memory pass (BuildingMemorySnapshots), which then chains
             // to EmbeddingJob → Indexed. Memory needs only the section summaries just
@@ -124,6 +146,209 @@ internal sealed class SectionExtractionJob(
         logger.LogInformation(
             "Extracted book {BookId}: {Summaries} summaries, {Events} events, {Relationships} relationships ({Skipped} sections skipped)",
             book.Id, total.Summaries, total.Events, total.Relationships, skipped);
+    }
+
+    /// <summary>Runs the first-seen backfill as a best-effort enhancement over
+    /// already-persisted extraction: a failure here (e.g. a scan timeout) must not fail an
+    /// otherwise-successful book, so it's swallowed and the model-derived positions stand.</summary>
+    private async Task TryBackfillFirstSeenAsync(Book book, CancellationToken ct)
+    {
+        try
+        {
+            await BackfillFirstSeenAsync(book, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "First-seen backfill failed for book {BookId}; skipping", book.Id);
+        }
+    }
+
+    /// <summary>Pulls each entity's first-seen position back to where its name first
+    /// occurs in the prose, not where the model first named it in structured output. The
+    /// extractor only stamps first-seen when an entity surfaces in <c>entitiesIntroduced</c>
+    /// / an event / a relationship, which can lag its true first mention by many sections
+    /// (e.g. a place named in the prologue but not modelled until much later) — leaving it
+    /// hidden from the Story Guide and unhighlighted where it actually appears. The scan
+    /// uses the same folded, separator-flexible whole-word matching as the reader's
+    /// highlighter (highlight-entities.ts), so first-seen lands where the name first
+    /// highlights. Matches only the entity's own canonical name and strong aliases against
+    /// real occurrences in the prose, so it can only reveal an entity on a page where its
+    /// name actually appears — never earlier, and never from a generic role word.</summary>
+    private async Task BackfillFirstSeenAsync(Book book, CancellationToken ct)
+    {
+        var entities = await db.BookEntities.Where(e => e.BookId == book.Id).ToListAsync(ct);
+        if (entities.Count == 0)
+        {
+            return;
+        }
+
+        var index = BuildTermIndex(entities);
+        if (index is null)
+        {
+            return;
+        }
+
+        var earliest = await ScanEarliestOccurrencesAsync(book.Id, index.Value, entities.Count, ct);
+        if (ApplyEarliest(entities, earliest))
+        {
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
+    /// <summary>Maps each entity's separator-insensitive match key (<see
+    /// cref="EntityNameNormalizer.MatchKey"/>) to the entity, plus a whole-word alternation
+    /// over the folded terms (longest-first, so a multi-word name wins over one of its
+    /// parts). Each term's internal separators flex (<c>[.\s]+</c>) so "Mrs. Bancroft" also
+    /// matches the prose's "Mrs.Bancroft" — the same matching the reader's highlighter uses
+    /// (highlight-entities.ts). The canonical name is always indexed; aliases only when they
+    /// are strong (<see cref="IsStrongAlias"/>), so a generic role word the model tagged as
+    /// an alias ("the doctor", "captain") can't drag first-seen onto an unrelated occurrence.
+    /// Each term carries whether it's a proper noun (<see cref="TermHit.RequiresCapital"/>) so
+    /// the scan can demand a capitalised occurrence for "Rose" but match a lowercase
+    /// common-noun name ("the ring") as-is. Returns <c>null</c> when no term survives.</summary>
+    private static (Dictionary<string, TermHit> ByTerm, Regex Pattern)? BuildTermIndex(
+        IReadOnlyList<BookEntity> entities)
+    {
+        var byTerm = new Dictionary<string, TermHit>(StringComparer.Ordinal);
+        var terms = new List<string>();
+
+        void AddTerm(string raw, BookEntity entity)
+        {
+            var key = EntityNameNormalizer.MatchKey(raw);
+            var folded = EntityNameNormalizer.Fold(raw);
+            if (key.Length >= MinTermLength && byTerm.TryAdd(key, new TermHit(entity, folded.Any(char.IsUpper))))
+            {
+                terms.Add(folded.Trim());
+            }
+        }
+
+        foreach (var entity in entities)
+        {
+            AddTerm(entity.CanonicalName, entity);
+            foreach (var alias in entity.Aliases)
+            {
+                if (IsStrongAlias(alias))
+                {
+                    AddTerm(alias, entity);
+                }
+            }
+        }
+
+        if (terms.Count == 0)
+        {
+            return null;
+        }
+
+        terms.Sort((a, b) => b.Length - a.Length);
+        var pattern = new Regex(
+            @"\b(?:" + string.Join("|", terms.Select(TermPattern)) + @")\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+            FirstSeenScanTimeout);
+        return (byTerm, pattern);
+    }
+
+    /// <summary>A regex source for a folded term whose internal separators flex: parts are
+    /// split on whitespace/abbreviation periods and rejoined with <c>[.\s]+</c>, so the
+    /// stored name matches the book's spacing variants. Mirrors <c>termPattern</c> in
+    /// highlight-entities.ts. Parts stay anchored, so a name with the separator dropped
+    /// entirely ("MrsBancroft") still won't match.</summary>
+    private static string TermPattern(string foldedTerm) =>
+        string.Join(
+            @"[.\s]+",
+            TermSeparators.Split(foldedTerm).Where(p => p.Length > 0).Select(Regex.Escape));
+
+    /// <summary>An alias is strong enough to anchor first-seen only if it reads like a proper
+    /// name: it must contain an uppercase letter (generic role nouns like "doctor" are
+    /// lowercase in prose) and not be built solely from honorifics, pronouns, or role words
+    /// ("Captain", "The Doctor", "Mother"). This keeps real aliases ("Frodo", "Captain
+    /// Maren") while rejecting generics that would otherwise reveal an entity at an unrelated
+    /// earlier mention.</summary>
+    private static bool IsStrongAlias(string alias)
+    {
+        var folded = EntityNameNormalizer.Fold(alias);
+        if (!folded.Any(char.IsUpper))
+        {
+            return false;
+        }
+
+        var words = TermSeparators.Split(EntityNameNormalizer.MatchKey(alias))
+            .Where(w => w.Length > 0)
+            .ToList();
+        return words.Count > 0 && words.Any(w => !GenericAliasWords.Contains(w));
+    }
+
+    private async Task<Dictionary<Guid, (int Section, int Location)>> ScanEarliestOccurrencesAsync(
+        Guid bookId, (Dictionary<string, TermHit> ByTerm, Regex Pattern) index, int entityCount, CancellationToken ct)
+    {
+        var sections = await db.BookSections
+            .Where(s => s.BookId == bookId)
+            .OrderBy(s => s.SectionIndex)
+            .ToListAsync(ct);
+
+        var earliest = new Dictionary<Guid, (int Section, int Location)>();
+        foreach (var section in sections)
+        {
+            if (earliest.Count == entityCount)
+            {
+                break;
+            }
+
+            var text = section.TextPath is null ? null : await storage.ReadTextAsync(section.TextPath, ct);
+            if (string.IsNullOrEmpty(text))
+            {
+                continue;
+            }
+
+            // Fold is one char per char, so a match index in the folded haystack is the same
+            // character offset in the original text the locations are measured against. Within
+            // a section matches arrive in order, so the first TryAdd per entity wins.
+            foreach (Match match in index.Pattern.Matches(EntityNameNormalizer.Fold(text)))
+            {
+                // For a proper-noun term ("Rose") a lowercase occurrence ("the rose") is a
+                // common word, not the entity — anchoring first-seen there would reveal it at
+                // an unrelated earlier mention, so skip it. A lowercase common-noun name (an
+                // Object/Concept like "the ring") has no such collision and matches as-is. The
+                // reader's highlighter applies the same per-term test (highlight-entities.ts)
+                // so highlight and gating agree.
+                if (index.ByTerm.TryGetValue(EntityNameNormalizer.MatchKey(match.Value), out var hit)
+                    && (!hit.RequiresCapital || match.Value.Any(char.IsUpper)))
+                {
+                    earliest.TryAdd(hit.Entity.Id, (section.SectionIndex, match.Index));
+                }
+            }
+        }
+
+        return earliest;
+    }
+
+    private static bool ApplyEarliest(
+        IReadOnlyList<BookEntity> entities, Dictionary<Guid, (int Section, int Location)> earliest)
+    {
+        var changed = false;
+        foreach (var entity in entities)
+        {
+            if (!earliest.TryGetValue(entity.Id, out var pos))
+            {
+                continue;
+            }
+
+            var isEarlier = entity.FirstSeenSection is not int seen
+                || pos.Section < seen
+                || (pos.Section == seen && pos.Location < (entity.FirstSeenLocation ?? 0));
+            if (isEarlier)
+            {
+                entity.FirstSeenSection = pos.Section;
+                entity.FirstSeenLocation = pos.Location;
+                entity.UpdatedAt = DateTimeOffset.UtcNow;
+                changed = true;
+            }
+        }
+
+        return changed;
     }
 
     /// <summary>Extracts and persists one section, or returns <c>null</c> if it was
@@ -225,10 +450,15 @@ internal sealed class SectionExtractionJob(
         var now = DateTimeOffset.UtcNow;
         var entitiesSeen = new List<string>();
 
-        ResolveIntroduced(extraction, section, text, reconciler, entitiesSeen);
+        // Fold once: every quote/name lookup below matches against the folded text so
+        // straight-vs-curly punctuation never costs a match. Fold is length-preserving, so
+        // an offset into the folded text is the same offset into the original the reader sees.
+        var foldedText = EntityNameNormalizer.Fold(text);
+
+        ResolveIntroduced(extraction, section, foldedText, reconciler, entitiesSeen);
         var (eventCount, summaryEvents) =
-            PersistEvents(bookId, section, text.Length, extraction, reconciler, entitiesSeen, now);
-        var relationshipCount = PersistRelationships(bookId, section, text, extraction, reconciler, entitiesSeen, now);
+            PersistEvents(bookId, section, foldedText, extraction, reconciler, entitiesSeen, now);
+        var relationshipCount = PersistRelationships(bookId, section, foldedText, extraction, reconciler, entitiesSeen, now);
 
         db.SectionSummaries.Add(new SectionSummary
         {
@@ -247,7 +477,7 @@ internal sealed class SectionExtractionJob(
     }
 
     private static void ResolveIntroduced(
-        SectionExtraction extraction, BookSection section, string text, EntityReconciler reconciler, List<string> entitiesSeen)
+        SectionExtraction extraction, BookSection section, string foldedText, EntityReconciler reconciler, List<string> entitiesSeen)
     {
         foreach (var introduced in extraction.EntitiesIntroduced ?? [])
         {
@@ -256,7 +486,7 @@ internal sealed class SectionExtractionJob(
                 ParseEntityType(introduced.EntityType),
                 introduced.Aliases,
                 section.SectionIndex,
-                location: LocateEntity(text, introduced));
+                location: LocateEntity(foldedText, introduced));
             if (entity is not null)
             {
                 entitiesSeen.Add(entity.CanonicalName);
@@ -267,7 +497,7 @@ internal sealed class SectionExtractionJob(
     private (int Count, List<SectionSummaryEvent> Summary) PersistEvents(
         Guid bookId,
         BookSection section,
-        int textLength,
+        string foldedText,
         SectionExtraction extraction,
         EntityReconciler reconciler,
         List<string> entitiesSeen,
@@ -284,7 +514,7 @@ internal sealed class SectionExtractionJob(
                 continue;
             }
 
-            var (locationStart, locationEnd) = ClampRange(ev.LocationStart, ev.LocationEnd, textLength);
+            var (locationStart, locationEnd) = LocateEvent(foldedText, ev);
             var eventType = CleanOptional(ev.EventType);
             var (involvedIds, involvedNames) = ResolveInvolved(
                 bookId, section, locationStart, locationEnd, description, ev.InvolvedEntityNames, reconciler, entitiesSeen);
@@ -361,7 +591,7 @@ internal sealed class SectionExtractionJob(
     private int PersistRelationships(
         Guid bookId,
         BookSection section,
-        string text,
+        string foldedText,
         SectionExtraction extraction,
         EntityReconciler reconciler,
         List<string> entitiesSeen,
@@ -371,7 +601,7 @@ internal sealed class SectionExtractionJob(
 
         foreach (var rel in extraction.RelationshipDeltas ?? [])
         {
-            var location = LocateRelationship(text, rel);
+            var location = LocateRelationship(foldedText, rel);
             var from = reconciler.Resolve(rel.FromName, EntityType.Unknown, null, section.SectionIndex, location);
             var to = reconciler.Resolve(rel.ToName, EntityType.Unknown, null, section.SectionIndex, location);
             if (from is null || to is null || from.Id == to.Id)
@@ -431,26 +661,36 @@ internal sealed class SectionExtractionJob(
     private static EntityType ParseEntityType(string? value) =>
         Enum.TryParse<EntityType>(value, ignoreCase: true, out var type) ? type : EntityType.Unknown;
 
-    private static (int Start, int End) ClampRange(int start, int end, int textLength)
+    /// <summary>The span of an event in the section, located by its verbatim evidence
+    /// quote (small models can't produce reliable character offsets, so we don't ask for
+    /// them). The prompt asks for a short quote, not a unique one, so the same phrase can
+    /// recur; we take the <em>last</em> occurrence. The event is at one of the matches, all
+    /// at or before the last, so gating on the last reveals only after the reader has passed
+    /// the real one — never before (spoiler-safety invariant). An event whose quote can't be
+    /// found is anchored to the section end, staying hidden until the reader finishes the
+    /// section rather than surfacing at offset 0.</summary>
+    private static (int Start, int End) LocateEvent(string foldedText, ExtractedEvent ev)
     {
-        var s = Math.Clamp(start, 0, textLength);
-        var e = Math.Clamp(end, 0, textLength);
-        return e < s ? (s, s) : (s, e);
+        var quote = ev.Evidence?.Trim();
+        var at = IndexOfOrdinal(foldedText, quote, last: true);
+        return at >= 0 && quote is not null
+            ? (at, Math.Min(at + quote.Length, foldedText.Length))
+            : (foldedText.Length, foldedText.Length);
     }
 
     /// <summary>Best-effort offset of where an introduced entity is first seen in the
     /// section, so the Story Guide and graph gate it to the reader's location rather than
     /// surfacing it from the section start. Prefers the model's evidence quote, then the
     /// canonical name, then an alias; 0 only when none is found in the text.</summary>
-    private static int LocateEntity(string text, ExtractedEntity entity)
+    private static int LocateEntity(string foldedText, ExtractedEntity entity)
     {
-        var at = IndexOfOrdinal(text, entity.FirstSeenEvidence);
+        var at = IndexOfOrdinal(foldedText, entity.FirstSeenEvidence);
         if (at >= 0)
         {
             return at;
         }
 
-        at = IndexOfOrdinal(text, entity.CanonicalName);
+        at = IndexOfOrdinal(foldedText, entity.CanonicalName);
         if (at >= 0)
         {
             return at;
@@ -458,7 +698,7 @@ internal sealed class SectionExtractionJob(
 
         foreach (var alias in entity.Aliases ?? [])
         {
-            var aliasAt = IndexOfOrdinal(text, alias);
+            var aliasAt = IndexOfOrdinal(foldedText, alias);
             if (aliasAt >= 0)
             {
                 return aliasAt;
@@ -473,25 +713,36 @@ internal sealed class SectionExtractionJob(
     /// the page together (the later of their two first mentions); 0 only when neither is
     /// found. Keeps a relationship introduced mid-section hidden until the reader reaches
     /// it rather than from the section start.</summary>
-    private static int LocateRelationship(string text, ExtractedRelationship rel)
+    private static int LocateRelationship(string foldedText, ExtractedRelationship rel)
     {
-        var at = IndexOfOrdinal(text, rel.Evidence);
+        var at = IndexOfOrdinal(foldedText, rel.Evidence);
         if (at >= 0)
         {
             return at;
         }
 
-        var from = IndexOfOrdinal(text, rel.FromName);
-        var to = IndexOfOrdinal(text, rel.ToName);
+        var from = IndexOfOrdinal(foldedText, rel.FromName);
+        var to = IndexOfOrdinal(foldedText, rel.ToName);
         return from >= 0 && to >= 0 ? Math.Max(from, to) : 0;
     }
 
-    private static int IndexOfOrdinal(string text, string? needle)
+    /// <summary>Index of <paramref name="needle"/> in already-folded section text, the first
+    /// occurrence by default or the last when <paramref name="last"/> is set. The needle is
+    /// folded too (it comes straight from the model/entity), so a quote with straight quotes
+    /// matches prose with typographic ones. Fold is length-preserving, so the returned offset
+    /// is valid against the original text.</summary>
+    private static int IndexOfOrdinal(string foldedText, string? needle, bool last = false)
     {
         var trimmed = needle?.Trim();
-        return string.IsNullOrEmpty(trimmed)
-            ? -1
-            : text.IndexOf(trimmed, StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return -1;
+        }
+
+        var folded = EntityNameNormalizer.Fold(trimmed);
+        return last
+            ? foldedText.LastIndexOf(folded, StringComparison.OrdinalIgnoreCase)
+            : foldedText.IndexOf(folded, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? CleanOptional(string? value)
@@ -508,4 +759,8 @@ internal sealed class SectionExtractionJob(
         public SectionCounts Add(SectionCounts other) =>
             new(Summaries + other.Summaries, Events + other.Events, Relationships + other.Relationships);
     }
+
+    // A first-seen scan term: the entity it resolves to, plus whether it's a proper noun
+    // (carries a capital) and so should only match capitalised occurrences in prose.
+    private readonly record struct TermHit(BookEntity Entity, bool RequiresCapital);
 }

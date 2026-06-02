@@ -62,7 +62,7 @@ internal sealed class SelectionHintService(
         int currentLocation,
         CancellationToken ct)
     {
-        var needle = Normalize(selectedText);
+        var needle = Key(selectedText);
         if (needle.Length == 0)
         {
             return null;
@@ -150,14 +150,14 @@ internal sealed class SelectionHintService(
 
     private static bool Matches(BookEntity entity, string needle)
     {
-        if (string.Equals(Normalize(entity.CanonicalName), needle, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(Key(entity.CanonicalName), needle, StringComparison.Ordinal))
         {
             return true;
         }
 
         return entity.Aliases.Any(alias =>
-            string.Equals(Normalize(alias), needle, StringComparison.OrdinalIgnoreCase));
+            string.Equals(Key(alias), needle, StringComparison.Ordinal));
     }
 
-    private static string Normalize(string text) => EntityNameNormalizer.Normalize(text);
+    private static string Key(string text) => EntityNameNormalizer.MatchKey(text);
 }

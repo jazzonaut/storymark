@@ -7,8 +7,12 @@ using Storymark.Api.Prompts;
 
 namespace Storymark.Api.Infrastructure.Settings;
 
-/// <summary>Inserts any missing default settings on startup. Existing keys are
-/// never overwritten — operator edits win.</summary>
+/// <summary>Inserts any missing default settings on startup, and re-seeds keys that
+/// are still seed-authored (<see cref="Setting.UpdatedBy"/> == <c>"seed"</c>) when their
+/// default text has changed — so a default whose *contract* changes (e.g. a prompt the
+/// parser now reads differently) reaches existing installs. Operator edits (any other
+/// <c>UpdatedBy</c>) always win and are never overwritten. Secrets are insert-only: their
+/// stored value is encrypted, so there is no meaningful default to diff against.</summary>
 internal sealed class SettingsSeeder(
     IServiceScopeFactory scopeFactory,
     IOptions<SettingsDefaultsOptions> defaults,
@@ -22,15 +26,21 @@ internal sealed class SettingsSeeder(
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<StorymarkDbContext>();
-        var existing = (await db.Settings.Select(s => s.Key).ToListAsync(ct))
-            .ToHashSet(StringComparer.Ordinal);
+        var existing = (await db.Settings.ToListAsync(ct))
+            .ToDictionary(s => s.Key, StringComparer.Ordinal);
 
         var now = DateTimeOffset.UtcNow;
         var added = 0;
+        var reseeded = new List<string>();
         foreach (var seed in seeds)
         {
-            if (existing.Contains(seed.Key))
+            if (existing.TryGetValue(seed.Key, out var row))
             {
+                if (TryReseed(row, seed, now))
+                {
+                    reseeded.Add(seed.Key);
+                }
+
                 continue;
             }
 
@@ -50,13 +60,39 @@ internal sealed class SettingsSeeder(
             added++;
         }
 
-        if (added > 0)
+        if (added > 0 || reseeded.Count > 0)
         {
             await db.SaveChangesAsync(ct);
         }
 
-        logger.LogInformation("Settings seed complete: {Added} inserted, {Existing} already present",
-            added, existing.Count);
+        logger.LogInformation(
+            "Settings seed complete: {Added} inserted, {Updated} re-seeded, {Existing} already present",
+            added, reseeded.Count, existing.Count);
+        if (reseeded.Count > 0)
+        {
+            // Name the keys: a re-seed silently changes live behaviour (e.g. a prompt the
+            // parser now reads differently), so an operator needs to see which defaults moved.
+            logger.LogInformation(
+                "Re-seeded defaults the operator never edited: {Keys}", string.Join(", ", reseeded));
+        }
+    }
+
+    // Re-seed only rows the operator never touched, and only non-secrets (a secret's stored
+    // value is ciphertext, so there is no plaintext default to diff). seed.JsonValue is exactly
+    // what a non-secret row stores, so an ordinal compare detects a changed default.
+    private static bool TryReseed(Setting row, SettingSeed seed, DateTimeOffset now)
+    {
+        if (seed.IsSecret
+            || !string.Equals(row.UpdatedBy, "seed", StringComparison.Ordinal)
+            || string.Equals(row.Value, seed.JsonValue, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        row.Value = seed.JsonValue;
+        row.ValueType = seed.ValueType;
+        row.UpdatedAt = now;
+        return true;
     }
 
     private List<SettingSeed> BuildSeeds()
@@ -70,6 +106,7 @@ internal sealed class SettingsSeeder(
             Scalar("assistant.evidence.trimLocal", options.Assistant.TrimLocal, SettingValueType.Bool),
             Scalar("assistant.evidence.maxChunks", options.Assistant.MaxChunks, SettingValueType.Int),
             Scalar("assistant.evidence.maxChunksLocal", options.Assistant.MaxChunksLocal, SettingValueType.Int),
+            Scalar("entitySummary.refreshThresholdChars", options.EntitySummary.RefreshThresholdChars, SettingValueType.Int),
             Text("prompts.qa", PromptDefaults.Qa),
             Text("prompts.sectionExtraction", PromptDefaults.SectionExtraction),
             Text("prompts.entitySummary", PromptDefaults.EntitySummary),

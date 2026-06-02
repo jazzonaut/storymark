@@ -5,11 +5,16 @@ using Storymark.Api.Infrastructure.Database;
 namespace Storymark.Api.Services.Extraction;
 
 /// <summary>Reconciles extracted entity names to <see cref="BookEntity"/> rows during
-/// a section-extraction run (docs/adr/0009): a normalised canonical-name/alias match
-/// reuses the existing row, otherwise a new one is inserted. Holds the book's entities
-/// in memory keyed by normalised name so reconciliation is consistent within a single
-/// (sequential) run without a round-trip per name. New rows are added to the tracked
-/// <see cref="StorymarkDbContext"/>; the caller saves.</summary>
+/// a section-extraction run (docs/adr/0009): a match on the separator-insensitive
+/// identity key (<see cref="EntityNameNormalizer.MatchKey"/>) of a canonical name or
+/// alias reuses the existing row, otherwise a new one is inserted. Keying on MatchKey
+/// (not the display-form <see cref="EntityNameNormalizer.Normalize"/>) means spacing and
+/// case variants the model emits across sections — "Mrs. Bancroft" / "Mrs.Bancroft" —
+/// collapse to one entity, the same identity the reader's highlighter and the first-seen
+/// backfill use. The stored canonical name keeps its original punctuation. Holds the
+/// book's entities in memory keyed this way so reconciliation is consistent within a
+/// single (sequential) run without a round-trip per name. New rows are added to the
+/// tracked <see cref="StorymarkDbContext"/>; the caller saves.</summary>
 internal sealed class EntityReconciler
 {
     private readonly StorymarkDbContext _db;
@@ -60,7 +65,7 @@ internal sealed class EntityReconciler
             return null;
         }
 
-        var key = core.ToLowerInvariant();
+        var key = EntityNameNormalizer.MatchKey(core);
         if (_byKey.TryGetValue(key, out var existing))
         {
             Enrich(existing, type, aliases);
@@ -101,18 +106,14 @@ internal sealed class EntityReconciler
         var merged = CleanAliases(aliases, entity.CanonicalName);
         if (merged.Count > 0)
         {
-            var union = entity.Aliases
-                .Concat(merged)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            var union = DedupeByKey(entity.Aliases.Concat(merged));
             if (union.Count != entity.Aliases.Count)
             {
                 entity.Aliases = union;
                 changed = true;
                 foreach (var alias in merged)
                 {
-                    var aliasKey = EntityNameNormalizer.Normalize(alias).ToLowerInvariant();
-                    _byKey.TryAdd(aliasKey, entity);
+                    _byKey.TryAdd(EntityNameNormalizer.MatchKey(alias), entity);
                 }
             }
         }
@@ -130,19 +131,27 @@ internal sealed class EntityReconciler
             return [];
         }
 
-        return aliases
+        var canonicalKey = EntityNameNormalizer.MatchKey(canonical);
+        return DedupeByKey(aliases
             .Select(EntityNameNormalizer.Normalize)
-            .Where(a => a.Length > 0 && !string.Equals(a, canonical, StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .Where(a => a.Length > 0
+                && !string.Equals(EntityNameNormalizer.MatchKey(a), canonicalKey, StringComparison.Ordinal)));
     }
+
+    // Dedupe display names by identity key (MatchKey), keeping the first form seen, so
+    // spacing/case variants ("Mrs. Bancroft" / "Mrs.Bancroft") collapse to a single stored
+    // alias — the same identity the reconciler and highlighter key on.
+    private static List<string> DedupeByKey(IEnumerable<string> names) =>
+        names.GroupBy(EntityNameNormalizer.MatchKey, StringComparer.Ordinal)
+            .Select(g => g.First())
+            .ToList();
 
     private static void Index(Dictionary<string, BookEntity> byKey, BookEntity entity)
     {
-        byKey.TryAdd(EntityNameNormalizer.Normalize(entity.CanonicalName).ToLowerInvariant(), entity);
+        byKey.TryAdd(EntityNameNormalizer.MatchKey(entity.CanonicalName), entity);
         foreach (var alias in entity.Aliases)
         {
-            var key = EntityNameNormalizer.Normalize(alias).ToLowerInvariant();
+            var key = EntityNameNormalizer.MatchKey(alias);
             if (key.Length > 0)
             {
                 byKey.TryAdd(key, entity);
