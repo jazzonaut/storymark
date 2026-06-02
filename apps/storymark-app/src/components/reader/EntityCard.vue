@@ -11,9 +11,6 @@ defineProps<{ card: SelectionEntityCard }>();
       <span class="text-sm font-semibold text-[var(--sm-fg)]">{{ card.canonicalName }}</span>
       <EntityTypeBadge :type="card.entityType" />
     </div>
-    <p v-if="card.aliases.length > 0" class="mt-1 text-xs text-[var(--sm-muted)]">
-      Also known as: {{ card.aliases.join(", ") }}
-    </p>
     <p v-if="card.firstSeenSection !== null" class="mt-1 text-xs text-[var(--sm-muted)]">
       First seen in section {{ card.firstSeenSection }}
     </p>

@@ -63,15 +63,12 @@ const filtered = computed<readonly StoryGuideEntity[]>(() => {
     });
 });
 
-// The secondary line under each entry: where it was introduced and any aliases,
-// so a reader recognises "Strider" as the "Aragorn" they've already met.
+// The secondary line under each entry: where it was introduced. Aliases are withheld
+// for now — they aren't position-gated, so a not-yet-reached alias would be a spoiler.
 function metaLine(entity: StoryGuideEntity): string {
   const parts: string[] = [];
   if (entity.firstSeenSection !== null) {
     parts.push(`Introduced in ${sectionLabel(props.manifest, entity.firstSeenSection)}`);
-  }
-  if (entity.aliases.length > 0) {
-    parts.push(`also known as ${entity.aliases.join(", ")}`);
   }
   return parts.join(" · ");
 }
