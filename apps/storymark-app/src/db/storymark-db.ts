@@ -117,7 +117,7 @@ export interface StoredReaderSettings {
 
 export type ReaderFontFamily = "serif" | "sans" | "mono" | "dyslexic" | "lexend";
 export type ReaderTheme = "light" | "sepia" | "dark";
-export type EntityHighlightMode = "off" | "subtle" | "always";
+export type EntityHighlightMode = "off" | "default" | "subtle";
 
 /** The local copy of a bookmark plus its sync state. `synced=false` means there
  * is a pending operation: a create (`deleted=false`) to POST, or a tombstone

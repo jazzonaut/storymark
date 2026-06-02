@@ -1,4 +1,3 @@
-import { watch } from "vue";
 import { progressApi } from "@/api/progress-api";
 import type { SaveProgressBody } from "@/api/progress-api";
 import { useOfflineSync } from "@/composables/use-offline-sync";
@@ -16,8 +15,9 @@ export interface ReadingPosition {
   readonly locationEnd: number;
 }
 
+const { registerSyncTask, requestFlush } = useOfflineSync();
+
 let syncTimer: number | undefined;
-let pendingSyncBookId: string | null = null;
 
 function toBody(local: StoredProgress): SaveProgressBody {
   return {
@@ -31,50 +31,85 @@ function toBody(local: StoredProgress): SaveProgressBody {
 }
 
 // Push a book's local position to the server, then mark it synced — but only if
-// the user hasn't advanced since (else the newer row stays pending).
-async function syncBook(bookId: string): Promise<void> {
+// the user hasn't advanced since (else the newer row stays pending). Returns false
+// only on a failed push, so the caller arms a retry for that but not for a row left
+// pending because the user advanced mid-flush (the next throttled sync handles it).
+async function syncBook(bookId: string): Promise<boolean> {
   const local = await db.progress.get(bookId);
   if (!local || local.synced) {
-    return;
+    return true;
   }
   try {
     await progressApi.save(bookId, toBody(local));
   } catch {
-    return;
+    return false;
   }
   const current = await db.progress.get(bookId);
   if (current && current.clientTimestamp === local.clientTimestamp) {
     await db.progress.put({ ...current, synced: true });
   }
+  return true;
 }
 
-// Trailing throttle: at most one POST per SYNC_THROTTLE_MS while reading.
-function scheduleSync(bookId: string): void {
-  pendingSyncBookId = bookId;
+// Push every book's pending position and report whether any push failed, so the
+// shared backoff retries only genuine failures (not a position still advancing).
+async function flushPending(): Promise<boolean> {
+  const rows = await db.progress.toArray();
+  const results = await Promise.all(
+    rows.filter((row) => !row.synced).map((row) => syncBook(row.bookId)),
+  );
+  return results.some((ok) => !ok);
+}
+
+// Retry queued writes through the shared reachability/backoff scheduler, and flush
+// once at startup to drain anything left pending by a previous session.
+registerSyncTask(flushPending);
+requestFlush();
+
+// Trailing throttle: at most one flush kick per SYNC_THROTTLE_MS while reading.
+function scheduleSync(): void {
   if (syncTimer === undefined) {
     syncTimer = window.setTimeout(() => {
       syncTimer = undefined;
-      const target = pendingSyncBookId;
-      pendingSyncBookId = null;
-      if (target !== null) {
-        void syncBook(target);
-      }
+      requestFlush();
     }, SYNC_THROTTLE_MS);
   }
 }
 
-async function flush(): Promise<void> {
-  const rows = await db.progress.toArray();
-  await Promise.all(rows.filter((row) => !row.synced).map((row) => syncBook(row.bookId)));
+function positionFromLocal(local: StoredProgress): ReadingPosition {
+  return {
+    sectionIndex: local.sectionIndex,
+    paragraphIndex: local.paragraphIndex,
+    ...(local.pageIndex === undefined ? {} : { pageIndex: local.pageIndex }),
+    locationStart: local.locationStart,
+    locationEnd: local.locationEnd,
+  };
 }
 
-// Flush queued writes when connectivity returns.
-const { isOnline } = useOfflineSync();
-watch(isOnline, (online) => {
-  if (online) {
-    void flush();
-  }
-});
+// Mirror the server's canonical position locally (as synced) and return it. The
+// page index is dropped: it's a device/layout-local refinement that doesn't apply
+// to a position resolved from the server.
+async function adoptServer(
+  bookId: string,
+  server: NonNullable<Awaited<ReturnType<typeof progressApi.get>>>,
+): Promise<ReadingPosition> {
+  const paragraphIndex = server.paragraphIndex ?? 0;
+  await db.progress.put({
+    bookId,
+    sectionIndex: server.sectionIndex,
+    paragraphIndex,
+    locationStart: server.locationStart,
+    locationEnd: server.locationEnd,
+    clientTimestamp: server.clientTimestamp,
+    synced: true,
+  });
+  return {
+    sectionIndex: server.sectionIndex,
+    paragraphIndex,
+    locationStart: server.locationStart,
+    locationEnd: server.locationEnd,
+  };
+}
 
 interface UseReadingProgress {
   record: (bookId: string, position: ReadingPosition) => Promise<void>;
@@ -97,51 +132,43 @@ export function useReadingProgress(): UseReadingProgress {
       synced: false,
     };
     await db.progress.put(row);
-    scheduleSync(bookId);
+    scheduleSync();
   }
 
-  // Resolve the position to open at: the newer of the local mirror and the
-  // server's latest-across-devices (last-write-wins by clientTimestamp). Network
-  // failure falls back to local; a newer server position is mirrored locally.
+  // Resolve where to open. Ordering is delegated entirely to the server's
+  // receive-time ordering (the backend's ReadingProgressService.GetLatestAsync) —
+  // the one ordering contract both sides share — so client wall-clocks are never
+  // compared across devices here; a skewed clock would otherwise pin the book to a
+  // stale position with a future client timestamp. See docs/adr/0020.
+  //
+  // A pending local write is this device's most recent action and hasn't reached
+  // the server yet, so it wins and is flushed in the background. A synced mirror can
+  // only be at or behind the server's canonical latest, so the server wins whenever
+  // it's reachable, with the mirror as the offline fallback. Accepted trade-off
+  // (ADR 0020): a pending write flushed late can become canonical over a position
+  // another device synced further ahead in the meantime — last-flush-wins.
   async function resume(bookId: string): Promise<ReadingPosition | null> {
     const local = await db.progress.get(bookId);
+
+    if (local && !local.synced) {
+      requestFlush();
+      return positionFromLocal(local);
+    }
+
     let server: Awaited<ReturnType<typeof progressApi.get>> = null;
     try {
       server = await progressApi.get(bookId);
     } catch {
       server = null;
     }
-
-    const localTs = local ? Date.parse(local.clientTimestamp) : Number.NEGATIVE_INFINITY;
-    const serverTs = server ? Date.parse(server.clientTimestamp) : Number.NEGATIVE_INFINITY;
-
-    if (local && !local.synced && localTs >= serverTs) {
-      void syncBook(bookId);
+    if (server) {
+      return adoptServer(bookId, server);
     }
-    if (server && serverTs > localTs) {
-      await db.progress.put({
-        bookId,
-        sectionIndex: server.sectionIndex,
-        paragraphIndex: server.paragraphIndex ?? 0,
-        locationStart: server.locationStart,
-        locationEnd: server.locationEnd,
-        clientTimestamp: server.clientTimestamp,
-        synced: true,
-      });
-    }
+    return local ? positionFromLocal(local) : null;
+  }
 
-    const chosen = serverTs > localTs ? server : local;
-    if (!chosen) {
-      return null;
-    }
-    const pageIndex = chosen === local ? local.pageIndex : undefined;
-    return {
-      sectionIndex: chosen.sectionIndex,
-      paragraphIndex: chosen.paragraphIndex ?? 0,
-      ...(pageIndex === undefined ? {} : { pageIndex }),
-      locationStart: chosen.locationStart,
-      locationEnd: chosen.locationEnd,
-    };
+  async function flush(): Promise<void> {
+    await flushPending();
   }
 
   return { record, resume, flush };

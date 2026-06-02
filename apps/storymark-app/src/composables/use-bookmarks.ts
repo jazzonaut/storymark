@@ -111,8 +111,23 @@ async function removeLocal(row: StoredBookmark): Promise<void> {
   await db.bookmarks.put({ ...row, deleted: true, synced: false });
 }
 
-// Flush pending bookmarks when connectivity returns, then re-pull the open book.
-const { isOnline } = useOfflineSync();
+const { isOnline, registerSyncTask, requestFlush } = useOfflineSync();
+
+// Push every pending bookmark op and report whether any remain (a failed POST/DELETE
+// keeps the row queued). Routed through the shared reachability/backoff scheduler so
+// queued writes retry even when navigator.onLine never transitions — the API is
+// unreachable but the link is up (off-VPN, server restart). Flush once at startup to
+// drain anything a previous session left pending.
+async function flushPending(): Promise<boolean> {
+  await flush();
+  const rows = await db.bookmarks.toArray();
+  return rows.some((row) => !row.synced);
+}
+registerSyncTask(flushPending);
+requestFlush();
+
+// On a regained link, also re-pull the open book so a bookmark made on another
+// device reconciles (the scheduler above only pushes).
 watch(isOnline, (online) => {
   if (online && currentBookId.value !== null) {
     void load(currentBookId.value);
@@ -155,7 +170,7 @@ export function useBookmarks(): UseBookmarks {
       });
     }
     await refresh(bookId);
-    void flush();
+    void requestFlush();
   }
 
   async function removeById(id: string): Promise<void> {
@@ -167,7 +182,7 @@ export function useBookmarks(): UseBookmarks {
     if (currentBookId.value !== null) {
       await refresh(currentBookId.value);
     }
-    void flush();
+    void requestFlush();
   }
 
   function isBookmarked(sectionIndex: number, paragraphIndex: number): boolean {

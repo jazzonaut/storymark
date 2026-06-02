@@ -719,6 +719,10 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .IsUnique()
                         .HasDatabaseName("reading_progress_book_device");
 
+                    b.HasIndex("BookId", "UpdatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("reading_progress_book_updated");
+
                     b.ToTable("reading_progress", (string)null);
                 });
 

@@ -28,5 +28,12 @@ internal sealed class ReadingProgressConfiguration : IEntityTypeConfiguration<Re
         builder.HasIndex(p => new { p.BookId, p.DeviceId })
             .HasDatabaseName("reading_progress_book_device")
             .IsUnique();
+
+        // Matches GetLatestAsync: filter by book, take the newest by server receive
+        // time. The unique (book, device) index above shares the leading column but
+        // can't serve the UpdatedAt ordering.
+        builder.HasIndex(p => new { p.BookId, p.UpdatedAt })
+            .HasDatabaseName("reading_progress_book_updated")
+            .IsDescending(false, true);
     }
 }
