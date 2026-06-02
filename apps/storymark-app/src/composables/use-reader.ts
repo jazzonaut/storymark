@@ -58,6 +58,7 @@ interface UseReader {
   nextSection: () => Promise<boolean>;
   prevSection: () => Promise<boolean>;
   setParagraph: (paragraphIndex: number) => void;
+  reloadCurrentSection: () => Promise<void>;
 }
 
 const sectionCount = computed<number>(() => manifest.value.length);
@@ -172,6 +173,20 @@ export function useReader(): UseReader {
     currentParagraphIndex.value = paragraphIndex;
   }
 
+  // Re-fetch the open section's content in place (after an entity merge rewrote its embedded
+  // highlight entity set) without moving the reader — position, paragraph, and page anchor are
+  // left untouched, only the section payload is swapped. The merge cleared the section's Dexie
+  // row, so this reads through to the server.
+  async function reloadCurrentSection(): Promise<void> {
+    const summary = manifest.value[currentPosition.value];
+    const id = bookId.value;
+    if (!summary || id === null) {
+      return;
+    }
+    const { version, canCache } = cacheParams(id);
+    currentSection.value = await readerApi.getSection(id, summary.sectionIndex, version, canCache);
+  }
+
   return {
     manifest,
     currentSection,
@@ -191,5 +206,6 @@ export function useReader(): UseReader {
     nextSection,
     prevSection,
     setParagraph,
+    reloadCurrentSection,
   };
 }

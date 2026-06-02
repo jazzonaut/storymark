@@ -75,6 +75,7 @@ try
     builder.Services.AddScoped<BookMemoryService>();
     builder.Services.AddScoped<BookEntityService>();
     builder.Services.AddScoped<EntitySummaryService>();
+    builder.Services.AddScoped<EntityMergeService>();
     builder.Services.AddScoped<ReadingProgressService>();
     builder.Services.AddScoped<BookmarkService>();
     builder.Services.AddScoped<BookDeletionService>();

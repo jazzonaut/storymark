@@ -6,6 +6,7 @@ import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
 import MemoryStaleBadge from "@/components/reader/MemoryStaleBadge.vue";
 import { entitiesApi } from "@/api/entities-api";
 import { useEntitySummary } from "@/composables/use-entity-summary";
+import { useEntityMerge } from "@/composables/use-entity-merge";
 import { useLatestOnly } from "@/composables/use-latest-only";
 import { ApiError } from "@/api/api-error";
 import { entityTypeOrder, entityTypePlural } from "@/utils/entity-type";
@@ -21,6 +22,7 @@ const props = defineProps<{
 }>();
 
 const { open } = useEntitySummary();
+const { mergeRevision } = useEntityMerge();
 
 const entities = ref<readonly StoryGuideEntity[]>([]);
 const isLoading = ref(false);
@@ -42,18 +44,23 @@ const presentTypes = computed<readonly string[]>(() =>
 
 const filtered = computed<readonly StoryGuideEntity[]>(() => {
   const query = search.value.trim().toLowerCase();
-  return entities.value.filter((entity) => {
-    if (activeType.value !== null && entity.entityType !== activeType.value) {
-      return false;
-    }
-    if (query.length === 0) {
-      return true;
-    }
-    return (
-      entity.canonicalName.toLowerCase().includes(query) ||
-      entity.aliases.some((alias) => alias.toLowerCase().includes(query))
-    );
-  });
+  return entities.value
+    .filter((entity) => {
+      if (activeType.value !== null && entity.entityType !== activeType.value) {
+        return false;
+      }
+      if (query.length === 0) {
+        return true;
+      }
+      return (
+        entity.canonicalName.toLowerCase().includes(query) ||
+        entity.aliases.some((alias) => alias.toLowerCase().includes(query))
+      );
+    })
+    .toSorted((a, b) => {
+      const sectionDiff = (b.firstSeenSection ?? -1) - (a.firstSeenSection ?? -1);
+      return sectionDiff !== 0 ? sectionDiff : a.canonicalName.localeCompare(b.canonicalName);
+    });
 });
 
 // The secondary line under each entry: where it was introduced and any aliases,
@@ -138,10 +145,18 @@ function reveal(entityId: string, shortSummary: string, section: number): void {
 
 // Load when first shown and whenever the reading position behind it changes — the
 // full (section, location) boundary, plus a reprocess (cacheVersion), not section
-// alone. Clear the type filter on reload so a chip selected for the previous section
-// can't hide an otherwise-populated list.
+// alone. A merge (mergeRevision) also reloads, since it rewrites the entity set behind
+// an open panel. Clear the type filter on reload so a chip selected for the previous
+// section can't hide an otherwise-populated list.
 watch(
-  () => [props.bookId, props.currentSection, props.currentLocation, props.cacheVersion] as const,
+  () =>
+    [
+      props.bookId,
+      props.currentSection,
+      props.currentLocation,
+      props.cacheVersion,
+      mergeRevision.value,
+    ] as const,
   () => {
     activeType.value = null;
     void load();

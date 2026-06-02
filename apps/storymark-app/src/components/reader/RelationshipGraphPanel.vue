@@ -4,6 +4,7 @@ import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
 import MemoryStaleBadge from "@/components/reader/MemoryStaleBadge.vue";
 import { useRelationshipGraph } from "@/composables/use-relationship-graph";
 import { useEntitySummary } from "@/composables/use-entity-summary";
+import { useEntityMerge } from "@/composables/use-entity-merge";
 
 // ECharts is heavy; load the graph chart only when the Graph tab is actually opened.
 const RelationshipGraphChart = defineAsyncComponent(
@@ -20,6 +21,7 @@ const props = defineProps<{
 
 const { nodes, edges, isLoading, error, isStale, load } = useRelationshipGraph();
 const { open } = useEntitySummary();
+const { mergeRevision } = useEntityMerge();
 
 // Tap a node → the same global entity popup the Story Guide and highlights open.
 function onNodeTap(payload: { entityId: string; name: string }): void {
@@ -36,9 +38,17 @@ function onNodeTap(payload: { entityId: string; name: string }): void {
 }
 
 // Reload on the full spoiler boundary (section + location) and on a reprocess
-// (cacheVersion), not section alone.
+// (cacheVersion), not section alone. A merge (mergeRevision) reloads too, since it
+// rewrites the graph's nodes and edges.
 watch(
-  () => [props.bookId, props.currentSection, props.currentLocation, props.cacheVersion] as const,
+  () =>
+    [
+      props.bookId,
+      props.currentSection,
+      props.currentLocation,
+      props.cacheVersion,
+      mergeRevision.value,
+    ] as const,
   () => {
     if (props.currentSection !== null) {
       void load(

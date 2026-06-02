@@ -78,6 +78,13 @@ internal static class PromptDefaults
         Allowed relationship type values: parent, sibling, friend, enemy, lover,
         ally, rival, mentor, servant, other.
         Allowed polarity values: positive, negative, neutral, complex.
+        For each entity, set canonicalName to the fullest form of its name that appears
+        in this section — prefer a character's full name over a bare surname or an
+        honorific form. List every other form this section uses for that same entity —
+        shorter names, surnames, honorific forms ("Mr. Kovacs"), nicknames, and epithets
+        — in aliases, so one person, place, or thing is never split across several
+        entries. Include only forms that actually appear in this section; do not invent
+        names or draw on knowledge from outside the section.
         Each event's evidence must be a short verbatim quote copied exactly from SECTION
         TEXT at the point the event occurs — it is used to locate the event in the text.
         Do not paraphrase, summarise, or invent the quote; copy it character for character.

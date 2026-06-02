@@ -66,6 +66,41 @@ internal static class EntityNameNormalizer
         return Normalize(sb.ToString());
     }
 
+    /// <summary>Normalises each raw name to its display form, drops blanks and any whose
+    /// identity key equals <paramref name="excludeName"/>'s, and dedupes by identity key
+    /// (<see cref="MatchKey"/>) keeping the first form seen — so spacing/case variants
+    /// ("Mrs. Bancroft" / "Mrs.Bancroft") collapse to one stored alias. The shared
+    /// alias-set cleaning the reconciler (cross-section) and the merge service both use, so
+    /// every path folds aliases the same way.</summary>
+    public static List<string> CleanAliasSet(IEnumerable<string> rawNames, string? excludeName = null)
+    {
+        var excludeKey = excludeName is null ? null : MatchKey(excludeName);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<string>();
+        foreach (var raw in rawNames)
+        {
+            var display = Normalize(raw);
+            if (display.Length == 0)
+            {
+                continue;
+            }
+
+            var key = MatchKey(display);
+            if (key.Length == 0
+                || (excludeKey is not null && string.Equals(key, excludeKey, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            if (seen.Add(key))
+            {
+                result.Add(display);
+            }
+        }
+
+        return result;
+    }
+
     /// <summary>Folds typographic quotes and dashes to their ASCII forms, one char per
     /// char, so a name and a book's prose match regardless of which the source used. The
     /// reader's highlight matcher (highlight-entities.ts) folds the same set, so an entity

@@ -3,9 +3,11 @@ import { computed, ref } from "vue";
 import EntityTypeBadge from "@/components/reader/EntityTypeBadge.vue";
 import CloseButton from "@/components/reader/CloseButton.vue";
 import { useEntitySummary } from "@/composables/use-entity-summary";
+import { useEntityMerge } from "@/composables/use-entity-merge";
 import { useFocusTrap } from "@/composables/use-focus-trap";
 
 const { openEntity, isLoading, summary, error, close } = useEntitySummary();
+const { requestMerge } = useEntityMerge();
 
 const panel = ref<HTMLElement | null>(null);
 const isOpen = computed<boolean>(() => openEntity.value !== null);
@@ -15,6 +17,17 @@ useFocusTrap(isOpen, panel, close);
 const heading = computed<string>(
   () => summary.value?.canonicalName ?? openEntity.value?.name ?? "",
 );
+
+// Hand off to the merge picker with this entity as the survivor (it keeps its name), then
+// close the summary so the picker takes over.
+function startMerge(): void {
+  const entity = openEntity.value;
+  if (entity === null) {
+    return;
+  }
+  requestMerge({ entityId: entity.entityId, name: heading.value });
+  close();
+}
 </script>
 
 <template>
@@ -40,7 +53,17 @@ const heading = computed<string>(
           </h2>
           <EntityTypeBadge v-if="summary" :type="summary.entityType" />
         </div>
-        <CloseButton @close="close" />
+        <div class="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            class="rounded-md px-2 py-1 text-xs font-medium text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
+            title="Merge another entry into this one"
+            @click="startMerge"
+          >
+            Merge…
+          </button>
+          <CloseButton @close="close" />
+        </div>
       </header>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">

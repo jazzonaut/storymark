@@ -842,10 +842,19 @@ function onTouchMove(event: TouchEvent): void {
   }
 }
 
-async function reposition(): Promise<void> {
+// Land on the section's entry point by default (a fresh mount / navigation). Pass a
+// paragraph to anchor there instead — used when the section payload is swapped in place
+// (an entity merge re-fetched the same section), where the reader must not be yanked back
+// to the entry point.
+async function reposition(toParagraph?: number): Promise<void> {
   await nextTick();
   measure();
-  goToPage(props.entryPage ?? pageForParagraph(props.entryParagraph), false);
+  goToPage(
+    toParagraph !== undefined
+      ? pageForParagraph(toParagraph)
+      : (props.entryPage ?? pageForParagraph(props.entryParagraph)),
+    false,
+  );
   updatePageInfo();
   reportParagraph();
 }
@@ -878,12 +887,16 @@ function flashParagraph(paragraphIndex: number): void {
   flashTimer = window.setTimeout(clearFlash, FLASH_MS);
 }
 
+// props.section changes only for an in-place, same-section payload refresh: a section
+// *navigation* changes currentSectionIndex, which re-keys the wrapper and remounts us, so
+// onMounted handles that case. So keep the reader on their tracked paragraph rather than
+// snapping back to the section's entry point — otherwise a merge mid-section jumps them back.
 watch(
   () => props.section,
   () => {
     cancelPress();
     clearSelectionVisuals();
-    void reposition();
+    void reposition(trackedParagraph);
   },
   { flush: "post" },
 );

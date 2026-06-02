@@ -267,6 +267,34 @@ export async function purgeBookData(bookId: string): Promise<void> {
   ]);
 }
 
+/** Drops the cached entity-dependent surfaces for a book — the Story Guide list, the
+ * timeline, the relationship graph, and section content — across their whole key span. An
+ * entity merge rewrites entity identities, event involvements, and graph edges, so every
+ * snapshot of these becomes stale; section rows also embed the per-section highlight entity
+ * set, so a stale row would keep a folded-away entity's id (a 404 on tap). Clearing them
+ * forces a refetch from the server (the source of truth) on the next load. Memory snapshots
+ * are untouched: a merge doesn't change them. */
+export async function purgeEntityDerivedCache(bookId: string): Promise<void> {
+  await Promise.all([
+    db.entities
+      .where("[bookId+upToSection]")
+      .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
+      .delete(),
+    db.timelines
+      .where("[bookId+upToSection]")
+      .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
+      .delete(),
+    db.graphs
+      .where("[bookId+upToSection]")
+      .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
+      .delete(),
+    db.sections
+      .where("[bookId+sectionIndex]")
+      .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
+      .delete(),
+  ]);
+}
+
 /** The most recently opened book on this device, or null if none has been opened.
  * Drives the cold-load redirect that resumes the reader's last book instead of the
  * library. `lastOpenedAt` is an ISO 8601 string, so a lexicographic max is also the

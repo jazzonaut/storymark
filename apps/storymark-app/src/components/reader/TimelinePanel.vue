@@ -5,6 +5,7 @@ import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
 import MemoryStaleBadge from "@/components/reader/MemoryStaleBadge.vue";
 import TimelineList from "@/components/reader/TimelineList.vue";
 import { useTimeline } from "@/composables/use-timeline";
+import { useEntityMerge } from "@/composables/use-entity-merge";
 
 const props = defineProps<{
   bookId: string;
@@ -20,12 +21,21 @@ const emit = defineEmits<{
 }>();
 
 const { events, entityNames, isLoading, error, isStale, load } = useTimeline();
+const { mergeRevision } = useEntityMerge();
 
 // The reader's spoiler boundary is (section, location) and a reprocess changes
 // cacheVersion, so all three must drive the reload — watching section alone would
-// leave the panel showing data for the wrong boundary after an in-section move.
+// leave the panel showing data for the wrong boundary after an in-section move. A merge
+// (mergeRevision) reloads too, since it rewrites the events' involved entities.
 watch(
-  () => [props.bookId, props.currentSection, props.currentLocation, props.cacheVersion] as const,
+  () =>
+    [
+      props.bookId,
+      props.currentSection,
+      props.currentLocation,
+      props.cacheVersion,
+      mergeRevision.value,
+    ] as const,
   () => {
     if (props.currentSection !== null) {
       void load(

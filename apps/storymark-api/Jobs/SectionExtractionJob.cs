@@ -6,6 +6,7 @@ using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Infrastructure.Llm;
 using Storymark.Api.Infrastructure.Storage;
+using Storymark.Api.Services.Entities;
 using Storymark.Api.Services.Extraction;
 using Storymark.Api.Services.Llm;
 using Storymark.Api.Services.Settings;
@@ -43,29 +44,13 @@ internal sealed class SectionExtractionJob(
     ChatModelRouter router,
     ISettingsService settings,
     IBackgroundJobClient jobs,
+    EntityMergeService entityMerge,
     ILogger<SectionExtractionJob> logger)
 {
     private const int SurroundingMaxChars = 160;
     private const int MinTermLength = 2;
     private static readonly TimeSpan FirstSeenScanTimeout = TimeSpan.FromSeconds(5);
     private static readonly Regex TermSeparators = new(@"[.\s]+", RegexOptions.CultureInvariant, FirstSeenScanTimeout);
-
-    // Honorifics, pronouns, and generic role words: an alias built solely from these is a
-    // role label, not a name, so it must not anchor first-seen (keys are lowercase to match
-    // EntityNameNormalizer.MatchKey output).
-    private static readonly HashSet<string> GenericAliasWords = new(StringComparer.Ordinal)
-    {
-        "i", "you", "he", "she", "it", "we", "they", "him", "her", "them", "his", "hers",
-        "its", "their", "theirs", "the", "a", "an", "this", "that", "these", "those",
-        "mr", "mrs", "ms", "miss", "mister", "mistress", "sir", "madam", "madame", "lady",
-        "lord", "dr", "doctor", "prof", "professor", "reverend", "saint", "st",
-        "captain", "commander", "general", "major", "colonel", "sergeant", "lieutenant",
-        "admiral", "king", "queen", "prince", "princess", "duke", "duchess", "count",
-        "countess", "baron", "baroness", "father", "mother", "brother", "sister", "son",
-        "daughter", "uncle", "aunt", "cousin", "master", "boy", "girl", "man", "woman",
-        "child", "kid", "lad", "lass", "guard", "soldier", "servant", "maid", "stranger",
-        "figure", "old", "young",
-    };
 
     public async Task RunAsync(Guid bookId, CancellationToken ct)
     {
@@ -86,6 +71,7 @@ internal sealed class SectionExtractionJob(
             await ClearExistingExtractionAsync(bookId, ct);
             await ExtractAllAsync(book, ct);
             await TryBackfillFirstSeenAsync(book, ct);
+            await TryReconcileAliasesAsync(book, ct);
 
             // Hand off to the memory pass (BuildingMemorySnapshots), which then chains
             // to EmbeddingJob → Indexed. Memory needs only the section summaries just
@@ -167,6 +153,106 @@ internal sealed class SectionExtractionJob(
         }
     }
 
+    /// <summary>Folds entities the model itself split apart: when one entity's canonical name
+    /// is a strong alias of exactly one other entity, the two name the same person/place/thing
+    /// (e.g. a bare "Kovacs" row and a "Takeshi Kovacs" row that lists "Kovacs" as an alias),
+    /// so the bare row is merged into the fuller one (<see cref="EntityMergeService"/>). Runs
+    /// after the first-seen backfill so the survivor adopts the earliest already-resolved
+    /// position. Best-effort, like the backfill: a failure must not fail an otherwise-successful
+    /// book, so it's swallowed.
+    ///
+    /// <para>Conservative on purpose: an entity claimed as an alias by more than one other (an
+    /// ambiguous bare surname two characters share) is never folded automatically — it's left
+    /// for a human to merge, so this pass can't collapse two distinct characters.</para></summary>
+    private async Task TryReconcileAliasesAsync(Book book, CancellationToken ct)
+    {
+        try
+        {
+            await ReconcileAliasesAsync(book, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Alias reconciliation failed for book {BookId}; skipping", book.Id);
+        }
+    }
+
+    private async Task ReconcileAliasesAsync(Book book, CancellationToken ct)
+    {
+        var entities = await db.BookEntities.Where(e => e.BookId == book.Id).ToListAsync(ct);
+
+        var merged = 0;
+        foreach (var group in FindAliasMerges(entities).GroupBy(p => p.SurvivorId))
+        {
+            var losers = group.Select(p => p.LoserId).ToList();
+            if (await entityMerge.MergeAsync(book.Id, group.Key, losers, ct) is not null)
+            {
+                merged += losers.Count;
+            }
+        }
+
+        if (merged > 0)
+        {
+            logger.LogInformation(
+                "Alias reconciliation merged {Count} duplicate entities in book {BookId}", merged, book.Id);
+        }
+    }
+
+    /// <summary>Unambiguous (loser → survivor) merges from the model's own alias declarations:
+    /// a loser whose canonical name is a strong alias of exactly one other entity of a
+    /// compatible type. Entities involved in an alias chain (both a survivor and a loser) are
+    /// excluded — merging them in one pass would be order-dependent; they resolve on a later
+    /// reprocess or a manual merge.</summary>
+    private static List<(Guid LoserId, Guid SurvivorId)> FindAliasMerges(IReadOnlyList<BookEntity> entities)
+    {
+        var byCanonicalKey = new Dictionary<string, BookEntity>(StringComparer.Ordinal);
+        foreach (var entity in entities)
+        {
+            byCanonicalKey.TryAdd(EntityNameNormalizer.MatchKey(entity.CanonicalName), entity);
+        }
+
+        var survivorsByLoser = new Dictionary<Guid, HashSet<Guid>>();
+        foreach (var survivor in entities)
+        {
+            foreach (var alias in survivor.Aliases)
+            {
+                if (EntityAliasRules.IsStrongAlias(alias)
+                    && byCanonicalKey.TryGetValue(EntityNameNormalizer.MatchKey(alias), out var loser)
+                    && loser.Id != survivor.Id
+                    && AreTypesCompatible(survivor.EntityType, loser.EntityType))
+                {
+                    if (!survivorsByLoser.TryGetValue(loser.Id, out var claimants))
+                    {
+                        claimants = [];
+                        survivorsByLoser[loser.Id] = claimants;
+                    }
+
+                    claimants.Add(survivor.Id);
+                }
+            }
+        }
+
+        var pairs = survivorsByLoser
+            .Where(kv => kv.Value.Count == 1)
+            .Select(kv => (LoserId: kv.Key, SurvivorId: kv.Value.Single()))
+            .ToList();
+
+        var survivorIds = pairs.Select(p => p.SurvivorId).ToHashSet();
+        var loserIds = pairs.Select(p => p.LoserId).ToHashSet();
+        return pairs
+            .Where(p => !loserIds.Contains(p.SurvivorId) && !survivorIds.Contains(p.LoserId))
+            .ToList();
+    }
+
+    // An auto-merge fires only when the two rows agree on type, or one is still Unknown so the
+    // merge can resolve it. A coincidental name collision across types (a person and a place
+    // named after them) must never fold automatically — the manual merge stays unrestricted.
+    private static bool AreTypesCompatible(EntityType a, EntityType b) =>
+        a == b || a == EntityType.Unknown || b == EntityType.Unknown;
+
     /// <summary>Pulls each entity's first-seen position back to where its name first
     /// occurs in the prose, not where the model first named it in structured output. The
     /// extractor only stamps first-seen when an entity surfaces in <c>entitiesIntroduced</c>
@@ -205,7 +291,7 @@ internal sealed class SectionExtractionJob(
     /// parts). Each term's internal separators flex (<c>[.\s]+</c>) so "Mrs. Bancroft" also
     /// matches the prose's "Mrs.Bancroft" — the same matching the reader's highlighter uses
     /// (highlight-entities.ts). The canonical name is always indexed; aliases only when they
-    /// are strong (<see cref="IsStrongAlias"/>), so a generic role word the model tagged as
+    /// are strong (<see cref="EntityAliasRules.IsStrongAlias"/>), so a generic role word the model tagged as
     /// an alias ("the doctor", "captain") can't drag first-seen onto an unrelated occurrence.
     /// Each term carries whether it's a proper noun (<see cref="TermHit.RequiresCapital"/>) so
     /// the scan can demand a capitalised occurrence for "Rose" but match a lowercase
@@ -231,7 +317,7 @@ internal sealed class SectionExtractionJob(
             AddTerm(entity.CanonicalName, entity);
             foreach (var alias in entity.Aliases)
             {
-                if (IsStrongAlias(alias))
+                if (EntityAliasRules.IsStrongAlias(alias))
                 {
                     AddTerm(alias, entity);
                 }
@@ -260,26 +346,6 @@ internal sealed class SectionExtractionJob(
         string.Join(
             @"[.\s]+",
             TermSeparators.Split(foldedTerm).Where(p => p.Length > 0).Select(Regex.Escape));
-
-    /// <summary>An alias is strong enough to anchor first-seen only if it reads like a proper
-    /// name: it must contain an uppercase letter (generic role nouns like "doctor" are
-    /// lowercase in prose) and not be built solely from honorifics, pronouns, or role words
-    /// ("Captain", "The Doctor", "Mother"). This keeps real aliases ("Frodo", "Captain
-    /// Maren") while rejecting generics that would otherwise reveal an entity at an unrelated
-    /// earlier mention.</summary>
-    private static bool IsStrongAlias(string alias)
-    {
-        var folded = EntityNameNormalizer.Fold(alias);
-        if (!folded.Any(char.IsUpper))
-        {
-            return false;
-        }
-
-        var words = TermSeparators.Split(EntityNameNormalizer.MatchKey(alias))
-            .Where(w => w.Length > 0)
-            .ToList();
-        return words.Count > 0 && words.Any(w => !GenericAliasWords.Contains(w));
-    }
 
     private async Task<Dictionary<Guid, (int Section, int Location)>> ScanEarliestOccurrencesAsync(
         Guid bookId, (Dictionary<string, TermHit> ByTerm, Regex Pattern) index, int entityCount, CancellationToken ct)

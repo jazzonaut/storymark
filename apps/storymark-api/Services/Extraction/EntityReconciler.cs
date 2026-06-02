@@ -106,7 +106,8 @@ internal sealed class EntityReconciler
         var merged = CleanAliases(aliases, entity.CanonicalName);
         if (merged.Count > 0)
         {
-            var union = DedupeByKey(entity.Aliases.Concat(merged));
+            var union = EntityNameNormalizer.CleanAliasSet(
+                entity.Aliases.Concat(merged), entity.CanonicalName);
             if (union.Count != entity.Aliases.Count)
             {
                 entity.Aliases = union;
@@ -124,27 +125,10 @@ internal sealed class EntityReconciler
         }
     }
 
-    private static List<string> CleanAliases(IReadOnlyList<string>? aliases, string canonical)
-    {
-        if (aliases is null || aliases.Count == 0)
-        {
-            return [];
-        }
-
-        var canonicalKey = EntityNameNormalizer.MatchKey(canonical);
-        return DedupeByKey(aliases
-            .Select(EntityNameNormalizer.Normalize)
-            .Where(a => a.Length > 0
-                && !string.Equals(EntityNameNormalizer.MatchKey(a), canonicalKey, StringComparison.Ordinal)));
-    }
-
-    // Dedupe display names by identity key (MatchKey), keeping the first form seen, so
-    // spacing/case variants ("Mrs. Bancroft" / "Mrs.Bancroft") collapse to a single stored
-    // alias — the same identity the reconciler and highlighter key on.
-    private static List<string> DedupeByKey(IEnumerable<string> names) =>
-        names.GroupBy(EntityNameNormalizer.MatchKey, StringComparer.Ordinal)
-            .Select(g => g.First())
-            .ToList();
+    private static List<string> CleanAliases(IReadOnlyList<string>? aliases, string canonical) =>
+        aliases is null || aliases.Count == 0
+            ? []
+            : EntityNameNormalizer.CleanAliasSet(aliases, canonical);
 
     private static void Index(Dictionary<string, BookEntity> byKey, BookEntity entity)
     {

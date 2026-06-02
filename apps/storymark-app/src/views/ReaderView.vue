@@ -5,6 +5,7 @@ import { useRoute } from "vue-router";
 import type { AssistantSource } from "@storymark/shared-types";
 import BookmarksPanel from "@/components/reader/BookmarksPanel.vue";
 import ContentsPanel from "@/components/reader/ContentsPanel.vue";
+import EntityMergePicker from "@/components/reader/EntityMergePicker.vue";
 import EntityPopup from "@/components/reader/EntityPopup.vue";
 import MemoryPanel from "@/components/reader/MemoryPanel.vue";
 import PaginatedSection from "@/components/reader/PaginatedSection.vue";
@@ -13,6 +14,7 @@ import ReaderToolbar from "@/components/reader/ReaderToolbar.vue";
 import SectionRecapCard from "@/components/reader/SectionRecapCard.vue";
 import SelectionPopover from "@/components/reader/SelectionPopover.vue";
 import { useAssistant } from "@/composables/use-assistant";
+import { useEntityMerge } from "@/composables/use-entity-merge";
 import { useEntitySummary } from "@/composables/use-entity-summary";
 import { useMemoryPanel } from "@/composables/use-memory-panel";
 import type { ReaderSelection } from "@/composables/use-selection-hint";
@@ -51,7 +53,9 @@ const {
   open,
   goTo,
   goToLocation,
+  reloadCurrentSection,
 } = useReader();
+const { mergeRevision } = useEntityMerge();
 const { record, resume, flush } = useReadingProgress();
 const { bookmarks, load: loadBookmarks, toggle, removeById, isBookmarked } = useBookmarks();
 const { draft: assistantDraft, reset: resetAssistant } = useAssistant();
@@ -119,6 +123,16 @@ const isCurrentBookmarked = computed<boolean>(() =>
     ? false
     : isBookmarked(currentSectionIndex.value, currentParagraphIndex.value),
 );
+
+// A merge rewrote the book's entities. Its server-side commit bumped the book version and the
+// merge call cleared the entity-dependent Dexie rows (section content included), but the open
+// section is already in memory and its highlights won't refresh on their own: refresh the
+// library so `bookVersion` reflects the new version, then re-fetch the open section in place.
+// The Story Guide, timeline, and graph panels watch `mergeRevision` themselves.
+watch(mergeRevision, async () => {
+  await loadBooks().catch(() => {});
+  await reloadCurrentSection();
+});
 
 const bookTitle = ref("");
 
@@ -648,6 +662,14 @@ onBeforeUnmount(() => {
       />
 
       <EntityPopup />
+
+      <EntityMergePicker
+        :book-id="bookId"
+        :current-section="currentSectionIndex"
+        :current-location="currentLocation"
+        :cache-version="bookVersion"
+        :is-processing="isMemoryProcessing"
+      />
 
       <Transition
         enter-active-class="transition duration-200 ease-out"
