@@ -57,8 +57,8 @@ const FONTS: readonly { value: ReaderFontFamily; label: string }[] = [
 
 const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [
   { value: "off", label: "Off" },
+  { value: "default", label: "Default" },
   { value: "subtle", label: "Subtle" },
-  { value: "always", label: "Always" },
 ];
 </script>
 

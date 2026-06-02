@@ -1135,16 +1135,18 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.reader-content--hl-subtle :deep(.sm-entity),
-.reader-content--hl-always :deep(.sm-entity) {
+.reader-content--hl-default :deep(.sm-entity),
+.reader-content--hl-subtle :deep(.sm-entity) {
   text-decoration: underline dotted;
-  text-decoration-color: color-mix(in srgb, var(--sm-accent) 50%, transparent);
   text-underline-offset: 0.18em;
 }
 
-.reader-content--hl-always :deep(.sm-entity) {
-  border-radius: 0.2em;
-  background-color: color-mix(in srgb, var(--sm-accent) 13%, transparent);
+.reader-content--hl-default :deep(.sm-entity) {
+  text-decoration-color: color-mix(in srgb, var(--sm-accent) 50%, transparent);
+}
+
+.reader-content--hl-subtle :deep(.sm-entity) {
+  text-decoration-color: color-mix(in srgb, var(--sm-accent) 22%, transparent);
 }
 </style>
 

@@ -25,7 +25,7 @@ const DEFAULTS: ReaderSettings = {
   contentWidthPx: 680,
   pageMarginPx: 24,
   theme: "light",
-  entityHighlight: "subtle",
+  entityHighlight: "default",
   recapCardOnSectionEntry: true,
   fullscreen: false,
 };
