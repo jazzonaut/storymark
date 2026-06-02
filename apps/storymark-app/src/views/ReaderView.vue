@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useEventListener, useTimeoutFn, useWakeLock } from "@vueuse/core";
 import { useRoute } from "vue-router";
 import type { AssistantSource } from "@storymark/shared-types";
@@ -103,6 +103,16 @@ function flashParagraph(paragraphIndex: number): void {
 // and is cleared only when the reader returns via it or dismisses it (the X).
 const returnPoint = ref<{ sectionIndex: number; paragraphIndex: number } | null>(null);
 const pageInfo = ref<{ page: number; total: number }>({ page: 0, total: 1 });
+
+// Slide the reader horizontally on every section change instead of snapping: a
+// forward move (swipe or jump) slides the new chapter in from the right, a
+// backward one from the left, so a chapter boundary turns like a page. The new
+// section is keyed/remounted under a <Transition>; the direction must be chosen
+// before that re-render, so this watch runs on the default "pre" flush.
+const sectionTransition = ref<"slide-next" | "slide-prev">("slide-next");
+watch(currentPosition, (pos, previous) => {
+  sectionTransition.value = pos >= previous ? "slide-next" : "slide-prev";
+});
 
 const isCurrentBookmarked = computed<boolean>(() =>
   currentSectionIndex.value === null
@@ -508,22 +518,25 @@ onBeforeUnmount(() => {
         @open-contents="openContents"
       />
 
-      <PaginatedSection
-        v-if="currentSection"
-        :section="currentSection"
-        :entry-paragraph="entryParagraph"
-        :entry-page="entryPage"
-        :highlight="highlight"
-        :selection-active="selection !== null"
-        @update:paragraph="onParagraph"
-        @page-change="onPageChange"
-        @next-section="goNext"
-        @prev-section="goPrev"
-        @toggle-chrome="toggleChrome"
-        @select="(payload) => (selection = payload)"
-        @dismiss-select="selection = null"
-        @entity-tap="onEntityTap"
-      />
+      <Transition :name="sectionTransition">
+        <PaginatedSection
+          v-if="currentSection"
+          :key="currentSectionIndex ?? -1"
+          :section="currentSection"
+          :entry-paragraph="entryParagraph"
+          :entry-page="entryPage"
+          :highlight="highlight"
+          :selection-active="selection !== null"
+          @update:paragraph="onParagraph"
+          @page-change="onPageChange"
+          @next-section="goNext"
+          @prev-section="goPrev"
+          @toggle-chrome="toggleChrome"
+          @select="(payload) => (selection = payload)"
+          @dismiss-select="selection = null"
+          @entity-tap="onEntityTap"
+        />
+      </Transition>
 
       <Transition
         enter-active-class="transition duration-200 ease-out"
@@ -666,3 +679,50 @@ onBeforeUnmount(() => {
     </template>
   </main>
 </template>
+
+<style scoped>
+/* Chapter-change slide. During the turn both sections are absolutely stacked so
+   the old one slides out as the new one slides in; the duration/easing mirror the
+   within-chapter page-flip (SWIPE_ANIM_MS / easeOutCubic in PaginatedSection) so a
+   chapter boundary feels continuous with paging inside one. */
+.slide-next-enter-active,
+.slide-next-leave-active,
+.slide-prev-enter-active,
+.slide-prev-leave-active {
+  position: absolute;
+  inset: 0;
+  transition: transform 280ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.slide-next-enter-from {
+  transform: translateX(100%);
+}
+
+.slide-next-leave-to {
+  transform: translateX(-100%);
+}
+
+.slide-prev-enter-from {
+  transform: translateX(-100%);
+}
+
+.slide-prev-leave-to {
+  transform: translateX(100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide-next-enter-active,
+  .slide-next-leave-active,
+  .slide-prev-enter-active,
+  .slide-prev-leave-active {
+    transition-duration: 0ms;
+  }
+
+  .slide-next-enter-from,
+  .slide-next-leave-to,
+  .slide-prev-enter-from,
+  .slide-prev-leave-to {
+    transform: none;
+  }
+}
+</style>
