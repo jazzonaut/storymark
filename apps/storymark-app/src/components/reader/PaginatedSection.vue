@@ -134,6 +134,11 @@ let swipeStartPage = 0;
 // A drag ends in a synthesised click; this swallows that one click so a swipe
 // (or any non-tap drag) never also pages via the edge-tap / chrome-toggle path.
 let swallowClick = false;
+// A selection was showing when this gesture began. Captured at pointerdown (the
+// popover's outside-tap dismisses on the same event, so it's gone by pointermove),
+// and used to suppress paging for the whole gesture — a near-miss of a selection
+// handle must never turn the page out from under an in-progress selection.
+let pressStartedWithSelection = false;
 // Locks scroll (touch-action: none) while we own the gesture, so an extend drag
 // pans the selection instead of paging.
 const scrollLocked = ref(false);
@@ -635,6 +640,7 @@ function onPointerDown(event: PointerEvent): void {
   }
   cancelPress();
   swallowClick = false;
+  pressStartedWithSelection = hasActiveSelection();
   pressPointerId = event.pointerId;
   pressStartX = event.clientX;
   pressStartY = event.clientY;
@@ -659,7 +665,9 @@ function onPointerMove(event: PointerEvent): void {
         pressTimer = undefined;
       }
       swallowClick = true;
-      if (Math.abs(dx) > Math.abs(dy)) {
+      // A horizontal drag pages — but not while a selection is up: that gesture is
+      // a missed handle grab, so let the popover dismiss it without also paging.
+      if (Math.abs(dx) > Math.abs(dy) && !pressStartedWithSelection) {
         beginSwipe();
         dragSwipe(event.clientX);
       } else {
@@ -795,8 +803,9 @@ function onClick(event: MouseEvent): void {
     return;
   }
   // A drag-select ends in a click; don't let it turn the page or toggle chrome.
-  // Desktop checks the native selection; touch checks our custom range.
-  if (hasActiveSelection()) {
+  // Desktop checks the native selection; touch checks our custom range. Also
+  // swallow the tap that dismisses an open selection so it never also pages.
+  if (hasActiveSelection() || pressStartedWithSelection) {
     return;
   }
   const scroll = scrollEl.value;
@@ -1141,8 +1150,8 @@ onBeforeUnmount(() => {
   content: "";
   position: absolute;
   left: 50%;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   border-radius: 9999px;
   background-color: var(--sm-accent);
   transform: translateX(-50%);
@@ -1153,25 +1162,25 @@ onBeforeUnmount(() => {
   content: "";
   position: absolute;
   left: 50%;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 3.5rem;
+  height: 3.5rem;
   transform: translateX(-50%);
 }
 
 .reader-sel-handle--start::before {
-  top: -15px;
+  top: -19px;
 }
 
 .reader-sel-handle--start::after {
-  top: -36px;
+  top: -42px;
 }
 
 .reader-sel-handle--end::before {
-  bottom: -15px;
+  bottom: -19px;
 }
 
 .reader-sel-handle--end::after {
-  bottom: -36px;
+  bottom: -42px;
 }
 
 /* During a drag the handle (and its grab target) must not intercept
