@@ -7,7 +7,7 @@ import { CanvasRenderer } from "echarts/renderers";
 import { computed, ref, watch } from "vue";
 import { useEventListener } from "@vueuse/core";
 import VChart from "vue-echarts";
-import type { GraphEdge, GraphNode } from "@/composables/use-relationship-graph";
+import type { EdgeRelationship, GraphEdge, GraphNode } from "@/composables/use-relationship-graph";
 import { entityTypeColor } from "@/utils/entity-type";
 import { useReaderSettings } from "@/composables/use-reader-settings";
 import type { ReaderTheme } from "@/db/storymark-db";
@@ -20,9 +20,23 @@ type ChartOption = ComposeOption<GraphSeriesOption>;
  * `x`/`y` are pixel offsets within the chart; `below` flips the card under the node
  * when it sits too near the top edge to fit above it. */
 interface SelectedNode {
+  readonly kind: "node";
   readonly entityId: string;
   readonly name: string;
   readonly color: string;
+  readonly x: number;
+  readonly y: number;
+  readonly below: boolean;
+}
+
+/** The edge a tap selected. Its card IS the details view — type, polarity and
+ * evidence per merged relationship — since relationships have no fuller popup to
+ * open the way entities do. Positioned like the node card. */
+interface SelectedEdge {
+  readonly kind: "edge";
+  readonly sourceName: string;
+  readonly targetName: string;
+  readonly relationships: readonly EdgeRelationship[];
   readonly x: number;
   readonly y: number;
   readonly below: boolean;
@@ -49,7 +63,7 @@ const emit = defineEmits<{
 const { settings } = useReaderSettings();
 const labelColors = computed(() => LABEL_COLORS[settings.theme]);
 
-const selected = ref<SelectedNode | null>(null);
+const selected = ref<SelectedNode | SelectedEdge | null>(null);
 
 // Mention count isn't on the entity DTO, so node size reflects how connected the
 // entity is (incident relationships); isolated nodes keep a legible minimum.
@@ -88,7 +102,6 @@ const option = computed<ChartOption>(() => {
         // zoom on mobile. Zoom is driven by our own gesture handlers below instead.
         roam: "move",
         scaleLimit: { min: 0.5, max: 4 },
-        draggable: true,
         force: { repulsion: 160, edgeLength: [60, 140], gravity: 0.08 },
         emphasis: { focus: "adjacency" },
         label: { show: true, position: "right", fontSize: 11, color: labelColors.value.fg },
@@ -110,6 +123,17 @@ const option = computed<ChartOption>(() => {
 // element), not the canvas — so it can't be swallowed by ECharts' touch/roam handling,
 // which is why a single canvas tap never opened anything on mobile.
 function onClick(params: ECElementEvent): void {
+  // A pinch finger landing on a node synthesizes a click after the gesture ends;
+  // selecting mid-zoom is never intended, so swallow it (and stay suppressed until
+  // the next clean single-finger touch, since a missed-target pinch fires no click).
+  if (pinched) {
+    pinched = false;
+    return;
+  }
+  if (params.dataType === "edge") {
+    selectEdge(params);
+    return;
+  }
   if (params.dataType !== "node") {
     selected.value = null;
     return;
@@ -124,15 +148,46 @@ function onClick(params: ECElementEvent): void {
   }
   const entityType =
     "entityType" in data && typeof data.entityType === "string" ? data.entityType : "";
-  const event = params.event;
-  const x = event ? event.offsetX : 0;
-  const y = event ? event.offsetY : 0;
-  selected.value = { entityId: id, name, color: entityTypeColor(entityType), x, y, below: y < 110 };
+  const { x, y } = tapPoint(params);
+  selected.value = {
+    kind: "node",
+    entityId: id,
+    name,
+    color: entityTypeColor(entityType),
+    x,
+    y,
+    below: y < 110,
+  };
+}
+
+function tapPoint(params: ECElementEvent): { x: number; y: number } {
+  return { x: params.event?.offsetX ?? 0, y: params.event?.offsetY ?? 0 };
+}
+
+// Links are mapped 1:1 and in order from props.edges, so dataIndex resolves the tap
+// back to the typed GraphEdge — no re-validating a payload echoed through ECharts.
+function selectEdge(params: ECElementEvent): void {
+  const edge = props.edges[params.dataIndex];
+  if (edge === undefined) {
+    return;
+  }
+  const { x, y } = tapPoint(params);
+  selected.value = {
+    kind: "edge",
+    sourceName: edge.sourceName,
+    targetName: edge.targetName,
+    relationships: edge.relationships,
+    x,
+    y,
+    // The edge card is taller than the node card (evidence quotes), so it flips
+    // below the tap point earlier.
+    below: y < 180,
+  };
 }
 
 function openDetails(): void {
   const node = selected.value;
-  if (node === null) {
+  if (node === null || node.kind !== "node") {
     return;
   }
   emit("node-tap", { entityId: node.entityId, name: node.name });
@@ -154,6 +209,7 @@ const PINCH_SENSITIVITY = 0.75;
 const WHEEL_ZOOM_STEP = 1.1;
 
 let pinchSpan: number | null = null;
+let pinched = false;
 
 // graphRoam applies `zoom` as a delta multiplier about the origin (chart pixel space)
 // and clamps to scaleLimit. The resulting `graphroam` event clears the selection card.
@@ -195,6 +251,11 @@ function onWheel(event: WheelEvent): void {
 
 function onTouchStart(event: TouchEvent): void {
   pinchSpan = twoFingerSpan(event.touches)?.distance ?? null;
+  if (pinchSpan !== null) {
+    pinched = true;
+  } else if (event.touches.length === 1) {
+    pinched = false;
+  }
 }
 
 function onTouchMove(event: TouchEvent): void {
@@ -231,9 +292,9 @@ function onBlankClick(event: ElementEvent): void {
   }
 }
 
-// Roaming, dragging a node, or a new section all move nodes; the card's pinned pixel
-// position would no longer point at its node, so drop it.
-watch(() => props.nodes, clearSelection);
+// Roaming or a new section moves nodes and rewrites edges; the card's pinned pixel
+// position (or its contents) would no longer match, so drop it.
+watch([() => props.nodes, () => props.edges], clearSelection);
 </script>
 
 <template>
@@ -254,13 +315,13 @@ watch(() => props.nodes, clearSelection);
       @click="onClick"
       @zr:click="onBlankClick"
       @graphroam="clearSelection"
-      @zr:dragstart="clearSelection"
     />
 
     <!-- pointer-events-none lets drags pass through to the canvas; only the card
          itself takes taps. -->
     <div v-if="selected" class="pointer-events-none absolute inset-0 z-10">
       <button
+        v-if="selected.kind === 'node'"
         type="button"
         class="pointer-events-auto absolute flex max-w-[14rem] -translate-x-1/2 items-center gap-2 rounded-xl border border-[var(--sm-muted)]/20 bg-[var(--sm-bg)] py-1.5 pr-2.5 pl-2 shadow-lg"
         :class="selected.below ? '' : '-translate-y-full'"
@@ -278,6 +339,32 @@ watch(() => props.nodes, clearSelection);
           <span class="text-xs text-[var(--sm-muted)]">View details ›</span>
         </span>
       </button>
+
+      <!-- The edge card is the relationship's details view; tapping it dismisses,
+           matching the blank-canvas tap it would otherwise swallow. -->
+      <div
+        v-else
+        class="pointer-events-auto absolute w-64 max-w-[80vw] -translate-x-1/2 rounded-xl border border-[var(--sm-muted)]/20 bg-[var(--sm-bg)] px-3 py-2 shadow-lg"
+        :class="selected.below ? '' : '-translate-y-full'"
+        :style="{ left: `${selected.x}px`, top: `${selected.y + (selected.below ? 12 : -12)}px` }"
+        @click="clearSelection"
+      >
+        <p class="truncate text-sm font-semibold text-[var(--sm-fg)]">
+          {{ selected.sourceName }} ↔ {{ selected.targetName }}
+        </p>
+        <div v-for="rel in selected.relationships" :key="rel.relationshipType" class="mt-1.5">
+          <p class="flex items-center gap-1.5 text-xs font-medium text-[var(--sm-fg)]">
+            <span
+              class="h-2 w-2 shrink-0 rounded-full"
+              :style="{ backgroundColor: polarityColor(rel.polarity) }"
+            ></span>
+            {{ rel.relationshipType }}
+          </p>
+          <p v-if="rel.evidence" class="mt-0.5 line-clamp-3 text-xs text-[var(--sm-muted)] italic">
+            “{{ rel.evidence }}”
+          </p>
+        </div>
+      </div>
     </div>
   </div>
 </template>

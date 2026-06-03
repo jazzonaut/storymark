@@ -30,8 +30,11 @@ export interface CachedLoadContext {
    * unless the load has been superseded, in which case nothing is painted. */
   readonly showCached: <T>(apply: (value: T) => void) => (value: T) => void;
   /** Adopts the first fallback reason among the results, so a surface built from
-   * several fetches flags stale when any of them fell back. A no-op once the load
-   * is superseded, so a slow earlier load can't restamp a newer one's indicator. */
+   * several fetches flags stale when any of them fell back — with `ahead` true when
+   * ANY of them served an ahead-stamped row, since the surface renders all of them
+   * and ADR-0022 makes the ahead label load-bearing (each fetch's cache row is
+   * stamped independently, so the reasons can disagree). A no-op once the load is
+   * superseded, so a slow earlier load can't restamp a newer one's indicator. */
   readonly commit: (...results: readonly CachedResult<unknown>[]) => void;
 }
 
@@ -101,8 +104,14 @@ export function useCachedLoad(): CachedLoad {
           if (!isCurrent()) {
             return;
           }
+          const reasons = results.flatMap((result) =>
+            result.fallback === undefined ? [] : [result.fallback],
+          );
+          const first = reasons[0];
           fallback.value =
-            results.map((result) => result.fallback).find((reason) => reason !== undefined) ?? null;
+            first === undefined
+              ? null
+              : { ...first, ahead: reasons.some((reason) => reason.ahead) };
         },
       });
     } catch (caught) {

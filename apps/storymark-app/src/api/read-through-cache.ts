@@ -13,10 +13,11 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 /** Why a read-through cache served a stale copy instead of fresh data, so the
  * refresh indicator can show the right icon: an HTTP status means the request
  * reached a server (so the code is worth surfacing), anything else means the
- * response never arrived (offline / slow link). */
+ * response never arrived (offline / slow link). `ahead` flags a copy stamped past
+ * the reader's current position (see ADR-0022), so the indicator can say so. */
 export type CacheFallback =
-  | { readonly kind: "offline" }
-  | { readonly kind: "http"; readonly status: number };
+  | { readonly kind: "offline"; readonly ahead: boolean }
+  | { readonly kind: "http"; readonly status: number; readonly ahead: boolean };
 
 export interface CachedResult<T> {
   readonly value: T;
@@ -27,8 +28,10 @@ export interface CachedResult<T> {
   readonly fallback?: CacheFallback;
 }
 
-function describeCacheFallback(error: unknown): CacheFallback {
-  return error instanceof ApiError ? { kind: "http", status: error.status } : { kind: "offline" };
+function describeCacheFallback(error: unknown, ahead: boolean): CacheFallback {
+  return error instanceof ApiError
+    ? { kind: "http", status: error.status, ahead }
+    : { kind: "offline", ahead };
 }
 
 /** Spreads to a `version` tag only when one is known — under
@@ -45,10 +48,13 @@ export function versionTag(version: string | null | undefined): { version?: stri
  *
  * Position-aware caches (timeline/graph/Story Guide) pass `boundary` — the reader's
  * current spoiler boundary (location offset) — and tag each cached row with the
- * boundary it was built at. A row built *ahead* of the reader is never served (that
- * would leak later-in-section content); a row from an *earlier* boundary is a safe
- * subset, so it is kept only as the offline fallback and never short-circuits a
- * refresh. The fast no-network path is taken solely on an exact-boundary fresh hit.
+ * boundary it was built at. A row built *ahead* of the reader never short-circuits a
+ * refresh and is never painted while one runs; it is served only as the last-resort
+ * fallback when the fetch fails, labelled via `fallback.ahead` (ADR-0022 — the row
+ * was stamped at the reader's own earlier panel-open position, so erroring instead
+ * broke offline reading after any backward move). A row from an *earlier* boundary
+ * is a safe subset, so it is kept as the fallback and also painted mid-refresh. The
+ * fast no-network path is taken solely on an exact-boundary fresh hit.
  *
  * `version` is the book's extraction version (its `updatedAt`): a row tagged with a
  * different version predates a reprocess, so it is never treated as current (it is
@@ -113,8 +119,8 @@ export async function readThroughCache<T>(source: {
     }
     return { value };
   } catch (caught) {
-    if (safe !== undefined) {
-      return { value: safe.value, fallback: describeCacheFallback(caught) };
+    if (cached !== undefined) {
+      return { value: cached.value, fallback: describeCacheFallback(caught, delta > 0) };
     }
     throw caught;
   }

@@ -29,6 +29,7 @@ If a decision is small enough that "look at the code" answers it, it's not an AD
 | 0019 | [Adopt VueUse for DOM/lifecycle primitives](0019-vueuse-for-dom-primitives.md) | accepted |
 | 0020 | [Reading-progress conflict policy: server receive-time wins](0020-reading-progress-conflict-policy.md) | accepted |
 | 0021 | [Stateless assistant conversations, client-carried](0021-stateless-assistant-conversations.md) | accepted |
+| 0022 | [Offline fallback may serve a cache row stamped ahead of the reader](0022-offline-ahead-fallback.md) | accepted |
 
 ## When to write one
 

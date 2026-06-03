@@ -16,13 +16,46 @@ export interface GraphNode {
   readonly degree: number;
 }
 
-/** One graph edge: a relationship between two visible entities. `source`/`target`
- * are entity ids (matched to {@link GraphNode.entityId}). */
+/** One distinct relationship folded into a merged {@link GraphEdge}. Reciprocal
+ * copies of the same type collapse to one entry: evidence comes from the first
+ * copy that has it, polarity only when the copies that state one agree (null on
+ * disagreement, same rule as the edge-level polarity). */
+export interface EdgeRelationship {
+  readonly relationshipType: string;
+  readonly polarity: string | null;
+  readonly evidence: string | null;
+}
+
+/** One graph edge: all relationships between two visible entities, merged.
+ * `source`/`target` are entity ids (matched to {@link GraphNode.entityId}) with
+ * their display names alongside, so the edge card needs no id→name join;
+ * `relationshipType` is the joined edge label, `polarity` the agreed-on sentiment
+ * (null when the merged relationships disagree), and `relationships` the per-type
+ * details behind them. */
 export interface GraphEdge {
   readonly source: string;
   readonly target: string;
+  readonly sourceName: string;
+  readonly targetName: string;
   readonly relationshipType: string;
   readonly polarity: string | null;
+  readonly relationships: readonly EdgeRelationship[];
+}
+
+/** Per-type accumulator while merging a pair's relationships: every stated polarity
+ * is collected (not first-wins) so disagreement between reciprocal copies is still
+ * visible when the {@link EdgeRelationship} is built. */
+interface PendingRelationship {
+  readonly relationshipType: string;
+  readonly polarities: string[];
+  evidence: string | null;
+}
+
+// Shared by the edge line and the per-type card dot, so the two can't contradict
+// each other: a polarity renders only when every copy that states one agrees.
+function agreedPolarity(polarities: readonly string[]): string | null {
+  const distinct = new Set(polarities);
+  return distinct.size === 1 ? ([...distinct][0] ?? null) : null;
 }
 
 // Module-level: one reader (one graph) is open at a time.
@@ -45,26 +78,82 @@ interface UseRelationshipGraph extends CachedLoadState {
 
 // Edges may reference an entity not in the visible list (a relationship's own
 // first-seen can precede an endpoint's); drop those so no link dangles to a missing
-// node. Degree is computed only over the kept edges.
+// node. Extraction often stores a relationship in both directions (A→B and B→A) —
+// rendered separately, the two edges overlap and both midpoint labels show. Same-pair
+// relationships are merged into one edge: distinct types joined into one label, the
+// polarity kept only when the merged relationships don't disagree on it, and the
+// per-type details (polarity, evidence) retained for the edge tap card. Degree is
+// computed over the merged edges.
 function build(
   entities: readonly StoryGuideEntity[],
   relationships: readonly Relationship[],
 ): { nodes: readonly GraphNode[]; edges: readonly GraphEdge[] } {
-  const known = new Set(entities.map((entity) => entity.entityId));
-  const degree = new Map<string, number>();
-  const keptEdges: GraphEdge[] = [];
+  const names = new Map(entities.map((entity) => [entity.entityId, entity.canonicalName]));
+  const pairs = new Map<
+    string,
+    {
+      source: string;
+      target: string;
+      sourceName: string;
+      targetName: string;
+      relationships: PendingRelationship[];
+    }
+  >();
   for (const relationship of relationships) {
-    if (!known.has(relationship.fromEntityId) || !known.has(relationship.toEntityId)) {
+    const { fromEntityId: from, toEntityId: to } = relationship;
+    const fromName = names.get(from);
+    const toName = names.get(to);
+    if (fromName === undefined || toName === undefined) {
       continue;
     }
+    const key = from < to ? `${from}\n${to}` : `${to}\n${from}`;
+    let pair = pairs.get(key);
+    if (pair === undefined) {
+      pair = {
+        source: from,
+        target: to,
+        sourceName: fromName,
+        targetName: toName,
+        relationships: [],
+      };
+      pairs.set(key, pair);
+    }
+    let entry = pair.relationships.find(
+      (candidate) => candidate.relationshipType === relationship.relationshipType,
+    );
+    if (entry === undefined) {
+      entry = {
+        relationshipType: relationship.relationshipType,
+        polarities: [],
+        evidence: relationship.evidence,
+      };
+      pair.relationships.push(entry);
+    } else {
+      entry.evidence ??= relationship.evidence;
+    }
+    if (relationship.polarity !== null && !entry.polarities.includes(relationship.polarity)) {
+      entry.polarities.push(relationship.polarity);
+    }
+  }
+  const degree = new Map<string, number>();
+  const keptEdges: GraphEdge[] = [];
+  for (const pair of pairs.values()) {
+    const merged = pair.relationships.map<EdgeRelationship>((entry) => ({
+      relationshipType: entry.relationshipType,
+      polarity: agreedPolarity(entry.polarities),
+      evidence: entry.evidence,
+    }));
     keptEdges.push({
-      source: relationship.fromEntityId,
-      target: relationship.toEntityId,
-      relationshipType: relationship.relationshipType,
-      polarity: relationship.polarity,
+      source: pair.source,
+      target: pair.target,
+      sourceName: pair.sourceName,
+      targetName: pair.targetName,
+      relationshipType: merged.map((entry) => entry.relationshipType).join(" · "),
+      polarity: agreedPolarity(pair.relationships.flatMap((entry) => entry.polarities)),
+      relationships: merged,
     });
-    degree.set(relationship.fromEntityId, (degree.get(relationship.fromEntityId) ?? 0) + 1);
-    degree.set(relationship.toEntityId, (degree.get(relationship.toEntityId) ?? 0) + 1);
+    degree.set(pair.source, (degree.get(pair.source) ?? 0) + 1);
+    degree.set(pair.target, (degree.get(pair.target) ?? 0) + 1);
   }
   const builtNodes = entities.map<GraphNode>((entity) => ({
     entityId: entity.entityId,

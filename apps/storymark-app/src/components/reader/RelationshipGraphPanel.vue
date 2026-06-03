@@ -85,7 +85,7 @@ watch(
       <RefreshStatusIndicator :refreshing="isRefreshing" :fallback="fallback" />
       <RelationshipGraphChart :nodes="nodes" :edges="edges" @node-tap="onNodeTap" />
       <p class="text-center text-xs text-[var(--sm-muted)]">
-        Drag to rearrange · pinch or scroll to zoom · tap a name, then the card, for details.
+        Drag to pan · pinch or scroll to zoom · tap a name or a connecting line for details.
       </p>
     </template>
   </div>
