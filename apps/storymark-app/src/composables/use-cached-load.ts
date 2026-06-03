@@ -102,8 +102,7 @@ export function useCachedLoad(): CachedLoad {
             return;
           }
           fallback.value =
-            results.map((result) => result.fallback).find((reason) => reason !== undefined) ??
-            null;
+            results.map((result) => result.fallback).find((reason) => reason !== undefined) ?? null;
         },
       });
     } catch (caught) {

@@ -52,8 +52,7 @@ export const readerApi = {
             `/api/books/${encodeURIComponent(bookId)}/sections/${String(sectionIndex)}`,
             `Failed to load section ${String(sectionIndex)}`,
           ),
-        writeBack: (section) =>
-          db.sections.put({ ...section, bookId, ...versionTag(version) }),
+        writeBack: (section) => db.sections.put({ ...section, bookId, ...versionTag(version) }),
       })
     ).value,
 } as const;

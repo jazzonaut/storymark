@@ -269,10 +269,7 @@ function deleteBookSpan<TRow, TKey extends [string, ...unknown[]]>(
   index: `[bookId+${string}]`,
   bookId: string,
 ): Promise<number> {
-  return table
-    .where(index)
-    .between([bookId, Dexie.minKey], [bookId, Dexie.maxKey])
-    .delete();
+  return table.where(index).between([bookId, Dexie.minKey], [bookId, Dexie.maxKey]).delete();
 }
 
 /** Removes every locally-cached row for a book once it has been deleted on the
