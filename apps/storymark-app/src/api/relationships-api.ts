@@ -7,7 +7,7 @@ import { db } from "@/db/storymark-db";
 export const relationshipsApi = {
   /** Relationships visible at the reading position, for the graph. Read-through Dexie
    * cache (see {@link positionAwareCache}): gated by the reader's boundary and the
-   * book's `version`, and a stale row is still returned (as `stale-offline`) on a
+   * book's `version`, and a stale row is still returned (flagged via `fallback`) on a
    * network failure so the graph works offline. `canCache` is false while the book is
    * still processing. Throws {@link ApiError} only when nothing usable is cached. */
   list: (
@@ -16,6 +16,7 @@ export const relationshipsApi = {
     upToLocation: number,
     version: BookVersion | null,
     canCache: boolean,
+    onRefreshingFrom?: (relationships: readonly Relationship[]) => void,
   ): Promise<CachedResult<readonly Relationship[]>> =>
     positionAwareCache({
       bookId,
@@ -28,5 +29,6 @@ export const relationshipsApi = {
       table: db.graphs,
       pluck: (row) => row.relationships,
       pack: (relationships, base) => ({ ...base, relationships }),
+      onRefreshingFrom,
     }),
 } as const;

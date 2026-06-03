@@ -3,12 +3,11 @@ import { computed, ref, watch } from "vue";
 import type { SectionSummary, StoryGuideEntity } from "@storymark/shared-types";
 import EntityTypeBadge from "@/components/reader/EntityTypeBadge.vue";
 import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
-import MemoryStaleBadge from "@/components/reader/MemoryStaleBadge.vue";
+import RefreshStatusIndicator from "@/components/reader/RefreshStatusIndicator.vue";
 import { entitiesApi } from "@/api/entities-api";
 import { useEntitySummary } from "@/composables/use-entity-summary";
 import { useEntityMerge } from "@/composables/use-entity-merge";
-import { useLatestOnly } from "@/composables/use-latest-only";
-import { ApiError } from "@/api/api-error";
+import { describeLoadError, useCachedLoad } from "@/composables/use-cached-load";
 import { entityTypeOrder, entityTypePlural } from "@/utils/entity-type";
 import { sectionLabel } from "@/utils/section-label";
 
@@ -25,14 +24,11 @@ const { open } = useEntitySummary();
 const { mergeRevision } = useEntityMerge();
 
 const entities = ref<readonly StoryGuideEntity[]>([]);
-const isLoading = ref(false);
-const error = ref<string | null>(null);
-const isStale = ref(false);
+const loader = useCachedLoad();
+// Destructured so the template's top-level bindings unwrap the refs.
+const { isLoading, isRefreshing, error, fallback } = loader;
 const search = ref("");
 const activeType = ref<string | null>(null);
-// A slow earlier fetch must not overwrite the current boundary's list, so each load
-// commits only if it is still the latest.
-const latest = useLatestOnly();
 
 // The entity types actually present, in the backend's declared order — the type
 // filter only offers kinds the reader has met, so a chip is never a dead end.
@@ -78,37 +74,33 @@ async function load(): Promise<void> {
     entities.value = [];
     return;
   }
-  const token = latest.begin();
-  isLoading.value = true;
-  error.value = null;
-  try {
-    const result = await entitiesApi.list(
-      props.bookId,
-      props.currentSection,
-      props.currentLocation,
-      props.cacheVersion,
-      !props.isProcessing,
-    );
-    if (!latest.isCurrent(token)) {
-      return;
-    }
-    entities.value = result.value;
-    isStale.value = result.status === "stale-offline";
-  } catch (caught) {
-    if (!latest.isCurrent(token)) {
-      return;
-    }
-    error.value =
-      caught instanceof ApiError
-        ? "Couldn't load the Story Guide just now."
-        : "The Story Guide is unavailable offline.";
-    entities.value = [];
-    isStale.value = false;
-  } finally {
-    if (latest.isCurrent(token)) {
-      isLoading.value = false;
-    }
-  }
+  const section = props.currentSection;
+  await loader.run({
+    load: async (ctx) => {
+      const result = await entitiesApi.list(
+        props.bookId,
+        section,
+        props.currentLocation,
+        props.cacheVersion,
+        !props.isProcessing,
+        ctx.showCached((cached) => {
+          entities.value = cached;
+        }),
+      );
+      if (!ctx.isCurrent()) {
+        return;
+      }
+      entities.value = result.value;
+      ctx.commit(result);
+    },
+    describeError: describeLoadError(
+      "Couldn't load the Story Guide just now.",
+      "The Story Guide is unavailable offline.",
+    ),
+    onFailure: () => {
+      entities.value = [];
+    },
+  });
 }
 
 function onTap(entity: StoryGuideEntity): void {
@@ -122,6 +114,8 @@ function onTap(entity: StoryGuideEntity): void {
     entity.canonicalName,
     section,
     props.currentLocation,
+    props.cacheVersion,
+    !props.isProcessing,
   ).then((loaded) => {
     // Generating the summary cached it server-side, but the list snapshot is
     // stale until the next section turn. Reflect the new summary into the row
@@ -202,7 +196,14 @@ watch(
       </button>
     </div>
 
-    <MemoryStaleBadge v-if="isStale && !isLoading && error === null" class="mb-3" />
+    <!-- No entities.length gate: an empty cached list can also be mid-refresh or a
+         stale offline copy, and that must not be presented as a current empty state. -->
+    <RefreshStatusIndicator
+      v-if="!isLoading && error === null"
+      :refreshing="isRefreshing"
+      :fallback="fallback"
+      class="mb-3"
+    />
 
     <div v-if="isLoading" class="space-y-3" aria-busy="true">
       <div

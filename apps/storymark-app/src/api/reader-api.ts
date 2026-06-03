@@ -1,6 +1,6 @@
 import type { Section, SectionSummary } from "@storymark/shared-types";
 import { fetchJson } from "@/api/http";
-import { readThroughCache } from "@/api/read-through-cache";
+import { readThroughCache, versionTag } from "@/api/read-through-cache";
 import type { BookVersion } from "@/db/storymark-db";
 import { db } from "@/db/storymark-db";
 
@@ -45,9 +45,7 @@ export const readerApi = {
         canCache,
         readCached: async () => {
           const row = await db.sections.get([bookId, sectionIndex]);
-          return row
-            ? { value: row, ...(row.version !== undefined ? { version: row.version } : {}) }
-            : undefined;
+          return row ? { value: row, ...versionTag(row.version) } : undefined;
         },
         fetchFresh: () =>
           fetchJson<Section>(
@@ -55,7 +53,7 @@ export const readerApi = {
             `Failed to load section ${String(sectionIndex)}`,
           ),
         writeBack: (section) =>
-          db.sections.put({ ...section, bookId, ...(version !== null ? { version } : {}) }),
+          db.sections.put({ ...section, bookId, ...versionTag(version) }),
       })
     ).value,
 } as const;

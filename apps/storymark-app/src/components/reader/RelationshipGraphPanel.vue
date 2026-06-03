@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { defineAsyncComponent, watch } from "vue";
 import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
-import MemoryStaleBadge from "@/components/reader/MemoryStaleBadge.vue";
+import RefreshStatusIndicator from "@/components/reader/RefreshStatusIndicator.vue";
 import { useRelationshipGraph } from "@/composables/use-relationship-graph";
 import { useEntitySummary } from "@/composables/use-entity-summary";
 import { useEntityMerge } from "@/composables/use-entity-merge";
@@ -19,7 +19,7 @@ const props = defineProps<{
   isProcessing: boolean;
 }>();
 
-const { nodes, edges, isLoading, error, isStale, load } = useRelationshipGraph();
+const { nodes, edges, isLoading, isRefreshing, error, fallback, load } = useRelationshipGraph();
 const { open } = useEntitySummary();
 const { mergeRevision } = useEntityMerge();
 
@@ -34,6 +34,8 @@ function onNodeTap(payload: { entityId: string; name: string }): void {
     payload.name,
     props.currentSection,
     props.currentLocation,
+    props.cacheVersion,
+    !props.isProcessing,
   );
 }
 
@@ -80,7 +82,7 @@ watch(
     />
 
     <template v-else>
-      <MemoryStaleBadge v-if="isStale" />
+      <RefreshStatusIndicator :refreshing="isRefreshing" :fallback="fallback" />
       <RelationshipGraphChart :nodes="nodes" :edges="edges" @node-tap="onNodeTap" />
       <p class="text-center text-xs text-[var(--sm-muted)]">
         Drag to rearrange · pinch or scroll to zoom · tap a name, then the card, for details.

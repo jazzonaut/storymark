@@ -2,11 +2,12 @@
 import { computed, ref } from "vue";
 import EntityTypeBadge from "@/components/reader/EntityTypeBadge.vue";
 import CloseButton from "@/components/reader/CloseButton.vue";
+import RefreshStatusIndicator from "@/components/reader/RefreshStatusIndicator.vue";
 import { useEntitySummary } from "@/composables/use-entity-summary";
 import { useEntityMerge } from "@/composables/use-entity-merge";
 import { useFocusTrap } from "@/composables/use-focus-trap";
 
-const { openEntity, isLoading, summary, error, close } = useEntitySummary();
+const { openEntity, isLoading, isRefreshing, summary, error, fallback, close } = useEntitySummary();
 const { requestMerge } = useEntityMerge();
 
 const panel = ref<HTMLElement | null>(null);
@@ -67,6 +68,13 @@ function startMerge(): void {
       </header>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <RefreshStatusIndicator
+          v-if="summary"
+          :refreshing="isRefreshing"
+          :fallback="fallback"
+          class="mb-3"
+        />
+
         <div v-if="isLoading" class="space-y-2" aria-busy="true">
           <div class="h-3 w-2/3 animate-pulse rounded bg-[var(--sm-surface)]"></div>
           <div class="h-3 w-full animate-pulse rounded bg-[var(--sm-surface)]"></div>

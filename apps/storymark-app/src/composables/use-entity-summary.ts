@@ -1,9 +1,11 @@
-import { ref, shallowRef } from "vue";
-import type { Ref, ShallowRef } from "vue";
+import { shallowRef } from "vue";
+import type { ShallowRef } from "vue";
 import type { EntitySummary } from "@storymark/shared-types";
 import { entitiesApi } from "@/api/entities-api";
 import { ApiError } from "@/api/api-error";
-import { useLatestOnly } from "@/composables/use-latest-only";
+import type { BookVersion } from "@/db/storymark-db";
+import { useCachedLoad } from "@/composables/use-cached-load";
+import type { CachedLoadState } from "@/composables/use-cached-load";
 
 /** The entity whose popup is open: its id and the display name to show while the
  * summary is still generating. */
@@ -16,7 +18,8 @@ export interface OpenEntity {
 // catch-all: an HTTP status means the request reached a server (the status pins it on
 // the API vs. the reverse proxy); a timeout or a thrown TypeError means it never got a
 // response (slow link or offline). The status code is shown so a phone-only failure
-// can be read off the screen without remote-debugging.
+// can be read off the screen without remote-debugging. Only reached when nothing is
+// cached — with a cached copy the popup shows it under a refresh-status badge instead.
 function describeError(caught: unknown): string {
   if (caught instanceof ApiError) {
     if (caught.status === 404) {
@@ -35,67 +38,68 @@ function describeError(caught: unknown): string {
 
 // Module-level: one entity popup is open at a time (like the selection popover).
 const openEntity = shallowRef<OpenEntity | null>(null);
-const isLoading = ref(false);
 const summary = shallowRef<EntitySummary | null>(null);
-const error = ref<string | null>(null);
 // Tapping entity B before entity A's request resolves must not let A's slow response
-// populate B's popup. Each open claims a token and commits only if still current.
-const latest = useLatestOnly();
+// populate B's popup — the loader gates every step on its load still being current.
+const loader = useCachedLoad();
+const { isLoading, isRefreshing, error, fallback } = loader;
 
-interface UseEntitySummary {
+interface UseEntitySummary extends CachedLoadState {
   readonly openEntity: ShallowRef<OpenEntity | null>;
-  readonly isLoading: Ref<boolean>;
   readonly summary: ShallowRef<EntitySummary | null>;
-  readonly error: Ref<string | null>;
   open: (
     bookId: string,
     entityId: string,
     name: string,
     section: number,
     location: number,
+    version: BookVersion | null,
+    canCache: boolean,
   ) => Promise<EntitySummary | null>;
   close: () => void;
 }
 
 export function useEntitySummary(): UseEntitySummary {
-  async function open(
+  function open(
     bookId: string,
     entityId: string,
     name: string,
     section: number,
     location: number,
+    version: BookVersion | null,
+    canCache: boolean,
   ): Promise<EntitySummary | null> {
-    const token = latest.begin();
     openEntity.value = { entityId, name };
-    isLoading.value = true;
     summary.value = null;
-    error.value = null;
-    try {
-      const loaded = await entitiesApi.summary(bookId, entityId, section, location);
-      if (latest.isCurrent(token)) {
-        summary.value = loaded;
-      }
-      return loaded;
-    } catch (caught) {
-      if (latest.isCurrent(token)) {
-        error.value = describeError(caught);
-      }
-      return null;
-    } finally {
-      if (latest.isCurrent(token)) {
-        isLoading.value = false;
-      }
-    }
+    return loader.run({
+      load: async (ctx) => {
+        const result = await entitiesApi.summary(
+          bookId,
+          entityId,
+          section,
+          location,
+          version,
+          canCache,
+          ctx.showCached((cached) => {
+            summary.value = cached;
+          }),
+        );
+        if (ctx.isCurrent()) {
+          summary.value = result.value;
+          ctx.commit(result);
+        }
+        return result.value;
+      },
+      describeError,
+    });
   }
 
   function close(): void {
-    // Claim a token so any in-flight request is stale and can't repopulate after close.
-    latest.begin();
+    // Supersede any in-flight request so it can't repopulate after close.
+    loader.invalidate();
     openEntity.value = null;
-    isLoading.value = false;
     summary.value = null;
-    error.value = null;
   }
 
-  return { openEntity, isLoading, summary, error, open, close };
+  return { openEntity, summary, isLoading, isRefreshing, error, fallback, open, close };
 }

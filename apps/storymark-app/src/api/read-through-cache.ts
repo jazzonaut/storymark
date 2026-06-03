@@ -1,4 +1,5 @@
 import type { Table } from "dexie";
+import { ApiError } from "@/api/api-error";
 import { fetchJson } from "@/api/http";
 
 // Section-keyed reader endpoints (events, relationships, entities) all cache the
@@ -9,15 +10,33 @@ import { fetchJson } from "@/api/http";
 // Those three share the identical wiring in {@link positionAwareCache} below.
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-/** How a read-through result was obtained, so the UI can flag data it is showing
- * stale because the live copy couldn't be refreshed. `fresh` = fetched from the
- * server just now; `cached` = a current cache hit (no network needed); `stale-offline`
- * = the fetch failed and a safe older row was served instead. */
-export type CacheStatus = "fresh" | "cached" | "stale-offline";
+/** Why a read-through cache served a stale copy instead of fresh data, so the
+ * refresh indicator can show the right icon: an HTTP status means the request
+ * reached a server (so the code is worth surfacing), anything else means the
+ * response never arrived (offline / slow link). */
+export type CacheFallback =
+  | { readonly kind: "offline" }
+  | { readonly kind: "http"; readonly status: number };
 
 export interface CachedResult<T> {
   readonly value: T;
-  readonly status: CacheStatus;
+  /** Present only when `value` is a stale saved copy served because the live fetch
+   * failed; says why, so the UI can tell an offline failure from an HTTP error (and
+   * show the status code) rather than flattening both to one "offline" message.
+   * Absent when `value` is fresh or a current cache hit. */
+  readonly fallback?: CacheFallback;
+}
+
+function describeCacheFallback(error: unknown): CacheFallback {
+  return error instanceof ApiError ? { kind: "http", status: error.status } : { kind: "offline" };
+}
+
+/** Spreads to a `version` tag only when one is known — under
+ * `exactOptionalPropertyTypes` an unknown version must omit the key entirely, not
+ * set it to undefined. Accepts both spellings of "unknown": `null` (a caller that
+ * doesn't know the book's version) and `undefined` (an untagged cached row). */
+export function versionTag(version: string | null | undefined): { version?: string } {
+  return version === null || version === undefined ? {} : { version };
 }
 
 /** Read-through TTL cache. Serves a current cached value, otherwise fetches and
@@ -53,6 +72,12 @@ export async function readThroughCache<T>(source: {
   >;
   fetchFresh: () => Promise<T>;
   writeBack: (value: T) => Promise<unknown>;
+  /** Invoked with the boundary-safe cached value when a network fetch is about to
+   * run and such a value exists — so the UI can render it (with a refreshing
+   * indicator) instead of a blank skeleton. Not called on the fast cached path (the
+   * value is the result) nor when no safe row exists (an ahead-of-reader row is never
+   * shown — a skeleton is correct there). */
+  onRefreshingFrom?: ((value: T) => void) | undefined;
 }): Promise<CachedResult<T>> {
   const cached = await source.readCached();
   const canCache = source.canCache ?? true;
@@ -76,17 +101,20 @@ export async function readThroughCache<T>(source: {
     safe !== undefined &&
     (safe.cachedAt === undefined || Date.now() - safe.cachedAt < CACHE_TTL_MS);
   if (safe !== undefined && delta === 0 && versionMatches && canCache && withinTtl) {
-    return { value: safe.value, status: "cached" };
+    return { value: safe.value };
+  }
+  if (safe !== undefined) {
+    source.onRefreshingFrom?.(safe.value);
   }
   try {
     const value = await source.fetchFresh();
     if (canCache) {
       await source.writeBack(value);
     }
-    return { value, status: "fresh" };
+    return { value };
   } catch (caught) {
     if (safe !== undefined) {
-      return { value: safe.value, status: "stale-offline" };
+      return { value: safe.value, fallback: describeCacheFallback(caught) };
     }
     throw caught;
   }
@@ -120,12 +148,14 @@ export function positionAwareCache<TItem, TRow extends PositionRow>(opts: {
   table: Table<TRow, [string, number]>;
   pluck: (row: TRow) => readonly TItem[];
   pack: (items: readonly TItem[], base: PositionRow) => TRow;
+  onRefreshingFrom?: ((items: readonly TItem[]) => void) | undefined;
 }): Promise<CachedResult<readonly TItem[]>> {
   const { bookId, upToSection, upToLocation, version, canCache } = opts;
   return readThroughCache<readonly TItem[]>({
     boundary: upToLocation,
     version,
     canCache,
+    onRefreshingFrom: opts.onRefreshingFrom,
     readCached: async () => {
       const row = await opts.table.get([bookId, upToSection]);
       return row
@@ -133,7 +163,7 @@ export function positionAwareCache<TItem, TRow extends PositionRow>(opts: {
             value: opts.pluck(row),
             cachedAt: row.cachedAt,
             boundary: row.upToLocation,
-            ...(row.version !== undefined ? { version: row.version } : {}),
+            ...versionTag(row.version),
           }
         : undefined;
     },
@@ -149,7 +179,7 @@ export function positionAwareCache<TItem, TRow extends PositionRow>(opts: {
           upToSection,
           upToLocation,
           cachedAt: Date.now(),
-          ...(version !== null ? { version } : {}),
+          ...versionTag(version),
         }),
       ),
   });

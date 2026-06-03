@@ -2,7 +2,7 @@ import type { MemorySnapshot } from "@storymark/shared-types";
 import { ApiError } from "@/api/api-error";
 import { apiFetch } from "@/api/http";
 import type { CachedResult } from "@/api/read-through-cache";
-import { readThroughCache } from "@/api/read-through-cache";
+import { readThroughCache, versionTag } from "@/api/read-through-cache";
 import type { BookVersion } from "@/db/storymark-db";
 import { db } from "@/db/storymark-db";
 
@@ -32,24 +32,24 @@ export const memoryApi = {
   // The snapshot is stable for a given (book version, section entry), so a cached row
   // whose `version` still matches is served without a refetch. A reprocess bumps the
   // version, so a stale-versioned row is refetched (and only falls back to the old row,
-  // marked `stale-offline`, when that refetch fails). `canCache` is false while the
+  // flagged via `fallback`, when that refetch fails). `canCache` is false while the
   // book is still processing.
   getForSectionEntry: (
     bookId: string,
     enteringSection: number,
     version: BookVersion | null,
     canCache: boolean,
+    onRefreshingFrom?: (snapshot: MemorySnapshot | null) => void,
   ): Promise<CachedResult<MemorySnapshot | null>> =>
     // No boundary and no `cachedAt`: the snapshot is location-independent and stable
     // for a given version, so the cache is version-gated rather than TTL-gated.
     readThroughCache<MemorySnapshot | null>({
       version,
       canCache,
+      onRefreshingFrom,
       readCached: async () => {
         const row = await db.memorySnapshots.get([bookId, enteringSection]);
-        return row
-          ? { value: row.snapshot, ...(row.version !== undefined ? { version: row.version } : {}) }
-          : undefined;
+        return row ? { value: row.snapshot, ...versionTag(row.version) } : undefined;
       },
       fetchFresh: () => fetchMemory(bookId, enteringSection, 0),
       // A 204 (no snapshot yet) returns null — left uncached so it can still appear
@@ -61,7 +61,7 @@ export const memoryApi = {
               bookId,
               enteringSection,
               snapshot,
-              ...(version !== null ? { version } : {}),
+              ...versionTag(version),
             }),
     }),
 

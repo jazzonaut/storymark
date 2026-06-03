@@ -268,6 +268,8 @@ function onEntityTap(payload: { entityId: string; name: string }): void {
     payload.name,
     sectionIndex,
     currentLocation.value,
+    bookVersion.value,
+    !isMemoryProcessing.value,
   );
 }
 

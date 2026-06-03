@@ -2,7 +2,7 @@
 import { watch } from "vue";
 import type { SectionSummary } from "@storymark/shared-types";
 import MemoryEmptyState from "@/components/reader/MemoryEmptyState.vue";
-import MemoryStaleBadge from "@/components/reader/MemoryStaleBadge.vue";
+import RefreshStatusIndicator from "@/components/reader/RefreshStatusIndicator.vue";
 import TimelineList from "@/components/reader/TimelineList.vue";
 import { useTimeline } from "@/composables/use-timeline";
 import { useEntityMerge } from "@/composables/use-entity-merge";
@@ -20,7 +20,7 @@ const emit = defineEmits<{
   (e: "jump", payload: { sectionIndex: number; locationStart: number }): void;
 }>();
 
-const { events, entityNames, isLoading, error, isStale, load } = useTimeline();
+const { events, entityNames, isLoading, isRefreshing, error, fallback, load } = useTimeline();
 const { mergeRevision } = useEntityMerge();
 
 // The reader's spoiler boundary is (section, location) and a reprocess changes
@@ -64,7 +64,7 @@ watch(
     />
 
     <template v-else>
-      <MemoryStaleBadge v-if="isStale" />
+      <RefreshStatusIndicator :refreshing="isRefreshing" :fallback="fallback" />
       <TimelineList
         :events="events"
         :entity-names="entityNames"
