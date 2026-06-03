@@ -2,86 +2,136 @@
 
 > Never lose the thread.
 
-Storymark is a self-hosted, offline-first reading app for people who enjoy books but sometimes forget character names, past events, places, relationships, and plot threads. It pairs a clean **Readera-style paginated reader** with **spoiler-safe memory features** powered by a local (or BYO) LLM:
+Storymark is a self-hosted, offline-first reading app for long, character-heavy books. It pairs a clean paginated reader with a **spoiler-safe memory** of everything you've read so far, powered by a local (or bring-your-own) LLM.
 
-- ask free-text questions about the book ("why is everyone angry at Y?")
-- select any passage to get an instant entity card or fast model hint
-- see a dismissible recap card at every chapter boundary
-- browse a visual **timeline of events** and **relationship graph**, both filtered to your current reading position
-- never see content from chapters you haven't reached
-
-The reader works **fully offline** once a book is downloaded; AI features degrade gracefully when the backend is unreachable.
+If you've ever returned to an epic fantasy after a two-week break and thought *"wait, who is this person and why does everyone hate them?"*, Storymark is for you. Ask it. It answers using only the chapters you've actually reached.
 
 ---
 
-## Repo layout
+## What it does
 
-```text
-storymark/
-├── apps/
-│   ├── storymark-app/      Vue 3 PWA (reader + admin panel), Capacitor later
-│   └── storymark-api/      ASP.NET Core API (FastEndpoints, EF Core, Hangfire)
-├── packages/
-│   └── shared-types/       TypeScript contracts shared between app and tooling
-├── infra/
-│   └── compose/            Reference Docker Compose stack + .env.example
-├── docs/                   Plan, ADRs, conventions, deployment guides
-├── .github/workflows/      CI (works on GitHub Actions and Forgejo Actions)
-├── CLAUDE.md               Working instructions for Claude Code in this repo
-├── CONTEXT.md              Current state pointer for any AI agent
-├── pnpm-workspace.yaml     Workspace + exact-pinned dependency catalog
-└── Taskfile.yml            Convenience runner over pnpm + dotnet
+**The reader comes first.** Storymark is meant to replace Kindle or Readera as your daily reading app, not to be a chatbot wrapped around books:
+
+- Paginated, Readera-style reading with typography and theme controls
+- Bookmarks and reading progress, synced to your server
+- Whole-book offline download: once a book is on your device, reading needs no connection
+- Installable PWA, works on phone, tablet, and desktop
+
+**The memory makes it different.** As a book is processed, Storymark builds a structured memory of its events, characters, places, and relationships. While you read, that memory is always one tap away:
+
+- **Ask** free-text questions ("why is everyone angry at Y?") and get answers with sources you can jump to
+- **Select any passage** for an instant "Who/What is this?" card or a fast model hint
+- **Tap any character name** in the text for a summary of what you know about them, so far
+- **Summary** tab: a rolling "story so far" at your exact reading position
+- **Timeline** of events and a force-directed **relationship graph**, both filtered to where you are in the book
+- **Recap cards** at chapter boundaries, and a "Previously…" card when you come back after a break
+
+Every one of these surfaces respects the same rule: **content from chapters you haven't reached is never shown to you, never fed to the model, and never counted.**
+
+---
+
+## How spoiler safety works
+
+Spoiler safety is the core product invariant, not a filter bolted on top:
+
+- Your reading position is a precise `(section, character offset)` pair.
+- All evidence for any LLM call flows through a single retrieval service that filters at the database level: a chunk, entity, event, or relationship from beyond your position simply never reaches the prompt.
+- Every LLM call is recorded in an audit log with the evidence it saw and a `used_future_content` flag, so a regression in the boundary is detectable, not silent.
+- Timeline, graph, entity cards, and recaps are all generated and cached *per position*, so even cached artifacts can't leak ahead.
+
+---
+
+## Self-hosting
+
+Storymark ships as a single API container (which also serves the web app), plus PostgreSQL with pgvector and Ollama. A reference Docker Compose stack lives in [`infra/compose/`](infra/compose/).
+
+```bash
+git clone <this repo> && cd storymark
+
+# Build the image (or push it to your own registry via the included CI workflow)
+docker build -t storymark-api -f apps/storymark-api/Dockerfile .
+
+# Configure and start the stack
+cp infra/compose/.env.example infra/compose/.env   # set passwords/keys before first up
+docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env up -d
+
+# Pull the default local models
+docker exec storymark-ollama ollama pull llama3.2:3b
+docker exec storymark-ollama ollama pull llama3.2:1b
+docker exec storymark-ollama ollama pull nomic-embed-text
 ```
 
+Open the published port (default `127.0.0.1:8088`), upload an EPUB, and let the background pipeline index it. Models, prompts, and per-task routing are all configurable from the admin panel at `/admin`. You can also point any task at an OpenAI-compatible hosted provider instead of (or alongside) Ollama.
+
+A CPU-only homelab box is a first-class target: background extraction takes its time, and reader-time AI features use a small fast model with aggressive caching.
+
+### A note on access control
+
+Storymark is **single-user by design**. The admin panel is protected by a bearer token (`STORYMARK_BEARER_TOKEN_SEED`, rotate it after first boot), but the reader itself is intentionally unauthenticated. Run it on a private network or VPN, or put your reverse proxy's auth layer (Authelia/Authentik forward-auth, OIDC) in front of it. Do **not** expose it to the open internet bare. See [`docs/deployment/04-auth-options.md`](docs/deployment/04-auth-options.md) and the rest of [`docs/deployment/`](docs/deployment/) for reverse-proxy options, CI/CD, Portainer GitOps, and backup guidance.
+
 ---
 
-## Quick start
+## Architecture at a glance
 
-Prereqs (host or devcontainer):
+```text
+Vue 3 PWA (Vite, Tailwind, ECharts, Dexie/IndexedDB offline cache)
+        |  REST
+        v
+ASP.NET Core API (FastEndpoints) + Hangfire background jobs
+        ├── PostgreSQL + pgvector  (books, sections, chunks + embeddings,
+        |                           entities, events, relationships, memory
+        |                           snapshots, settings, LLM call audit log)
+        ├── Ollama or any OpenAI-compatible LLM provider
+        └── File volume            (originals, covers, extracted sections)
+```
 
-- Node 22 LTS + pnpm 10
-- .NET SDK (latest LTS)
-- Docker + Docker Compose
-- [go-task](https://taskfile.dev) (optional; everything also works via the underlying tools)
+The backend is canonical; the client is a smart offline replica that caches everything it has seen. New AI generation needs the backend, but viewing anything already cached does not.
+
+The "why" behind every load-bearing decision is written down in [`docs/adr/`](docs/adr/). Start with [`docs/vision-and-architecture.md`](docs/vision-and-architecture.md) for the full picture.
+
+---
+
+## Development
+
+Prereqs: Node 22 LTS + pnpm 10, the .NET SDK (latest LTS), Docker, and optionally [go-task](https://taskfile.dev).
 
 ```bash
 pnpm install
 cp infra/compose/.env.example infra/compose/.env   # edit before first up
-task compose:up                                    # postgres + ollama up
+task compose:up                                    # postgres + ollama
 task api                                           # backend with hot reload
 task dev                                           # frontend dev server (separate terminal)
 ```
 
-Open [http://localhost:5173](http://localhost:5173).
+Open [http://localhost:5173](http://localhost:5173). Before pushing, run **`task ci`**: it runs the same lint, format, typecheck, and build gates as CI across both apps. Conventions (strict TypeScript, exact-pinned dependencies, commit shape) are documented in [`docs/conventions/`](docs/conventions/).
 
-On first boot, the admin panel at `/admin` is gated by the bearer token in `infra/compose/.env` (`STORYMARK_BEARER_TOKEN_SEED`). Set a real value before exposing the API beyond `localhost`.
+### Repo layout
 
-Before you push, run **`task ci`** — it runs the same lint, format, typecheck, and build gates CI runs across the frontend and backend. See [`docs/conventions/05-commit-and-pr.md`](docs/conventions/05-commit-and-pr.md#local-gates--run-before-every-push).
-
----
-
-## Deployment
-
-The reference deployment is a Docker Compose stack pulled and redeployed by [Portainer](https://www.portainer.io/) from a Git repo, fronted by a reverse proxy that handles TLS. Both the reverse proxy and the auth layer are **pluggable**:
-
-- Reverse proxy options — see [`docs/deployment/03-reverse-proxy-options.md`](docs/deployment/03-reverse-proxy-options.md) for `caddy-docker-proxy`, Traefik, Nginx, or none.
-- Auth options — see [`docs/deployment/04-auth-options.md`](docs/deployment/04-auth-options.md) for Authelia/Authentik forward-auth, OIDC, or the default single-bearer-token mode.
-
-The reference compose file ([`infra/compose/docker-compose.yml`](infra/compose/docker-compose.yml)) ships with `caddy-docker-proxy` labels commented in, and a single env var (`STORYMARK_PROXY_NETWORK`) controls which external network the API joins. If you don't run any reverse proxy, just expose the published port.
-
-CI/CD reference is in [`docs/deployment/01-ci-cd.md`](docs/deployment/01-ci-cd.md) — the workflow under `.github/workflows/ci.yml` runs on both GitHub Actions and Forgejo Actions, builds the image, pushes to a configurable registry, and (optionally) triggers a Portainer redeploy via API.
+```text
+storymark/
+├── apps/
+│   ├── storymark-app/      Vue 3 PWA (reader + admin panel)
+│   └── storymark-api/      ASP.NET Core API (FastEndpoints, EF Core, Hangfire)
+├── packages/
+│   └── shared-types/       TypeScript contracts shared between app and tooling
+├── infra/compose/          Reference Docker Compose stack + .env.example
+├── docs/                   Vision, plan, ADRs, conventions, deployment guides
+└── .github/workflows/      CI (works on GitHub Actions and Forgejo Actions)
+```
 
 ---
 
-## Docs
+## Status
 
-- [`docs/vision-and-architecture.md`](docs/vision-and-architecture.md) — what Storymark is and the high-level architecture.
-- [`docs/plan.md`](docs/plan.md) — full implementation plan (long).
-- [`docs/issues.md`](docs/issues.md) — Phase 0–6 backlog as vertical-slice issues.
-- [`docs/delivery-plan.md`](docs/delivery-plan.md) — phase-by-phase milestones.
-- [`docs/adr/`](docs/adr/) — architecture decision records.
-- [`docs/conventions/`](docs/conventions/) — code style, naming, commits, PRs.
-- [`docs/deployment/`](docs/deployment/) — server prereqs, CI/CD, Portainer, reverse proxy, auth.
+Storymark is young and honest about it:
+
+- **Format support**: EPUB only today. The import path is pluggable; PDF and others can land as handlers.
+- **Single-user**: one library, one reading position, one admin token. Multi-user is explicitly out of scope for v1.
+- **Quality scales with your model**: small local models (1B–3B) run everywhere but extract sparser timelines and graphs than larger ones. Prompts and per-task model choice are tunable at runtime from the admin panel.
+- **Automated tests are still thin**: the core was built against manually verified acceptance criteria ([ADR-0012](docs/adr/0012-tests-deferred.md)); a spoiler-safety harness exists (`pnpm test:spoiler`) and broader coverage is in progress.
+- **PWA today, native later**: a Capacitor wrap of the same codebase is planned for iOS/Android niceties.
+
+Found a bug, or want a feature? Issues and PRs are welcome.
 
 ---
 

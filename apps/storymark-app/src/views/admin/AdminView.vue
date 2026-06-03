@@ -83,6 +83,13 @@ async function unlock(): Promise<void> {
           AI Models
         </RouterLink>
         <RouterLink
+          :to="{ name: 'admin-books' }"
+          class="rounded px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          active-class="bg-zinc-100 font-medium dark:bg-zinc-800"
+        >
+          Books
+        </RouterLink>
+        <RouterLink
           :to="{ name: 'admin-prompts' }"
           class="rounded px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
           active-class="bg-zinc-100 font-medium dark:bg-zinc-800"

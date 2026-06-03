@@ -110,3 +110,15 @@ export interface ApplySwapResult {
 export interface BackfillSectionTitlesResult {
   readonly sectionsToBackfill: number;
 }
+
+export interface RecoverStuckBooksResult {
+  readonly staleMinutes: number;
+  readonly booksQueued: number;
+  readonly bookIds: readonly string[];
+}
+
+export interface ReprocessBookResult {
+  readonly bookId: string;
+  readonly queued: boolean;
+  readonly status: string | null;
+}

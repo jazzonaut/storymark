@@ -77,6 +77,13 @@ internal static class PromptDefaults
 
         Use only this section.
         Do not infer future events.
+        Be thorough: include every named person, place, organization, important object,
+        title, role, faction, mystery, promise, conflict, discovery, arrival, departure,
+        alliance, threat, and relationship change that this section makes visible. Prefer
+        several precise events over one broad summary event. Do not skip a relationship
+        just because it is implied by dialogue or action; if the section shows trust,
+        hostility, authority, debt, family, service, pursuit, rivalry, secrecy, or
+        cooperation between two named entities, add a relationshipDelta with evidence.
         Allowed eventType values: arrival, departure, death, betrayal, reveal,
         conflict, reconciliation, discovery, promise, other.
         Allowed entityType values: Person, Place, Organization, Object, Event,
@@ -94,6 +101,8 @@ internal static class PromptDefaults
         Each event's evidence must be a short verbatim quote copied exactly from SECTION
         TEXT at the point the event occurs — it is used to locate the event in the text.
         Do not paraphrase, summarise, or invent the quote; copy it character for character.
+        Each relationshipDelta also needs a short verbatim evidence quote from SECTION
+        TEXT. Keep entity names consistent with entitiesIntroduced whenever possible.
         """;
 
     public const string EntitySummary =

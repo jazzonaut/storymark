@@ -1,6 +1,6 @@
 import { computed, reactive, readonly, watch } from "vue";
 import type { ComputedRef, DeepReadonly } from "vue";
-import { useEventListener, useFullscreen } from "@vueuse/core";
+import { useEventListener } from "@vueuse/core";
 import { db } from "@/db/storymark-db";
 import type { EntityHighlightMode, ReaderFontFamily, ReaderTheme } from "@/db/storymark-db";
 
@@ -56,31 +56,53 @@ watch(
   { deep: true },
 );
 
-const { isFullscreen, enter: enterFullscreen, exit: exitFullscreen } = useFullscreen();
+// Hand-rolled instead of vueuse's useFullscreen: Android can drop fullscreen in
+// the background without ever delivering fullscreenchange, and useFullscreen
+// only resyncs its cached state on that event — after which its enter() refuses
+// while the cache still reads fullscreen. document.fullscreenElement is always
+// current, so it is the only state we consult.
+function fullscreenActive(): boolean {
+  return document.fullscreenElement !== null;
+}
+
+async function enterFullscreen(): Promise<void> {
+  await document.documentElement.requestFullscreen();
+}
 
 // requestFullscreen() only succeeds under transient user activation, so an
-// automatic request on load is rejected; when that happens we arm a one-shot
-// listener and enter on the reader's next tap/keypress instead.
+// automatic request (on load, or on returning to the app) is rejected; when
+// that happens we arm a listener and enter on the reader's next tap/keypress.
+// It stays armed across rejected attempts — an Esc keydown, for one, carries no
+// activation — and disarms only once fullscreen is restored or no longer wanted.
 let armed = false;
 function enterFullscreenOnGesture(): void {
   if (armed) return;
   armed = true;
   const stop = useEventListener(window, ["pointerdown", "keydown"], () => {
-    armed = false;
-    stop();
-    if (settings.fullscreen && !isFullscreen.value) {
-      void enterFullscreen().catch(() => undefined);
+    if (!settings.fullscreen || fullscreenActive()) {
+      armed = false;
+      stop();
+      return;
     }
+    void (async () => {
+      try {
+        await enterFullscreen();
+        armed = false;
+        stop();
+      } catch {
+        // No activation on this gesture; stay armed for the next one.
+      }
+    })();
   });
 }
 
 function applyFullscreen(want: boolean): void {
-  if (want && !isFullscreen.value) {
+  if (want && !fullscreenActive()) {
     void enterFullscreen().catch(() => {
       enterFullscreenOnGesture();
     });
-  } else if (!want && isFullscreen.value) {
-    void exitFullscreen().catch(() => undefined);
+  } else if (!want && fullscreenActive()) {
+    void document.exitFullscreen().catch(() => undefined);
   }
 }
 
@@ -105,27 +127,36 @@ useEventListener(window, "pageshow", () => {
 });
 
 // Android force-exits fullscreen when the app is backgrounded, but delivers the
-// fullscreenchange only after the app is foregrounded again — so an OS-forced
-// exit can't be told from a user one by visibility at event time. What does
-// mark it is arriving right after the return; a deliberate exit (back gesture,
-// Esc) comes while the user has visibly been in the app.
+// fullscreenchange late — after the app is foregrounded again — or not at all.
+// So an OS-forced exit can't be told from a user one by visibility at event
+// time. Two signals mark it instead: the fullscreen state already being gone
+// when the app comes back (observed below, before any event), or the event
+// arriving right after the return. A deliberate exit (back gesture, Esc) comes
+// while the user has visibly been in the app.
 const FORCED_EXIT_GRACE_MS = 1000;
 let foregroundedAt = 0;
+let observedForcedExit = false;
 
 function isForcedExit(): boolean {
   return (
+    observedForcedExit ||
     document.visibilityState === "hidden" ||
     performance.now() - foregroundedAt < FORCED_EXIT_GRACE_MS
   );
 }
 
-// useFullscreen tracks the real fullscreen state; mirror it back to the stored
-// preference so leaving via Esc or the browser chrome keeps the toggle truthful.
-// An OS-forced exit is not the user changing their mind: keep the preference and
-// arm the gesture fallback instead, so the first tap back in re-enters.
-watch(isFullscreen, (active) => {
+// Mirror the real fullscreen state back to the stored preference so leaving via
+// Esc or the browser chrome keeps the toggle truthful. An OS-forced exit is not
+// the user changing their mind: keep the preference and arm the gesture
+// fallback instead, so the first tap back in re-enters.
+useEventListener(document, "fullscreenchange", () => {
+  const active = fullscreenActive();
+  if (active) {
+    observedForcedExit = false;
+  }
   if (unloading) return;
   if (!active && settings.fullscreen && isForcedExit()) {
+    observedForcedExit = false;
     enterFullscreenOnGesture();
     return;
   }
@@ -134,14 +165,19 @@ watch(isFullscreen, (active) => {
   }
 });
 
-// Coming back from an app switch with the exit already delivered while hidden:
-// the preference survived, so try to re-enter. Without transient user activation
-// the request is rejected, which also lands in the gesture fallback.
+// Coming back from an app switch: don't wait for the exit event — compare the
+// preference against the real state directly. A divergence means the OS dropped
+// fullscreen while hidden, however its event delivery turns out; flag it so a
+// late event isn't mirrored as the user turning fullscreen off. The re-entry
+// attempt has no transient activation and is rejected, which arms the gesture
+// fallback — the first tap back in restores fullscreen.
 useEventListener(document, "visibilitychange", () => {
-  if (document.visibilityState === "visible") {
-    foregroundedAt = performance.now();
-    applyFullscreen(settings.fullscreen);
+  if (document.visibilityState !== "visible") return;
+  foregroundedAt = performance.now();
+  if (settings.fullscreen && !fullscreenActive()) {
+    observedForcedExit = true;
   }
+  applyFullscreen(settings.fullscreen);
 });
 
 interface UseReaderSettings {

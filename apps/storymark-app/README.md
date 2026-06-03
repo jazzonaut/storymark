@@ -1,34 +1,38 @@
 # `apps/storymark-app`
 
-The Vue 3 PWA — reader + admin panel.
+Vue 3 PWA for the Storymark reader and admin panel.
 
-**Status:** scaffolded (issue [`S0.1`](../../docs/issues.md)). Vite + Vue 3 + TypeScript
-(strict), Tailwind v4, PrimeVue v4, and Vue Router are wired. `/` is the Library
-placeholder; `/admin` is the PrimeVue shell placeholder (lazy-loaded).
+## Current Surface
+
+- Library grid with EPUB upload, delete, install prompt, cached offline library fallback, and processing status polling.
+- Paginated reader with typography/theme controls, wake lock, bookmarks, backend-synced progress, offline section cache, and inline resource image cache warming.
+- Spoiler-safe memory surfaces in the reader: Summary, Timeline, Graph, Story Guide, Assistant, entity popups, selection hints, and recap cards.
+- Admin panel for settings, prompts, model registry, LLM call log, cost meter, books maintenance, section-title backfill, stuck-upload recovery, and full book reprocessing.
 
 ## Layout
 
 ```text
-apps/storymark-app/
-  package.json            # catalog deps as "vue": "catalog:"
-  tsconfig.json           # extends @vue/tsconfig + ../../tsconfig.base.json (strict)
-  vite.config.ts          # @vitejs/plugin-vue + @tailwindcss/vite, "@/" -> src alias
-  index.html              # data-theme="light" on <html>
-  env.d.ts
-  src/
-    main.ts               # app bootstrap (router + PrimeVue Aura preset)
-    App.vue               # <RouterView /> shell
-    router/               # manual routes array (lazy-load heavy routes)
-    styles/theme.css      # Tailwind import + light/sepia/dark theme tokens
-    views/                # LibraryView.vue, admin/AdminView.vue
+src/
+  api/             browser API clients and read-through cache helpers
+  components/      shared UI plus reader/admin components
+  composables/     Vue state modules for reader, admin, offline sync, cache, memory
+  db/              Dexie schema and local cache cleanup helpers
+  router/          library, upload, reader, and admin routes
+  styles/          Tailwind import and Storymark theme tokens
+  utils/           reader formatting, color, entity highlighting, labels
+  views/           route-level screens
 ```
 
-Folders not yet present (`components/`, `composables/`, `api/`, `db/`, `sw/`,
-`utils/`) land with the features that need them.
+## Run
 
-## Scripts
+From the repo root:
 
-Run from the repo root: `pnpm dev`, `pnpm build`, `pnpm typecheck`, `pnpm lint`,
-`pnpm format:check`.
+```bash
+pnpm dev
+pnpm typecheck
+pnpm lint
+pnpm format:check
+pnpm build
+```
 
-See [`docs/conventions/02-vue.md`](../../docs/conventions/02-vue.md) for the Vue rules.
+Vite proxies `/api` to `http://localhost:8088` in dev and preview. The production SPA is served by the API image from the same origin.

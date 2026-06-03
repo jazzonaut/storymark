@@ -1,42 +1,39 @@
 # `apps/storymark-api`
 
-The ASP.NET Core API — FastEndpoints, EF Core, Hangfire, pgvector retrieval, Ollama / OpenAI-compatible LLM adapters.
+ASP.NET Core API for Storymark. It serves the reader API, admin API, Hangfire jobs, pgvector search, LLM routing, and the built Vue SPA.
 
-**Status:** scaffolded (issue [`S0.2`](../../docs/issues.md)). Targets `net10.0`
-(latest LTS). FastEndpoints, EF Core (Npgsql, no migrations yet), and Serilog
-(console JSON) are wired. `GET /api/health` returns `{ "status", "version" }`.
+## Current Surface
+
+- Public reader/library endpoints for upload, book list, covers/resources, sections, progress, bookmarks, Q&A, selection hints, memory, entities, events, and relationships.
+- Admin endpoints for settings, prompts, providers/models, LLM call log, cost summary, embedding swaps, section-title backfill, stuck-upload recovery, and explicit book reprocessing.
+- Background pipeline: EPUB parse -> chunk -> per-section extraction -> rolling memory snapshots -> embeddings -> `Indexed`.
+- LLM abstraction for Ollama and OpenAI-compatible providers, with per-task model routing and audited call logging.
+- EF Core/Postgres storage with pgvector, Hangfire on Postgres, and filesystem book artifacts under `/data/books/{sha256}`.
 
 ## Layout
 
 ```text
-apps/storymark-api/
-  global.json                 # SDK pin (10.0, rollForward latestFeature)
-  nuget.config                # restores from nuget.org only (reproducible/CI)
-  Directory.Build.props       # nullable, warnings-as-errors, analyzers
-  Directory.Packages.props    # central package management, exact-pinned
-  .editorconfig               # .NET analyzer severity tuning
-  Dockerfile                  # multi-stage, non-root; build context = repo root
-  Program.cs                  # Serilog bootstrap, FastEndpoints, DbContext
-  appsettings.json / appsettings.Development.json
-  Endpoints/Health/HealthEndpoint.cs
-  Infrastructure/Database/StorymarkDbContext.cs
+Domain/             persisted entities and small domain enums
+Endpoints/          FastEndpoints grouped by public/admin/debug route surface
+Infrastructure/     database config, auth, LLM clients, settings, storage
+Jobs/               Hangfire pipeline and maintenance jobs
+Prompts/            first-run prompt defaults and placeholder contracts
+Services/           book, retrieval, assistant, entity, memory, settings, LLM logic
 ```
-
-Folders from the plan (`Services/`, `Jobs/`, `Prompts/`, `Domain/`, …) land with
-the features that need them.
 
 ## Run
 
-```bash
-# local (serves http://localhost:5080 via Properties/launchSettings.json)
-dotnet run
+From `apps/storymark-api`:
 
-# container (build context is the repo root)
-docker build -f apps/storymark-api/Dockerfile -t storymark-api .
-docker run --rm -p 8080:8080 storymark-api
-# both serve GET /api/health
+```bash
+dotnet run
 ```
 
-CI gates: `dotnet format --verify-no-changes` and `dotnet build -warnaserror`.
+From the repo root:
 
-See [`docs/conventions/03-dotnet.md`](../../docs/conventions/03-dotnet.md) for the .NET rules.
+```bash
+dotnet build apps/storymark-api -c Release -warnaserror
+dotnet format apps/storymark-api --verify-no-changes
+```
+
+Local launch settings serve the API on `http://localhost:8088` for the Vite proxy. In production, the API also serves the built SPA from `wwwroot`.

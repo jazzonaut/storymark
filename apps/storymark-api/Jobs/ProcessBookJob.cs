@@ -19,7 +19,13 @@ namespace Storymark.Api.Jobs;
 /// deterministic (a malformed file), so a retry would just fail again — it surfaces
 /// as Failed in the dashboard instead. Re-running (e.g. a manual requeue) is safe:
 /// existing sections are cleared first, which cascade-deletes their paragraphs and
-/// chunks.</para></summary>
+/// chunks.</para>
+///
+/// <para>The job starts by atomically claiming the book (<c>Uploaded → Parsing</c>
+/// via a conditional update). A book sits on <c>Uploaded</c> between enqueue and
+/// pickup, so a stale-upload recovery sweep can't tell "never enqueued" from
+/// "queued behind a backlog" and may enqueue a duplicate — the claim makes the
+/// duplicate a no-op instead of two pipelines racing over the same rows.</para></summary>
 internal sealed class ProcessBookJob(
     StorymarkDbContext db,
     FileStorageService storage,
@@ -31,18 +37,26 @@ internal sealed class ProcessBookJob(
     [AutomaticRetry(Attempts = 0)]
     public async Task RunAsync(Guid bookId, CancellationToken ct)
     {
-        var book = await db.Books.FirstOrDefaultAsync(b => b.Id == bookId, ct);
-        if (book is null)
+        var claimed = await db.Books
+            .Where(b => b.Id == bookId && b.ProcessingStatus == ProcessingStatus.Uploaded)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(b => b.ProcessingStatus, ProcessingStatus.Parsing)
+                    .SetProperty(b => b.ProcessingError, (string?)null)
+                    .SetProperty(b => b.UpdatedAt, DateTimeOffset.UtcNow),
+                ct);
+        if (claimed == 0)
         {
-            logger.LogWarning("ProcessBookJob skipped: book {BookId} not found", bookId);
+            logger.LogWarning(
+                "ProcessBookJob skipped: book {BookId} is missing or not Uploaded (duplicate enqueue?)",
+                bookId);
             return;
         }
 
+        var book = await db.Books.FirstAsync(b => b.Id == bookId, ct);
         try
         {
             await ClearExistingSectionsAsync(bookId, ct);
-            book.ProcessingError = null;
-            await SetStatusAsync(book, ProcessingStatus.Parsing, ct);
 
             var handler = handlers.First(h => h.CanHandle(book.Format));
             var content = await handler.ParseAsync(book.FilePath, ct);

@@ -11,17 +11,24 @@ import type {
   PromptItem,
   ProviderItem,
   ProviderUpsertBody,
+  RecoverStuckBooksResult,
+  ReprocessBookResult,
   SettingItem,
 } from "@/api/admin-types";
 
-/** Thrown on any non-2xx admin response. <see cref="status"/> drives 401 handling. */
+/** Thrown on any non-2xx admin response. `status` drives 401 handling; `body` is
+ * the parsed JSON error payload (or null), so endpoints that reject with a
+ * structured reason — e.g. reprocess answering 409 with the book's mid-pipeline
+ * status — can surface it instead of a generic failure line. */
 export class AdminApiError extends Error {
   readonly status: number;
+  readonly body: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, body: unknown) {
     super(message);
     this.name = "AdminApiError";
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -35,7 +42,8 @@ async function send(token: string, path: string, init?: RequestInit): Promise<Re
   });
 
   if (!response.ok) {
-    throw new AdminApiError(response.status, `Admin request failed (${response.status}).`);
+    const body: unknown = await response.json().catch(() => null);
+    throw new AdminApiError(response.status, `Admin request failed (${response.status}).`, body);
   }
 
   return response;
@@ -80,6 +88,15 @@ export const adminApi = {
 
   backfillSectionTitles: (token: string): Promise<BackfillSectionTitlesResult> =>
     request(token, "books/backfill-section-titles", { method: "POST" }),
+
+  recoverStuckBooks: (token: string, staleMinutes: number): Promise<RecoverStuckBooksResult> =>
+    request(token, "books/recover-stuck", {
+      method: "POST",
+      body: JSON.stringify({ staleMinutes }),
+    }),
+
+  reprocessBook: (token: string, bookId: string): Promise<ReprocessBookResult> =>
+    request(token, `books/reprocess/${encodeURIComponent(bookId)}`, { method: "POST" }),
 
   listProviders: (token: string): Promise<readonly ProviderItem[]> =>
     request(token, "models/providers"),

@@ -8,22 +8,43 @@ import { db } from "@/db/storymark-db";
 // back to the API, and writes back — so once a book is prefetched the reader is
 // fully offline-capable (the offline-detection/service-worker layer lands in S2.3).
 export const readerApi = {
-  // TTL read-through (not cache-forever): the manifest carries section titles, which
-  // the server can change after the fact (a title backfill), so a stale row is
-  // refreshed when online and still served offline.
-  getManifest: async (bookId: string): Promise<readonly SectionSummary[]> =>
+  // TTL + version read-through (not cache-forever): the TTL catches server-side
+  // title changes (a title backfill), and the version gate catches a reprocess —
+  // which can change the section *count*, something a TTL-only row would keep
+  // serving (indefinitely offline) while the version-gated section caches had
+  // already invalidated. The write-back preserves `imagesWarmedForVersion`: the
+  // warmed marker outlives a TTL refresh, and a version change naturally restarts
+  // the warming because the stored marker no longer matches.
+  getManifest: async (
+    bookId: string,
+    version: BookVersion | null,
+  ): Promise<readonly SectionSummary[]> =>
     (
       await readThroughCache({
+        version,
         readCached: async () => {
           const row = await db.manifests.get(bookId);
-          return row ? { value: row.sections, cachedAt: row.cachedAt } : undefined;
+          return row
+            ? { value: row.sections, cachedAt: row.cachedAt, ...versionTag(row.version) }
+            : undefined;
         },
         fetchFresh: () =>
           fetchJson<readonly SectionSummary[]>(
             `/api/books/${encodeURIComponent(bookId)}/sections`,
             "Failed to load sections",
           ),
-        writeBack: (sections) => db.manifests.put({ bookId, sections, cachedAt: Date.now() }),
+        writeBack: async (sections) => {
+          const existing = await db.manifests.get(bookId);
+          await db.manifests.put({
+            bookId,
+            sections,
+            cachedAt: Date.now(),
+            ...versionTag(version),
+            ...(existing?.imagesWarmedForVersion === undefined
+              ? {}
+              : { imagesWarmedForVersion: existing.imagesWarmedForVersion }),
+          });
+        },
       })
     ).value,
 

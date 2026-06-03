@@ -466,7 +466,7 @@ Estimates are rough T-shirt sizes: **S** ≈ ½ day, **M** ≈ 1–2 days, **L**
 **Depends on:** S0.3
 
 ### CC.3 — Spoiler-safety regression harness (deferred — Phase 7+) — **M**
-**Goal (when adopted):** A reusable harness that, given a sample book + reading position, asserts no future content appears in any AI surface (Q&A, hint, entity, recap, timeline, graph). Until tests are reintroduced, this is enforced manually via the LLM call log and an admin-panel "future content" filter that surfaces any call with `used_future_content = true`.
+**Goal (when adopted):** A reusable harness that, given a sample book + reading position, asserts no future content appears in any AI surface (Q&A, hint, entity, recap, timeline, graph). A first live-API harness now exists at `scripts/spoiler-safety-harness.mjs` and runs via `pnpm test:spoiler` when `STORYMARK_RUN_SPOILER_HARNESS=1`; the remaining work is real golden EPUB fixtures/cases and deciding when it should gate CI. Until then, this is still backed by the LLM call log and the admin-panel filters for `used_future_content = true` / failed calls.
 **Depends on:** S0.5.5 (admin call log), eventual tests reintroduction (see [`adr/0012-tests-deferred.md`](adr/0012-tests-deferred.md)).
 
 ---

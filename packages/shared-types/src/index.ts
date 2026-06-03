@@ -13,6 +13,12 @@ export type ProcessingStatus =
   | "Indexed"
   | "Failed";
 
+/** Statuses where the pipeline has stopped and nothing further runs without an
+ * explicit action — drives the library's status poll and gates admin reprocessing.
+ * Mirrors BookProcessingAdminService.ReprocessableStatuses on the API side. */
+export const TERMINAL_PROCESSING_STATUSES: ReadonlySet<ProcessingStatus> =
+  new Set<ProcessingStatus>(["Indexed", "Failed"]);
+
 /** Embedding progress while a book is on `Embedding`: chunks vectorised under the
  * current model over the book's total chunks. Mirrors EmbeddingProgressResponse. */
 export interface EmbeddingProgress {

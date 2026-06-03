@@ -9,6 +9,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import type { LlmCallItem } from "@/api/admin-types";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
+import { formatDateTime } from "@/utils/format-date-time";
 import { formatCost, formatTokens } from "@/utils/llm-format";
 
 const ALL_TASKS = "all";
@@ -51,10 +52,6 @@ watch(distinctTasks, (tasks) => {
     taskFilter.value = ALL_TASKS;
   }
 });
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString();
-}
 
 function formatModel(call: LlmCallItem): string {
   return `${call.provider}:${call.model}`;
@@ -128,7 +125,9 @@ onMounted(refresh);
 
       <Column header="Time">
         <template #body="{ data }">
-          <span class="whitespace-nowrap">{{ formatTime((data as LlmCallItem).createdAt) }}</span>
+          <span class="whitespace-nowrap">{{
+            formatDateTime((data as LlmCallItem).createdAt)
+          }}</span>
         </template>
       </Column>
 

@@ -1,0 +1,13 @@
+{
+  "bookId": "00000000-0000-0000-0000-000000000000",
+  "cases": [
+    {
+      "name": "before future reveal",
+      "section": 2,
+      "location": 0,
+      "question": "What do we know about the locked chapel?",
+      "forbidden": ["betrayal", "execution", "secret heir"],
+      "entityIds": []
+    }
+  ]
+}

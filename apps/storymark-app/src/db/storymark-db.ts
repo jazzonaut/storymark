@@ -14,11 +14,19 @@ import type {
 /** A book's section manifest, cached for offline reading. `cachedAt` (epoch ms)
  * drives a short TTL: a fresh row is served directly, a stale one is refreshed
  * online but still rendered offline — so server-side title changes (e.g. a
- * section-title backfill) surface without the reader having to clear storage. */
+ * section-title backfill) surface without the reader having to clear storage.
+ * `version` gates it like the section rows: a reprocess can change the section
+ * *count*, and a TTL-only manifest would keep serving the old TOC (indefinitely
+ * offline) while the version-gated section caches had already moved on.
+ * `imagesWarmedForVersion` records that the book's inline images have been pushed
+ * into the service worker's `book-images` cache for that version, so re-opening a
+ * cached book skips the per-section HTML parse + per-image fetch entirely. */
 export interface CachedManifest {
   readonly bookId: string;
   readonly sections: readonly SectionSummary[];
   readonly cachedAt: number;
+  readonly version?: BookVersion;
+  readonly imagesWarmedForVersion?: BookVersion;
 }
 
 /** Full section content, cached and keyed by [bookId+sectionIndex]. Tagged with the

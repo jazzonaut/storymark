@@ -1,6 +1,7 @@
 import { shallowRef } from "vue";
 import type { ShallowRef } from "vue";
-import type { BookSummary, ProcessingStatus } from "@storymark/shared-types";
+import { TERMINAL_PROCESSING_STATUSES } from "@storymark/shared-types";
+import type { BookSummary } from "@storymark/shared-types";
 import { booksApi } from "@/api/books-api";
 import type { BookVersion } from "@/db/storymark-db";
 import { purgeBookData } from "@/db/storymark-db";
@@ -14,8 +15,6 @@ export interface BookCacheParams {
   readonly version: BookVersion | null;
   readonly canCache: boolean;
 }
-
-const TERMINAL: ReadonlySet<ProcessingStatus> = new Set<ProcessingStatus>(["Indexed", "Failed"]);
 
 const books = shallowRef<readonly BookSummary[]>([]);
 const isLoading = shallowRef(false);
@@ -60,10 +59,9 @@ export function useBooks(): UseBooks {
     return inFlight;
   }
 
-  // True while any book is still being processed; drives the library's status
-  // poll. Nothing advances past Uploaded until the S2.1 pipeline exists.
+  // True while any book is still being processed; drives the library's status poll.
   function hasPending(): boolean {
-    return books.value.some((book) => !TERMINAL.has(book.processingStatus));
+    return books.value.some((book) => !TERMINAL_PROCESSING_STATUSES.has(book.processingStatus));
   }
 
   // An unknown book (list not loaded yet — e.g. an offline deep-link) is treated as
@@ -73,7 +71,7 @@ export function useBooks(): UseBooks {
     const book = books.value.find((existing) => existing.bookId === bookId);
     return {
       version: book?.updatedAt ?? null,
-      canCache: book === undefined || TERMINAL.has(book.processingStatus),
+      canCache: book === undefined || TERMINAL_PROCESSING_STATUSES.has(book.processingStatus),
     };
   }
 

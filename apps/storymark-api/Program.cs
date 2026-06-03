@@ -79,6 +79,7 @@ try
     builder.Services.AddScoped<ReadingProgressService>();
     builder.Services.AddScoped<BookmarkService>();
     builder.Services.AddScoped<BookDeletionService>();
+    builder.Services.AddScoped<BookProcessingAdminService>();
     builder.Services.AddScoped<ProcessBookJob>();
     builder.Services.AddScoped<EmbeddingJob>();
     builder.Services.AddScoped<SectionExtractionJob>();

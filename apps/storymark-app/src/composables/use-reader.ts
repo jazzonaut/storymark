@@ -123,7 +123,7 @@ export function useReader(): UseReader {
     currentSection.value = null;
     currentPosition.value = 0;
     currentParagraphIndex.value = 0;
-    manifest.value = await readerApi.getManifest(id);
+    manifest.value = await readerApi.getManifest(id, cacheParams(id).version);
 
     const startPos = initial
       ? manifest.value.findIndex((s) => s.sectionIndex === initial.sectionIndex)

@@ -13,6 +13,8 @@ import type {
   PromptItem,
   ProviderItem,
   ProviderUpsertBody,
+  RecoverStuckBooksResult,
+  ReprocessBookResult,
   SettingItem,
 } from "@/api/admin-types";
 
@@ -56,6 +58,8 @@ interface UseAdmin {
   previewEmbeddingSwap: () => Promise<EmbeddingImpactPreview>;
   applyEmbeddingSwap: (modelId: string) => Promise<ApplySwapResult>;
   backfillSectionTitles: () => Promise<BackfillSectionTitlesResult>;
+  recoverStuckBooks: (staleMinutes: number) => Promise<RecoverStuckBooksResult>;
+  reprocessBook: (bookId: string) => Promise<ReprocessBookResult>;
   loadProviders: () => Promise<void>;
   saveProvider: (id: string | null, body: ProviderUpsertBody) => Promise<void>;
   deleteProvider: (id: string) => Promise<void>;
@@ -69,7 +73,7 @@ export function useAdmin(): UseAdmin {
 
   function requireToken(): string {
     if (token.value === null || token.value.length === 0) {
-      throw new AdminApiError(401, "No admin token set.");
+      throw new AdminApiError(401, "No admin token set.", null);
     }
     return token.value;
   }
@@ -166,6 +170,14 @@ export function useAdmin(): UseAdmin {
     return adminApi.backfillSectionTitles(requireToken());
   }
 
+  function recoverStuckBooks(staleMinutes: number): Promise<RecoverStuckBooksResult> {
+    return adminApi.recoverStuckBooks(requireToken(), staleMinutes);
+  }
+
+  function reprocessBook(bookId: string): Promise<ReprocessBookResult> {
+    return adminApi.reprocessBook(requireToken(), bookId);
+  }
+
   async function loadProviders(): Promise<void> {
     providers.value = await adminApi.listProviders(requireToken());
   }
@@ -223,6 +235,8 @@ export function useAdmin(): UseAdmin {
     previewEmbeddingSwap,
     applyEmbeddingSwap,
     backfillSectionTitles,
+    recoverStuckBooks,
+    reprocessBook,
     loadProviders,
     saveProvider,
     deleteProvider,
