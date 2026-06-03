@@ -3,6 +3,7 @@ import type { Ref, ShallowRef } from "vue";
 import type { SelectionHintResult } from "@storymark/shared-types";
 import { selectionApi } from "@/api/selection-api";
 import { ApiError } from "@/api/api-error";
+import { isTimeout } from "@/api/http";
 import { useLatestOnly } from "@/composables/use-latest-only";
 
 /** A live text selection in the reader: the selected text and the viewport rect
@@ -68,7 +69,9 @@ export function useSelectionHint(): UseSelectionHint {
         error.value =
           caught instanceof ApiError
             ? "Couldn't look that up just now."
-            : "Hints are unavailable offline.";
+            : isTimeout(caught)
+              ? "The lookup took too long. Try again."
+              : "Hints are unavailable offline.";
       }
     } finally {
       if (latest.isCurrent(token)) {

@@ -17,6 +17,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "ask", text: string): void;
+  (e: "tell-me-more", text: string): void;
   (e: "open-entity", payload: { entityId: string; name: string }): void;
 }>();
 
@@ -104,7 +105,7 @@ onMounted(reset);
     <HintText
       v-else-if="result?.kind === 'hint'"
       :hint="result.hint"
-      @tell-me-more="emit('ask', selection.text)"
+      @tell-me-more="emit('tell-me-more', selection.text)"
     />
 
     <div v-else class="flex flex-wrap gap-2">

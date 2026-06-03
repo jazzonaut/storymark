@@ -6,6 +6,7 @@ using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Infrastructure.Llm;
 using Storymark.Api.Infrastructure.Storage;
+using Storymark.Api.Infrastructure.Text;
 using Storymark.Api.Services.Entities;
 using Storymark.Api.Services.Extraction;
 using Storymark.Api.Services.Llm;
@@ -646,7 +647,7 @@ internal sealed class SectionExtractionJob(
                 LocationStart = locationStart,
                 LocationEnd = locationEnd,
                 MentionText = entity.CanonicalName,
-                SurroundingText = Truncate(description),
+                SurroundingText = Ellipsis.Truncate(description, SurroundingMaxChars),
                 Confidence = 1.0m,
             });
         }
@@ -816,9 +817,6 @@ internal sealed class SectionExtractionJob(
         var trimmed = value?.Trim();
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
-
-    private static string Truncate(string text) =>
-        text.Length <= SurroundingMaxChars ? text : text[..SurroundingMaxChars].TrimEnd() + "…";
 
     private sealed record SectionCounts(int Summaries, int Events, int Relationships)
     {

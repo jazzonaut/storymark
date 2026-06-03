@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FastEndpoints;
 using Storymark.Api.Infrastructure.Auth;
+using Storymark.Api.Prompts;
 using Storymark.Api.Services.Settings;
 
 namespace Storymark.Api.Endpoints.Admin.Prompts;
@@ -31,6 +32,14 @@ internal sealed class PatchPromptEndpoint(ISettingsService settings)
         }
 
         var fullKey = $"prompts.{key}";
+        // A template missing a placeholder its render site relies on would silently
+        // drop that content (rendering is a plain Replace), so reject it here.
+        var missing = PromptContract.MissingPlaceholders(fullKey, req.Text);
+        if (missing.Count > 0)
+        {
+            ThrowError(r => r.Text, $"Prompt must contain the placeholder(s): {string.Join(", ", missing)}.");
+        }
+
         var updatedBy = HttpContext.Items[AdminAuthPreProcessor.FingerprintItemKey] as string ?? "admin";
 
         try

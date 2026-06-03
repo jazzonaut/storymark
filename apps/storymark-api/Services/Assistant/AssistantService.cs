@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using Storymark.Api.Domain.Books;
 using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Database;
+using Storymark.Api.Infrastructure.Text;
+using Storymark.Api.Prompts;
 using Storymark.Api.Services.Llm;
 using Storymark.Api.Services.Retrieval;
 using Storymark.Api.Services.Settings;
@@ -13,25 +15,44 @@ namespace Storymark.Api.Services.Assistant;
 
 /// <summary>Answers a free-text question at a reading position (docs/plan.md §18).
 /// It composes the two existing chokepoints and adds no new ones:
-/// <see cref="SpoilerSafeRetrievalService"/> is the only evidence path (so the
-/// model can never be handed future content) and <see cref="ChatModelRouter"/> →
+/// <see cref="SpoilerSafeRetrievalService"/> is the only evidence path (retrieval
+/// can never return future content) and <see cref="ChatModelRouter"/> →
 /// <c>LlmCallRecorder</c> is the only call path (so every turn is audited). The
-/// answer turn is also persisted to <c>question_answers</c>.</summary>
+/// prompt additionally carries client-attested text — the question, and the
+/// optional selection/history conversation context — which is position-gated in
+/// the client and only clamped here; docs/adr/0021 records why that is accepted
+/// on an anonymous API whose position parameters are client-attested everywhere.
+/// The answer turn is also persisted to <c>question_answers</c>.</summary>
 internal sealed class AssistantService(
     StorymarkDbContext db,
     SpoilerSafeRetrievalService retrieval,
     ChatModelRouter router,
-    ISettingsService settings)
+    ISettingsService settings,
+    ILogger<AssistantService> logger)
 {
     private const int PerQueryK = 8;
     private const int SnippetMaxChars = 240;
+    private const int MaxSelectionChars = 500;
+    private const int MaxHistoryTurns = 6;
+    private const int MaxHistoryTurnChars = 2000;
 
-    // Matches a bare numeric citation marker like [2]. The context labels its
-    // passage numbers the same way and tells the model to cite with them; the
-    // "(Section N)" label uses parens so it never collides with this.
+    // Matches a bare numeric citation marker like [2], for mapping an answer's
+    // citations back to evidence. The context labels its passage numbers the same
+    // way and tells the model to cite with them; the "(Section N)" label uses
+    // parens so it never collides with this.
     private static readonly Regex CitationMarker = new(
         @"\[(?<n>\d+)\]",
         RegexOptions.Compiled | RegexOptions.ExplicitCapture | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
+
+    // Strips citation markers from replayed history answers — their numbers point
+    // at a previous turn's evidence set, so kept verbatim they would teach the
+    // model to cite passages that don't exist in this turn. Also eats the spaces
+    // before a marker, but never a newline: stripping a line-leading marker must
+    // not join two paragraphs.
+    private static readonly Regex HistoryCitationMarker = new(
+        @"[^\S\n]*\[\d+\]",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1));
 
     // A chunk scores up to ~2.0 only when it surfaces in both the semantic and the
@@ -43,9 +64,7 @@ internal sealed class AssistantService(
     /// exist (the caller maps that to 404).</summary>
     public async Task<AssistantAnswer?> AnswerAsync(
         Guid bookId,
-        string question,
-        int currentSection,
-        int currentLocation,
+        AssistantQuestion request,
         CancellationToken ct)
     {
         if (!await db.Books.AnyAsync(b => b.Id == bookId, ct))
@@ -53,18 +72,26 @@ internal sealed class AssistantService(
             return null;
         }
 
+        var question = request.Question;
+        var currentSection = request.CurrentSection;
+        var currentLocation = request.CurrentLocation;
+        var selectedText = NormalizeSelection(request.SelectedText);
+        var history = NormalizeHistory(request.History);
+
         var maxEvidence = await ResolveMaxEvidenceAsync(ct);
         var evidence = await GatherEvidenceAsync(
-            bookId, question, currentSection, currentLocation, maxEvidence, ct);
+            bookId, question, selectedText, currentSection, currentLocation, maxEvidence, ct);
 
         // Always false because the SQL filter already excluded future content; deriving
         // it from the evidence (rather than hardcoding false) makes the audit flag fire
-        // if that filter ever regresses (CLAUDE.md, docs/plan.md §17).
+        // if that filter ever regresses (CLAUDE.md, docs/plan.md §17). The flag covers
+        // retrieved evidence only: the carried selection/history is client-attested and
+        // never feeds it (docs/adr/0021).
         var usedFutureContent = evidence.Any(e =>
             e.SectionIndex > currentSection
             || (e.SectionIndex == currentSection && e.LocationEnd > currentLocation));
 
-        var prompt = RenderPrompt(question, currentSection, currentLocation, evidence);
+        var prompt = RenderPrompt(question, selectedText, history, currentSection, currentLocation, evidence);
         var messages = new[] { new ChatMessage { Role = ChatRole.User, Content = prompt } };
         var metadata = new LlmCallMetadata
         {
@@ -100,10 +127,6 @@ internal sealed class AssistantService(
         };
     }
 
-    /// <summary>Runs every expanded query through the spoiler-safe path, then merges:
-    /// de-dup by <c>(section, chunk)</c> keeping the strongest hit, and cap to the top
-    /// evidence by score. Scores are per-query and not strictly comparable across them,
-    /// so the merge is a pragmatic best-of rather than a fused ranking.</summary>
     /// <summary>Caps the evidence set: the full <c>assistant.evidence.maxChunks</c>,
     /// or the smaller <c>maxChunksLocal</c> when <c>trimLocal</c> is on and the qa
     /// model is local (Ollama) — a shorter prompt for slow CPU inference. Hosted
@@ -122,16 +145,56 @@ internal sealed class AssistantService(
             : max;
     }
 
+    // The clamps below bound the prompt: the endpoint is public and the client
+    // carries the conversation context, so an oversized selection or history must
+    // shrink to a bounded prompt instead of overwhelming a (possibly local) model.
+    private static string? NormalizeSelection(string? selectedText)
+    {
+        var trimmed = selectedText?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return null;
+        }
+
+        return Ellipsis.Truncate(trimmed, MaxSelectionChars);
+    }
+
+    private static List<AssistantHistoryTurn> NormalizeHistory(IReadOnlyList<AssistantHistoryTurn> history)
+    {
+        return history
+            .Where(t => !string.IsNullOrWhiteSpace(t.Question) && !string.IsNullOrWhiteSpace(t.Answer))
+            .TakeLast(MaxHistoryTurns)
+            .Select(t => new AssistantHistoryTurn
+            {
+                Question = Ellipsis.Truncate(t.Question.Trim(), MaxHistoryTurnChars),
+                Answer = Ellipsis.Truncate(
+                    HistoryCitationMarker.Replace(t.Answer, string.Empty).Trim(), MaxHistoryTurnChars),
+            })
+            .ToList();
+    }
+
+    /// <summary>Runs every expanded query through the spoiler-safe path, then merges:
+    /// de-dup by <c>(section, chunk)</c> keeping the strongest hit, and cap to the top
+    /// evidence by score. Scores are per-query and not strictly comparable across them,
+    /// so the merge is a pragmatic best-of rather than a fused ranking.</summary>
     private async Task<List<EvidenceChunk>> GatherEvidenceAsync(
         Guid bookId,
         string question,
+        string? selectedText,
         int currentSection,
         int currentLocation,
         int maxEvidence,
         CancellationToken ct)
     {
         var synonyms = settings.GetJson<Dictionary<string, List<string>>>("search.synonyms");
-        var queries = QueryExpander.BuildQueries(question, synonyms);
+        var queries = QueryExpander.BuildQueries(question, synonyms).ToList();
+        // The selected passage is the strongest retrieval signal for "what is this?"
+        // style questions, so it runs as its own query alongside the expanded set.
+        if (selectedText is not null
+            && !queries.Contains(selectedText, StringComparer.OrdinalIgnoreCase))
+        {
+            queries.Add(selectedText);
+        }
 
         var collected = new List<EvidenceChunk>();
         foreach (var query in queries)
@@ -152,6 +215,8 @@ internal sealed class AssistantService(
 
     private string RenderPrompt(
         string question,
+        string? selectedText,
+        List<AssistantHistoryTurn> history,
         int currentSection,
         int currentLocation,
         List<EvidenceChunk> evidence)
@@ -170,9 +235,39 @@ internal sealed class AssistantService(
                 $"[{i + 1}] (Section {chunk.SectionIndex})\n{chunk.Text}");
         }
 
-        return settings.GetString("prompts.qa")
+        // The blocks carry their own labels so an absent selection or history leaves
+        // no dangling heading in the rendered prompt — the slot just goes blank.
+        var selection = selectedText is null
+            ? string.Empty
+            : $"The reader selected this passage and is asking about it:\n\"{selectedText}\"\n";
+
+        var conversation = new StringBuilder();
+        if (history.Count > 0)
+        {
+            conversation.Append("Conversation so far:\n");
+            foreach (var turn in history)
+            {
+                conversation.Append(CultureInfo.InvariantCulture, $"Q: {turn.Question}\nA: {turn.Answer}\n");
+            }
+        }
+
+        // An operator-edited template predating a placeholder would otherwise drop
+        // that content without a trace — the Replace is a no-op. Fall back loudly.
+        var template = settings.GetString("prompts.qa");
+        var missing = PromptContract.MissingPlaceholders("prompts.qa", template);
+        if (missing.Count > 0)
+        {
+            logger.LogError(
+                "prompts.qa is missing required placeholder(s) {Missing}; using the built-in default for this call",
+                string.Join(", ", missing));
+            template = PromptDefaults.Qa;
+        }
+
+        return template
             .Replace("{currentSection}", currentSection.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("{currentLocation}", currentLocation.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
+            .Replace("{selection}", selection, StringComparison.Ordinal)
+            .Replace("{history}", conversation.ToString(), StringComparison.Ordinal)
             .Replace("{question}", question, StringComparison.Ordinal)
             .Replace("{context}", context.ToString(), StringComparison.Ordinal);
     }
@@ -230,9 +325,6 @@ internal sealed class AssistantService(
         return seen;
     }
 
-    private static string Snippet(string text)
-    {
-        var flat = text.ReplaceLineEndings(" ").Trim();
-        return flat.Length <= SnippetMaxChars ? flat : flat[..SnippetMaxChars].TrimEnd() + "…";
-    }
+    private static string Snippet(string text) =>
+        Ellipsis.Truncate(text.ReplaceLineEndings(" ").Trim(), SnippetMaxChars);
 }

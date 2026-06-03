@@ -159,6 +159,14 @@ export interface AssistantAnswer {
   readonly usedFutureContent: boolean;
 }
 
+/** One earlier Q&A turn, carried by the client with a follow-up question so the
+ * model can resolve references like "she" — the server keeps no conversation
+ * state. Mirrors AskHistoryTurn. */
+export interface AssistantHistoryTurn {
+  readonly question: string;
+  readonly answer: string;
+}
+
 /** The spoiler-safe entity card returned by the selection-hint entity
  * short-circuit. Mirrors EntityCard. */
 export interface SelectionEntityCard {

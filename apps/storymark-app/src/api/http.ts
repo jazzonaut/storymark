@@ -9,16 +9,28 @@ import { ApiError } from "@/api/api-error";
 export const DEFAULT_TIMEOUT_MS = 20_000;
 export const LLM_TIMEOUT_MS = 60_000;
 
+/** True when `caught` is {@link apiFetch}'s timeout firing: the request ran too
+ * long (an LLM call on a slow model, a stalled mobile link), as opposed to never
+ * reaching a server at all. Lets a caller word the two failures differently. */
+export function isTimeout(caught: unknown): boolean {
+  return caught instanceof DOMException && caught.name === "TimeoutError";
+}
+
 /** The single fetch primitive for the app: identical to `fetch` but with a
  * mandatory abort timeout so no request can hang forever. A timeout surfaces as
- * the standard `TimeoutError` (an `AbortError`-family `DOMException`), which the
- * api wrappers treat the same as any other network failure. */
+ * the standard `TimeoutError` (an `AbortError`-family `DOMException`) — see
+ * {@link isTimeout}. A caller-supplied `init.signal` is honoured alongside the
+ * timeout. */
 export function apiFetch(
   path: string,
   init: RequestInit = {},
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<Response> {
-  return fetch(path, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return fetch(path, {
+    ...init,
+    signal: init.signal != null ? AbortSignal.any([init.signal, timeout]) : timeout,
+  });
 }
 
 /** The happy-path JSON wrapper: fetches with a timeout and parses the body,

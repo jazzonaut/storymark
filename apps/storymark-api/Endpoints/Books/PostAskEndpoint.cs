@@ -8,9 +8,20 @@ internal sealed record AskRequest
 {
     public required string Question { get; init; }
 
+    public string? SelectedText { get; init; }
+
+    public IReadOnlyList<AskHistoryTurn>? History { get; init; }
+
     public required int CurrentSection { get; init; }
 
     public required int CurrentLocation { get; init; }
+}
+
+internal sealed record AskHistoryTurn
+{
+    public required string Question { get; init; }
+
+    public required string Answer { get; init; }
 }
 
 internal sealed record AskResponse
@@ -25,8 +36,10 @@ internal sealed record AskResponse
 }
 
 /// <summary>Answers a question about the book using only content the reader has
-/// already passed (docs/plan.md §11.6, §18). Public, like the other reader
-/// endpoints. 400 on a blank question, 404 if the book is unknown.</summary>
+/// already passed (docs/plan.md §11.6, §18). The optional selection and history
+/// make a turn conversational while staying stateless server-side — the client
+/// carries the thread (docs/adr/0021). Public, like the other reader endpoints.
+/// 400 on a blank question, 404 if the book is unknown.</summary>
 internal sealed class PostAskEndpoint(AssistantService assistant)
     : Endpoint<AskRequest, AskResponse>
 {
@@ -46,9 +59,16 @@ internal sealed class PostAskEndpoint(AssistantService assistant)
 
         var answer = await assistant.AnswerAsync(
             Route<Guid>("id"),
-            req.Question.Trim(),
-            req.CurrentSection,
-            req.CurrentLocation,
+            new AssistantQuestion
+            {
+                Question = req.Question.Trim(),
+                SelectedText = req.SelectedText,
+                History = req.History
+                    ?.Select(t => new AssistantHistoryTurn { Question = t.Question, Answer = t.Answer })
+                    .ToList() ?? [],
+                CurrentSection = req.CurrentSection,
+                CurrentLocation = req.CurrentLocation,
+            },
             ct);
 
         if (answer is null)

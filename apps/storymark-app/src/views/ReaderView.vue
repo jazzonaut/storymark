@@ -58,7 +58,7 @@ const {
 const { mergeRevision } = useEntityMerge();
 const { record, resume, flush } = useReadingProgress();
 const { bookmarks, load: loadBookmarks, toggle, removeById, isBookmarked } = useBookmarks();
-const { draft: assistantDraft, reset: resetAssistant } = useAssistant();
+const { ask: askAssistant, reset: resetAssistant, startSelectionAsk } = useAssistant();
 const { open: openEntitySummary, close: closeEntitySummary } = useEntitySummary();
 const {
   restore: restoreMemoryTab,
@@ -245,14 +245,34 @@ function openMemoryPanel(): void {
   chromeVisible.value = true;
 }
 
-// "Ask…" / "Tell me more" from the selection popover: pre-fill the assistant
-// input, switch to the Assistant tab, and open the panel.
-function onAskFromSelection(text: string): void {
-  assistantDraft.value = text;
+// "Ask…" from the selection popover: anchor a fresh assistant conversation to the
+// selected passage (pinned at the position it was selected at, so it can be
+// spoiler-gated later), switch to the Assistant tab, and open the panel.
+function anchorSelectionAsk(text: string, sectionIndex: number): void {
+  startSelectionAsk(text, { bookId, section: sectionIndex, location: currentLocation.value });
   selection.value = null;
   setMemoryTab("assistant");
   memoryPanelOpen.value = true;
   chromeVisible.value = true;
+}
+
+function onAskFromSelection(text: string): void {
+  const sectionIndex = currentSectionIndex.value;
+  if (sectionIndex === null) {
+    return;
+  }
+  anchorSelectionAsk(text, sectionIndex);
+}
+
+// "Tell me more" escalation from a hint: same anchored conversation, but the label
+// promises one tap, so the first question is asked immediately.
+function onTellMeMoreFromSelection(text: string): void {
+  const sectionIndex = currentSectionIndex.value;
+  if (sectionIndex === null) {
+    return;
+  }
+  anchorSelectionAsk(text, sectionIndex);
+  void askAssistant(bookId, "Tell me more about this.", sectionIndex, currentLocation.value);
 }
 
 // Open the spoiler-safe entity popup at the current position (from a highlighted
@@ -659,6 +679,7 @@ onBeforeUnmount(() => {
         :current-section="currentSectionIndex"
         :current-location="currentLocation"
         @ask="onAskFromSelection"
+        @tell-me-more="onTellMeMoreFromSelection"
         @open-entity="onOpenEntityFromSelection"
         @close="selection = null"
       />

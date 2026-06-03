@@ -28,6 +28,7 @@ If a decision is small enough that "look at the code" answers it, it's not an AD
 | 0018 | [Per-book sequential extraction, before embedding](0018-extraction-pipeline-shape.md) | accepted |
 | 0019 | [Adopt VueUse for DOM/lifecycle primitives](0019-vueuse-for-dom-primitives.md) | accepted |
 | 0020 | [Reading-progress conflict policy: server receive-time wins](0020-reading-progress-conflict-policy.md) | accepted |
+| 0021 | [Stateless assistant conversations, client-carried](0021-stateless-assistant-conversations.md) | accepted |
 
 ## When to write one
 

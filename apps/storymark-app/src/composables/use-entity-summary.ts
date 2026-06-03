@@ -3,6 +3,7 @@ import type { ShallowRef } from "vue";
 import type { EntitySummary } from "@storymark/shared-types";
 import { entitiesApi } from "@/api/entities-api";
 import { ApiError } from "@/api/api-error";
+import { isTimeout } from "@/api/http";
 import type { BookVersion } from "@/db/storymark-db";
 import { useCachedLoad } from "@/composables/use-cached-load";
 import type { CachedLoadState } from "@/composables/use-cached-load";
@@ -30,7 +31,7 @@ function describeError(caught: unknown): string {
     }
     return `Couldn't load this just now (${String(caught.status)}).`;
   }
-  if (caught instanceof DOMException && caught.name === "TimeoutError") {
+  if (isTimeout(caught)) {
     return "The summary took too long to load. Try again.";
   }
   return "Story Guide is unavailable offline.";

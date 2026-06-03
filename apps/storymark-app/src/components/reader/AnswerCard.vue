@@ -62,6 +62,8 @@ function onCite(index: number): void {
 
 <template>
   <div>
+    <p v-if="question" class="mb-2 text-sm font-medium text-[var(--sm-fg)]">{{ question }}</p>
+
     <div v-if="isAsking" class="space-y-2" aria-busy="true">
       <div class="h-3 w-3/4 animate-pulse rounded bg-[var(--sm-surface)]"></div>
       <div class="h-3 w-full animate-pulse rounded bg-[var(--sm-surface)]"></div>
@@ -70,16 +72,12 @@ function onCite(index: number): void {
 
     <p v-else-if="error" class="text-sm text-red-600">{{ error }}</p>
 
-    <div v-else-if="answer && outOfRange" class="space-y-2">
-      <p v-if="question" class="text-sm font-medium text-[var(--sm-fg)]">{{ question }}</p>
-      <p class="text-sm text-[var(--sm-muted)]">
-        This answer was written for a later point in the book. Read on to where you asked it to see
-        it again, so it can't reveal what's ahead.
-      </p>
-    </div>
+    <p v-else-if="answer && outOfRange" class="text-sm text-[var(--sm-muted)]">
+      This answer was written for a later point in the book. Read on to where you asked it to see it
+      again, so it can't reveal what's ahead.
+    </p>
 
     <div v-else-if="answer">
-      <p v-if="question" class="mb-2 text-sm font-medium text-[var(--sm-fg)]">{{ question }}</p>
       <div class="mb-3 flex items-start gap-2">
         <span
           class="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium capitalize"
@@ -109,9 +107,5 @@ function onCite(index: number): void {
         @select="(source) => emit('select-source', source)"
       />
     </div>
-
-    <p v-else class="text-sm text-[var(--sm-muted)]">
-      Ask anything about what you've read so far. Answers never reveal what's ahead.
-    </p>
   </div>
 </template>

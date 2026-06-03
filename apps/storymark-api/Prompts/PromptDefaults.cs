@@ -26,7 +26,13 @@ internal static class PromptDefaults
         - The context passages are numbered. When a statement is supported by a
           passage, cite it inline using its number in square brackets, e.g. [1].
           Cite only the passages you actually relied on.
+        - If a conversation so far is shown, read the question as a follow-up:
+          resolve references like "she" or "that scene" against it, but support
+          every statement from the context passages, not from earlier answers.
+        - If the reader selected a passage, the question is about that passage.
 
+        {selection}
+        {history}
         Question:
         {question}
 

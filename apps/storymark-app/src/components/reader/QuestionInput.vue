@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { useAssistant } from "@/composables/use-assistant";
 
-const props = defineProps<{ disabled: boolean; pending: boolean }>();
+const props = defineProps<{ disabled: boolean; pending: boolean; followUp: boolean }>();
 
 const emit = defineEmits<{ (e: "ask", question: string): void }>();
 
-// Shared so the selection popover's "Ask…" / "Tell me more" can pre-fill it.
+// Shared so startSelectionAsk/reset can clear a typed-but-unsent question.
 const { draft } = useAssistant();
 
 function submit(): void {
@@ -24,7 +24,13 @@ function submit(): void {
       v-model="draft"
       type="text"
       :disabled="disabled"
-      :placeholder="disabled ? 'Q&A is unavailable offline' : 'Ask about this book…'"
+      :placeholder="
+        disabled
+          ? 'Q&A is unavailable offline'
+          : followUp
+            ? 'Ask a follow-up…'
+            : 'Ask about this book…'
+      "
       class="min-w-0 flex-1 rounded-md border border-[var(--sm-muted)]/30 bg-[var(--sm-surface)] px-3 py-2 text-sm text-[var(--sm-fg)] placeholder:text-[var(--sm-muted)] focus:border-[var(--sm-accent)] focus:outline-none disabled:opacity-60"
     />
     <button
