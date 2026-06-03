@@ -101,25 +101,45 @@ useEventListener(window, "pagehide", () => {
 // mirror below or it would stay dead for the rest of the session.
 useEventListener(window, "pageshow", () => {
   unloading = false;
+  foregroundedAt = performance.now();
 });
+
+// Android force-exits fullscreen when the app is backgrounded, but delivers the
+// fullscreenchange only after the app is foregrounded again — so an OS-forced
+// exit can't be told from a user one by visibility at event time. What does
+// mark it is arriving right after the return; a deliberate exit (back gesture,
+// Esc) comes while the user has visibly been in the app.
+const FORCED_EXIT_GRACE_MS = 1000;
+let foregroundedAt = 0;
+
+function isForcedExit(): boolean {
+  return (
+    document.visibilityState === "hidden" ||
+    performance.now() - foregroundedAt < FORCED_EXIT_GRACE_MS
+  );
+}
 
 // useFullscreen tracks the real fullscreen state; mirror it back to the stored
 // preference so leaving via Esc or the browser chrome keeps the toggle truthful.
-// Not while hidden, though: Android force-exits fullscreen when the app is
-// backgrounded, and persisting that would read as the user turning it off.
+// An OS-forced exit is not the user changing their mind: keep the preference and
+// arm the gesture fallback instead, so the first tap back in re-enters.
 watch(isFullscreen, (active) => {
-  if (unloading || document.visibilityState === "hidden") return;
+  if (unloading) return;
+  if (!active && settings.fullscreen && isForcedExit()) {
+    enterFullscreenOnGesture();
+    return;
+  }
   if (settings.fullscreen !== active) {
     settings.fullscreen = active;
   }
 });
 
-// Coming back from an app switch: the OS dropped fullscreen, the preference
-// survived (see the hidden guard above), so try to re-enter. Without transient
-// user activation the request is rejected, which arms the gesture fallback —
-// the first tap back in the reader restores fullscreen.
+// Coming back from an app switch with the exit already delivered while hidden:
+// the preference survived, so try to re-enter. Without transient user activation
+// the request is rejected, which also lands in the gesture fallback.
 useEventListener(document, "visibilitychange", () => {
   if (document.visibilityState === "visible") {
+    foregroundedAt = performance.now();
     applyFullscreen(settings.fullscreen);
   }
 });
