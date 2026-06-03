@@ -11,6 +11,7 @@ import RelationshipGraphPanel from "@/components/reader/RelationshipGraphPanel.v
 import { isWithinBoundary, useAssistant } from "@/composables/use-assistant";
 import type { AssistantTurn } from "@/composables/use-assistant";
 import { useFocusTrap } from "@/composables/use-focus-trap";
+import { useKeyboardInset } from "@/composables/use-keyboard-inset";
 import { useMemoryPanel } from "@/composables/use-memory-panel";
 import { useOfflineSync } from "@/composables/use-offline-sync";
 import { ellipsize } from "@/utils/ellipsize";
@@ -40,6 +41,20 @@ const { isOnline } = useOfflineSync();
 const panel = ref<HTMLElement | null>(null);
 const scroller = ref<HTMLElement | null>(null);
 useFocusTrap(toRef(props, "open"), panel, () => emit("close"));
+
+// The keyboard only shrinks the visual viewport, so the bottom-anchored sheet
+// (and its question input) would sit behind it; lift the sheet by the overlap
+// and cap its height to the space that remains above the keyboard.
+const keyboardInset = useKeyboardInset();
+const sheetStyle = computed<Record<string, string>>(() => {
+  if (keyboardInset.value === 0) {
+    return {};
+  }
+  return {
+    bottom: `${String(keyboardInset.value)}px`,
+    maxHeight: `calc(100dvh - ${String(keyboardInset.value)}px)`,
+  };
+});
 
 // Q&A needs the network and a known position; section text stays readable offline.
 const canAsk = computed<boolean>(() => isOnline.value && props.currentSection !== null);
@@ -93,9 +108,23 @@ watch(
       return;
     }
     await nextTick();
-    scroller.value?.scrollTo({ top: scroller.value.scrollHeight });
+    scrollThreadToEnd();
   },
 );
+
+// The keyboard shrinking the sheet clips the thread from the bottom; keep the
+// latest turn in view while it's up.
+watch(keyboardInset, async (inset) => {
+  if (inset === 0 || activeTab.value !== "assistant") {
+    return;
+  }
+  await nextTick();
+  scrollThreadToEnd();
+});
+
+function scrollThreadToEnd(): void {
+  scroller.value?.scrollTo({ top: scroller.value.scrollHeight });
+}
 </script>
 
 <template>
@@ -108,6 +137,7 @@ watch(
       aria-label="Memory"
       tabindex="-1"
       class="absolute inset-x-0 bottom-0 flex max-h-[80vh] flex-col rounded-t-2xl bg-[var(--sm-bg)] shadow-2xl outline-none sm:inset-y-0 sm:right-0 sm:left-auto sm:max-h-none sm:w-[26rem] sm:rounded-none"
+      :style="sheetStyle"
     >
       <div class="flex items-center justify-between border-b border-[var(--sm-muted)]/15 px-5 py-3">
         <nav class="flex flex-wrap gap-1">

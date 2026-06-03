@@ -11,7 +11,10 @@ import { useBooks } from "@/composables/use-books";
 type SectionEntry = "start" | "end" | number | { readonly location: number };
 
 /** The paragraph whose half-open range covers `location`, else the first
- * paragraph starting at/after it, else the section start. */
+ * paragraph starting at/after it, else the section end. The end fallback matters:
+ * the server anchors an event whose evidence quote it couldn't find to the
+ * section's end (LocationStart = text length), past every paragraph's half-open
+ * range — falling back to 0 would turn "end of section" into "start of section". */
 function paragraphIndexForLocation(section: Section, location: number): number {
   const containing = section.paragraphs.find(
     (p) => p.locationStart <= location && location < p.locationEnd,
@@ -20,7 +23,7 @@ function paragraphIndexForLocation(section: Section, location: number): number {
     return containing.paragraphIndex;
   }
   const after = section.paragraphs.find((p) => p.locationStart >= location);
-  return after?.paragraphIndex ?? 0;
+  return after?.paragraphIndex ?? section.paragraphs.at(-1)?.paragraphIndex ?? 0;
 }
 
 /** A position to open a book at (a resumed reading position). */
@@ -37,6 +40,11 @@ const currentSection = shallowRef<Section | null>(null);
 const currentParagraphIndex = ref(0);
 const entryParagraph = ref(0);
 const entryPage = ref<number | null>(null);
+// Bumped on every navigation (open, goTo, next/prev). A same-section jump (e.g.
+// a bookmark a few pages back) swaps the section payload without a remount —
+// exactly like an entity-merge refresh — so the reader needs this to tell "land
+// on the new entry point" apart from "stay where you are".
+const navigationRevision = ref(0);
 const isLoadingSection = ref(false);
 
 interface UseReader {
@@ -46,6 +54,7 @@ interface UseReader {
   readonly currentParagraphIndex: Ref<number>;
   readonly entryParagraph: Ref<number>;
   readonly entryPage: Ref<number | null>;
+  readonly navigationRevision: Ref<number>;
   readonly isLoadingSection: Ref<boolean>;
   readonly sectionCount: ComputedRef<number>;
   readonly currentSectionTitle: ComputedRef<string | null>;
@@ -103,6 +112,7 @@ export function useReader(): UseReader {
       entryPage.value = pageIndex;
       currentParagraphIndex.value = landing;
       currentSection.value = section;
+      navigationRevision.value += 1;
     } finally {
       isLoadingSection.value = false;
     }
@@ -194,6 +204,7 @@ export function useReader(): UseReader {
     currentParagraphIndex,
     entryParagraph,
     entryPage,
+    navigationRevision,
     isLoadingSection,
     sectionCount,
     currentSectionTitle,

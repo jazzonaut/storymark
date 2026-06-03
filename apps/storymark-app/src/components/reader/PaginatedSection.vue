@@ -38,6 +38,7 @@ const props = defineProps<{
   section: Section;
   entryParagraph: number;
   entryPage: number | null;
+  entryRevision: number;
   highlight: ParagraphHighlight | null;
   selectionActive: boolean;
 }>();
@@ -89,6 +90,11 @@ const HANDLE_PROBE_PX = 18;
 const SWIPE_COMMIT_FRACTION = 0.18;
 const FLICK_MAX_MS = 250;
 const FLICK_MIN_PX = 24;
+// Anchor-capture probe: step down the page in these increments, trying each x
+// fraction, until a text caret is found (the top of a page can be padding, an
+// image, or a short centred heading, so a single probe point isn't enough).
+const ANCHOR_PROBE_STEP_PX = 24;
+const ANCHOR_PROBE_X_FRACTIONS = [0.5, 0.25, 0.75];
 // Duration of the JS-driven page-turn tween. We animate scrollLeft ourselves (see
 // animateTo) rather than via native smooth-scroll, so scroll-snap and the settle
 // timer can stay out of the way for the whole turn — otherwise mandatory snap and
@@ -103,6 +109,13 @@ const totalPages = ref(1);
 // The paragraph at the top of the current page. Tracked locally so a reflow
 // (resize / typography change) can scroll the *same* paragraph back into view.
 let trackedParagraph = 0;
+// The first visible text of the settled page, as a one-character Range. The text
+// nodes survive a reflow (only the CSS columns move), so a resize can restore the
+// page containing that exact character — paragraph granularity alone yanks the
+// reader back to the start of a long paragraph spanning several pages. A section
+// payload swap re-renders the DOM and detaches the range; pageForAnchor() detects
+// that and restoreToTracked falls back to the paragraph anchor.
+let anchorRange: Range | null = null;
 let flashTimer: number | undefined;
 let flashedEl: HTMLElement | null = null;
 
@@ -205,6 +218,58 @@ function pageForParagraph(paragraphIndex: number): number {
   return 0;
 }
 
+// The page the anchored character sits on in the *current* layout, or null when
+// there is no usable anchor (none captured yet, or its nodes were detached by a
+// section payload re-render — a detached range reports an all-zero rect).
+function pageForAnchor(): number | null {
+  const scroll = scrollEl.value;
+  if (anchorRange === null || scroll === null) {
+    return null;
+  }
+  const rect = anchorRange.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) {
+    return null;
+  }
+  const relative = rect.left - scroll.getBoundingClientRect().left + scroll.scrollLeft;
+  // floor, not round: the anchor was the first *visible* text, so it must end up
+  // on the restored page, never one ahead. The epsilon absorbs subpixel rects.
+  return Math.floor((relative + 2) / pageWidth());
+}
+
+function captureAnchor(): void {
+  const scroll = scrollEl.value;
+  if (scroll === null) {
+    return;
+  }
+  // An anchor still on the settled page is kept as-is. Re-anchoring to the new
+  // page top after every restore would drift backwards one page per reflow cycle
+  // (nav bar in/out, fullscreen toggle) whenever page boundaries don't line up.
+  if (pageForAnchor() === page.value) {
+    return;
+  }
+  const rect = scroll.getBoundingClientRect();
+  for (let y = rect.top + ANCHOR_PROBE_STEP_PX; y < rect.bottom; y += ANCHOR_PROBE_STEP_PX) {
+    for (const fraction of ANCHOR_PROBE_X_FRACTIONS) {
+      const caret = caretFromPoint(rect.left + rect.width * fraction, y);
+      if (caret === null) {
+        continue;
+      }
+      const length = caret.node.textContent?.length ?? 0;
+      if (length === 0) {
+        continue;
+      }
+      // Span one character — a collapsed range reports a zero rect after reflow.
+      const start = Math.min(caret.offset, length - 1);
+      const range = document.createRange();
+      range.setStart(caret.node, start);
+      range.setEnd(caret.node, start + 1);
+      anchorRange = range;
+      return;
+    }
+  }
+  anchorRange = null;
+}
+
 // The active paragraph is the last one whose column starts at or before the
 // current page — a long paragraph spanning pages started earlier but still
 // occupies the top.
@@ -229,6 +294,7 @@ function reportParagraph(): void {
   const resolved = best ?? indexOf(anchors()[0] ?? contentEl.value ?? scroll);
   trackedParagraph = resolved;
   emit("update:paragraph", resolved);
+  captureAnchor();
 }
 
 function updatePageInfo(): void {
@@ -419,15 +485,30 @@ function hasActiveSelection(): boolean {
 // --- Custom touch selection -------------------------------------------------
 
 function caretFromPoint(x: number, y: number): Boundary | null {
-  const pos = document.caretPositionFromPoint(x, y);
-  if (pos === null || pos.offsetNode.nodeType !== Node.TEXT_NODE) {
-    return null;
-  }
   const content = contentEl.value;
-  if (!content || !content.contains(pos.offsetNode)) {
+  if (!content) {
     return null;
   }
-  return { node: pos.offsetNode, offset: pos.offset };
+  // Chromium 128+ and Firefox have the standard API; WebKit only ships it from
+  // Safari 26.2, so older Safari takes the non-standard caretRangeFromPoint path.
+  if (typeof document.caretPositionFromPoint === "function") {
+    const pos = document.caretPositionFromPoint(x, y);
+    if (pos === null || pos.offsetNode.nodeType !== Node.TEXT_NODE) {
+      return null;
+    }
+    if (!content.contains(pos.offsetNode)) {
+      return null;
+    }
+    return { node: pos.offsetNode, offset: pos.offset };
+  }
+  const range = document.caretRangeFromPoint(x, y);
+  if (range === null || range.startContainer.nodeType !== Node.TEXT_NODE) {
+    return null;
+  }
+  if (!content.contains(range.startContainer)) {
+    return null;
+  }
+  return { node: range.startContainer, offset: range.startOffset };
 }
 
 // Expand a caret to the word-like segment under it, so a long-press selects a
@@ -861,7 +942,7 @@ async function reposition(toParagraph?: number): Promise<void> {
 
 function restoreToTracked(): void {
   measure();
-  goToPage(pageForParagraph(trackedParagraph), false);
+  goToPage(pageForAnchor() ?? pageForParagraph(trackedParagraph), false);
   updatePageInfo();
 }
 
@@ -887,16 +968,17 @@ function flashParagraph(paragraphIndex: number): void {
   flashTimer = window.setTimeout(clearFlash, FLASH_MS);
 }
 
-// props.section changes only for an in-place, same-section payload refresh: a section
-// *navigation* changes currentSectionIndex, which re-keys the wrapper and remounts us, so
-// onMounted handles that case. So keep the reader on their tracked paragraph rather than
-// snapping back to the section's entry point — otherwise a merge mid-section jumps them back.
+// props.section changes without a remount in two same-section cases (a *cross*-section
+// navigation re-keys the wrapper, so onMounted handles it): an in-place payload refresh
+// (entity merge) and a same-section jump (bookmark, Q&A source, "back to reading").
+// They need opposite landings — stay on the tracked paragraph vs. go to the new entry
+// point — and only the navigation bumps entryRevision, so that's the discriminator.
 watch(
-  () => props.section,
-  () => {
+  () => [props.section, props.entryRevision] as const,
+  ([, revision], [, previousRevision]) => {
     cancelPress();
     clearSelectionVisuals();
-    void reposition(trackedParagraph);
+    void reposition(revision === previousRevision ? trackedParagraph : undefined);
   },
   { flush: "post" },
 );
@@ -929,7 +1011,7 @@ watch(
 
 // Observe both: contentEl catches typography reflow (column-count changes), scrollEl
 // catches viewport resize (which leaves the JS-pinned columnWidth stale until we
-// re-measure). Either way, keep the tracked paragraph in view.
+// re-measure). Either way, keep the anchored text in view.
 useResizeObserver(contentEl, restoreToTracked);
 useResizeObserver(scrollEl, restoreToTracked);
 

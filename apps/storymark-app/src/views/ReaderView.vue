@@ -50,6 +50,7 @@ const {
   prevSection,
   setParagraph,
   entryPage,
+  navigationRevision,
   open,
   goTo,
   goToLocation,
@@ -563,6 +564,7 @@ onBeforeUnmount(() => {
             :section="currentSection"
             :entry-paragraph="entryParagraph"
             :entry-page="entryPage"
+            :entry-revision="navigationRevision"
             :highlight="highlight"
             :selection-active="selection !== null"
             @update:paragraph="onParagraph"

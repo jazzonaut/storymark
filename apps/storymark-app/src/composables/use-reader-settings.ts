@@ -97,13 +97,30 @@ let unloading = false;
 useEventListener(window, "pagehide", () => {
   unloading = true;
 });
+// A bfcache restore brings the page back without re-running setup; re-arm the
+// mirror below or it would stay dead for the rest of the session.
+useEventListener(window, "pageshow", () => {
+  unloading = false;
+});
 
 // useFullscreen tracks the real fullscreen state; mirror it back to the stored
 // preference so leaving via Esc or the browser chrome keeps the toggle truthful.
+// Not while hidden, though: Android force-exits fullscreen when the app is
+// backgrounded, and persisting that would read as the user turning it off.
 watch(isFullscreen, (active) => {
-  if (unloading) return;
+  if (unloading || document.visibilityState === "hidden") return;
   if (settings.fullscreen !== active) {
     settings.fullscreen = active;
+  }
+});
+
+// Coming back from an app switch: the OS dropped fullscreen, the preference
+// survived (see the hidden guard above), so try to re-enter. Without transient
+// user activation the request is rejected, which arms the gesture fallback —
+// the first tap back in the reader restores fullscreen.
+useEventListener(document, "visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    applyFullscreen(settings.fullscreen);
   }
 });
 
