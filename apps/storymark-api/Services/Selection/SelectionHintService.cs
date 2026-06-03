@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Storymark.Api.Domain.Books;
 using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Database;
+using Storymark.Api.Prompts;
 using Storymark.Api.Services.Llm;
 using Storymark.Api.Services.Retrieval;
 using Storymark.Api.Services.Settings;
@@ -20,7 +21,8 @@ internal sealed class SelectionHintService(
     StorymarkDbContext db,
     SpoilerSafeRetrievalService retrieval,
     ChatModelRouter router,
-    ISettingsService settings)
+    ISettingsService settings,
+    ILogger<SelectionHintService> logger)
 {
     private const int HintK = 4;
 
@@ -85,8 +87,7 @@ internal sealed class SelectionHintService(
         // Always false because the retrieval SQL already excluded future content;
         // derived (not hardcoded) so the audit flag fires on a filter regression.
         var usedFutureContent = evidence.Any(e =>
-            e.SectionIndex > currentSection
-            || (e.SectionIndex == currentSection && e.LocationEnd > currentLocation));
+            SpoilerBoundary.IsBeyond(e.SectionIndex, e.LocationEnd, currentSection, currentLocation));
 
         var prompt = RenderPrompt(selectedText, currentSection, currentLocation, evidence);
         var messages = new[] { new ChatMessage { Role = ChatRole.User, Content = prompt } };
@@ -130,7 +131,7 @@ internal sealed class SelectionHintService(
             context.Append(CultureInfo.InvariantCulture, $"[Section {chunk.SectionIndex}]\n{chunk.Text}");
         }
 
-        return settings.GetString("prompts.selectionHint")
+        return PromptContract.Resolve("prompts.selectionHint", settings, logger, PromptDefaults.SelectionHint)
             .Replace("{selectedText}", selectedText, StringComparison.Ordinal)
             .Replace("{currentSection}", currentSection.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("{currentLocation}", currentLocation.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)

@@ -4,6 +4,7 @@ import type { AssistantSource, SectionSummary } from "@storymark/shared-types";
 import QuestionInput from "@/components/reader/QuestionInput.vue";
 import CloseButton from "@/components/reader/CloseButton.vue";
 import AnswerCard from "@/components/reader/AnswerCard.vue";
+import CurrentScenePanel from "@/components/reader/CurrentScenePanel.vue";
 import SummaryPanel from "@/components/reader/SummaryPanel.vue";
 import StoryGuidePanel from "@/components/reader/StoryGuidePanel.vue";
 import TimelinePanel from "@/components/reader/TimelinePanel.vue";
@@ -98,6 +99,17 @@ function onAsk(question: string): void {
     return;
   }
   void ask(props.bookId, question, props.currentSection, props.currentLocation);
+}
+
+function askFromScene(question: string): void {
+  // Same gate as the question input: a suggested question must not start a turn
+  // that is doomed offline.
+  if (!canAsk.value) {
+    return;
+  }
+  clearSelection();
+  setTab("assistant");
+  onAsk(question);
 }
 
 // A new turn lands below the fold of an ongoing thread; bring it into view.
@@ -195,6 +207,17 @@ function scrollThreadToEnd(): void {
           :cache-version="cacheVersion"
           :manifest="manifest"
           :is-processing="isProcessing"
+        />
+        <CurrentScenePanel
+          v-else-if="activeTab === 'scene'"
+          :book-id="bookId"
+          :current-section="currentSection"
+          :current-location="currentLocation"
+          :cache-version="cacheVersion"
+          :manifest="manifest"
+          :is-processing="isProcessing"
+          @jump="(source) => emit('jump', source)"
+          @ask="askFromScene"
         />
         <div v-else>
           <p v-if="turns.length === 0" class="text-sm text-[var(--sm-muted)]">

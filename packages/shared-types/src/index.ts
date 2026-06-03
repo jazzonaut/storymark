@@ -165,6 +165,25 @@ export interface AssistantAnswer {
   readonly usedFutureContent: boolean;
 }
 
+export interface CurrentSceneEntity {
+  readonly entityId: string | null;
+  readonly name: string;
+  readonly role: string;
+}
+
+/** A compact "what is happening right now?" card generated at the reader's current
+ * spoiler boundary (`GET /api/books/{id}/scene`). */
+export interface CurrentScene {
+  readonly summary: string;
+  readonly presentEntities: readonly CurrentSceneEntity[];
+  readonly place: string | null;
+  readonly immediateTension: string | null;
+  readonly relevantThreads: readonly string[];
+  readonly recentChange: string | null;
+  readonly suggestedQuestions: readonly string[];
+  readonly sources: readonly AssistantSource[];
+}
+
 /** One earlier Q&A turn, carried by the client with a follow-up question so the
  * model can resolve references like "she" — the server keeps no conversation
  * state. Mirrors AskHistoryTurn. */

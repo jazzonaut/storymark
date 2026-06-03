@@ -21,6 +21,7 @@ const TASK_LABELS: Record<string, string> = {
   entity_summary: "Entity summary",
   selection_hint: "Selection hint",
   memory: "Memory",
+  current_scene: "Current scene",
 };
 
 const KIND_OPTIONS: { label: string; value: LlmProviderKind }[] = [

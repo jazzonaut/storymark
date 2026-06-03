@@ -88,8 +88,7 @@ internal sealed class AssistantService(
         // retrieved evidence only: the carried selection/history is client-attested and
         // never feeds it (docs/adr/0021).
         var usedFutureContent = evidence.Any(e =>
-            e.SectionIndex > currentSection
-            || (e.SectionIndex == currentSection && e.LocationEnd > currentLocation));
+            SpoilerBoundary.IsBeyond(e.SectionIndex, e.LocationEnd, currentSection, currentLocation));
 
         var prompt = RenderPrompt(question, selectedText, history, currentSection, currentLocation, evidence);
         var messages = new[] { new ChatMessage { Role = ChatRole.User, Content = prompt } };
@@ -251,19 +250,7 @@ internal sealed class AssistantService(
             }
         }
 
-        // An operator-edited template predating a placeholder would otherwise drop
-        // that content without a trace — the Replace is a no-op. Fall back loudly.
-        var template = settings.GetString("prompts.qa");
-        var missing = PromptContract.MissingPlaceholders("prompts.qa", template);
-        if (missing.Count > 0)
-        {
-            logger.LogError(
-                "prompts.qa is missing required placeholder(s) {Missing}; using the built-in default for this call",
-                string.Join(", ", missing));
-            template = PromptDefaults.Qa;
-        }
-
-        return template
+        return PromptContract.Resolve("prompts.qa", settings, logger, PromptDefaults.Qa)
             .Replace("{currentSection}", currentSection.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("{currentLocation}", currentLocation.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("{selection}", selection, StringComparison.Ordinal)

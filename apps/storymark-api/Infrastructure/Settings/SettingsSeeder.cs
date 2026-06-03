@@ -112,6 +112,7 @@ internal sealed class SettingsSeeder(
             Text("prompts.entitySummary", PromptDefaults.EntitySummary),
             Text("prompts.selectionHint", PromptDefaults.SelectionHint),
             Text("prompts.bookMemory", PromptDefaults.BookMemory),
+            Text("prompts.currentScene", PromptDefaults.CurrentScene),
         };
 
         // LLM routing (providers, models, task assignments) is seeded by

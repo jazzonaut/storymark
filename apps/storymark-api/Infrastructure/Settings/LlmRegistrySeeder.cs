@@ -29,6 +29,7 @@ internal sealed class LlmRegistrySeeder(
         [LlmSettingKeys.TaskKey("entity_summary")] = Llama3bId,
         [LlmSettingKeys.TaskKey("selection_hint")] = Llama1bId,
         [LlmSettingKeys.TaskKey("memory")] = Llama3bId,
+        [LlmSettingKeys.TaskKey("current_scene")] = Llama3bId,
         [LlmSettingKeys.EmbeddingModelId] = NomicId,
     };
 

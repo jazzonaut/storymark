@@ -88,6 +88,7 @@ try
     builder.Services.AddScoped<SpoilerSafeRetrievalService>();
     builder.Services.AddScoped<AssistantService>();
     builder.Services.AddScoped<SelectionHintService>();
+    builder.Services.AddScoped<CurrentSceneService>();
 
     builder.Services.AddHangfire(config => config
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)

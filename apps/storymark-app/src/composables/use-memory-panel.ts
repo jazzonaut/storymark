@@ -2,7 +2,7 @@ import { ref } from "vue";
 import type { Ref } from "vue";
 import { db } from "@/db/storymark-db";
 
-export type MemoryTab = "summary" | "timeline" | "graph" | "guide" | "assistant";
+export type MemoryTab = "summary" | "timeline" | "graph" | "guide" | "assistant" | "scene";
 
 export interface MemoryTabDef {
   readonly id: MemoryTab;
@@ -10,12 +10,15 @@ export interface MemoryTabDef {
 }
 
 // Tab order is the displayed order and the number-key order (1 = Summary, …).
+// Scene is deliberately last and never the default: opening it triggers an LLM
+// generation, so it must be an explicit choice rather than the landing tab.
 export const MEMORY_TABS: readonly MemoryTabDef[] = [
   { id: "summary", label: "Summary" },
   { id: "timeline", label: "Timeline" },
   { id: "graph", label: "Graph" },
   { id: "guide", label: "Story Guide" },
   { id: "assistant", label: "Assistant" },
+  { id: "scene", label: "Scene" },
 ];
 
 const DEFAULT_TAB: MemoryTab = "summary";
@@ -48,7 +51,9 @@ export function useMemoryPanel(): UseMemoryPanel {
     activeTab.value = DEFAULT_TAB;
     try {
       const row = await db.panelState.get(bookId);
-      if (row && isMemoryTab(row.lastTab)) {
+      // Never restore onto Scene: it generates on mount, and a remembered tab must
+      // not cost an LLM call before the reader has chosen anything.
+      if (row && isMemoryTab(row.lastTab) && row.lastTab !== "scene") {
         activeTab.value = row.lastTab;
       }
     } catch {

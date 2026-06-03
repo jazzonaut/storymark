@@ -123,11 +123,13 @@ const option = computed<ChartOption>(() => {
 // element), not the canvas — so it can't be swallowed by ECharts' touch/roam handling,
 // which is why a single canvas tap never opened anything on mobile.
 function onClick(params: ECElementEvent): void {
-  // A pinch finger landing on a node synthesizes a click after the gesture ends;
-  // selecting mid-zoom is never intended, so swallow it (and stay suppressed until
-  // the next clean single-finger touch, since a missed-target pinch fires no click).
-  if (pinched) {
-    pinched = false;
+  // zrender synthesizes a click from touchend with no movement threshold, so a
+  // pinch finger or a pan that started on a node still "clicks" it when the gesture
+  // ends; selecting mid-gesture is never intended, so swallow it (and stay
+  // suppressed until the next clean single-finger touch, since a gesture that
+  // misses every target fires no click).
+  if (suppressTap) {
+    suppressTap = false;
     return;
   }
   if (params.dataType === "edge") {
@@ -207,9 +209,13 @@ const container = ref<HTMLDivElement | null>(null);
 // many touchmove events fire — which is exactly what ECharts' fixed-step roam got wrong.
 const PINCH_SENSITIVITY = 0.75;
 const WHEEL_ZOOM_STEP = 1.1;
+// Finger travel beyond this is a pan, not a tap; within it, jitter on a deliberate
+// tap still selects.
+const TAP_SLOP_PX = 8;
 
 let pinchSpan: number | null = null;
-let pinched = false;
+let suppressTap = false;
+let tapOrigin: { x: number; y: number } | null = null;
 
 // graphRoam applies `zoom` as a delta multiplier about the origin (chart pixel space)
 // and clamps to scaleLimit. The resulting `graphroam` event clears the selection card.
@@ -251,10 +257,13 @@ function onWheel(event: WheelEvent): void {
 
 function onTouchStart(event: TouchEvent): void {
   pinchSpan = twoFingerSpan(event.touches)?.distance ?? null;
+  const single = event.touches[0];
   if (pinchSpan !== null) {
-    pinched = true;
-  } else if (event.touches.length === 1) {
-    pinched = false;
+    suppressTap = true;
+    tapOrigin = null;
+  } else if (event.touches.length === 1 && single !== undefined) {
+    suppressTap = false;
+    tapOrigin = { x: single.clientX, y: single.clientY };
   }
 }
 
@@ -262,6 +271,15 @@ function onTouchMove(event: TouchEvent): void {
   const span = twoFingerSpan(event.touches);
   const previous = pinchSpan;
   if (span === null) {
+    const single = event.touches[0];
+    if (
+      tapOrigin !== null &&
+      single !== undefined &&
+      Math.hypot(single.clientX - tapOrigin.x, single.clientY - tapOrigin.y) > TAP_SLOP_PX
+    ) {
+      suppressTap = true;
+      tapOrigin = null;
+    }
     return;
   }
   pinchSpan = span.distance;

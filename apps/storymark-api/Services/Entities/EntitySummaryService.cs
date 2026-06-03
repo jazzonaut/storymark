@@ -90,8 +90,7 @@ internal sealed class EntitySummaryService(
         // Always false: the retrieval SQL already excluded future content. Derived (not
         // hardcoded) so the audit flag fires if that filter ever regresses.
         var usedFutureContent = evidence.Any(e =>
-            e.SectionIndex > section
-            || (e.SectionIndex == section && e.LocationEnd > location));
+            SpoilerBoundary.IsBeyond(e.SectionIndex, e.LocationEnd, section, location));
 
         var prompt = RenderPrompt(entity, mentions, evidence);
 

@@ -159,4 +159,47 @@ internal static class PromptDefaults
         Do not include anything beyond the supplied summaries.
         Do not use markdown fences, commentary, or bullet lists outside the JSON.
         """;
+
+    public const string CurrentScene =
+        """
+        Create a spoiler-safe current-scene card for a distracted reader.
+
+        The reader is currently at:
+        Section: {currentSection}
+        Location: {currentLocation}
+
+        Return one JSON object only — no markdown fences, no commentary:
+        {
+          "summary": "2-4 plain sentences about what is happening right now",
+          "presentEntities": [
+            { "name": "...", "role": "what they are doing or why they matter in this scene" }
+          ],
+          "place": "where the scene appears to be happening, or null",
+          "immediateTension": "the immediate question, risk, or conflict, or null",
+          "relevantThreads": ["only unresolved threads that matter to this scene"],
+          "recentChange": "what just changed in the recent passage, or null",
+          "suggestedQuestions": ["Who is ...?", "Why are they ...?", "What did I miss?"]
+        }
+
+        Rules:
+        - Use only the supplied context.
+        - Do not use outside knowledge of the book.
+        - Do not reveal, imply, foreshadow, or hint at future events.
+        - Focus on the current scene, not a full chapter summary.
+        - Prefer concrete character goals, location, conflict, and recent changes.
+        - If a field is unknown from the context, use null or an empty array.
+        - Keep suggested questions short and useful for a reader who lost focus.
+
+        Recent passage:
+        {recentPassage}
+
+        Recent visible events:
+        {recentEvents}
+
+        Story-so-far memory:
+        {memory}
+
+        Open threads:
+        {openThreads}
+        """;
 }
