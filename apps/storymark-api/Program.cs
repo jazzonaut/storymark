@@ -170,6 +170,7 @@ try
     {
         var db = scope.ServiceProvider.GetRequiredService<StorymarkDbContext>();
         await db.Database.MigrateAsync();
+        await AdminBootstrap.EnsurePasswordAsync(scope.ServiceProvider, builder.Configuration);
     }
 
     await app.Services.GetRequiredService<SettingsSeeder>().SeedAsync(CancellationToken.None);
@@ -189,10 +190,9 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
 
-    var settingsService = app.Services.GetRequiredService<ISettingsService>();
     app.UseHangfireDashboard("/hangfire", new DashboardOptions
     {
-        Authorization = [new HangfireDashboardAuthFilter(settingsService)],
+        Authorization = [new HangfireDashboardAuthFilter()],
     });
 
     app.UseFastEndpoints(c => c.Endpoints.RoutePrefix = "api");

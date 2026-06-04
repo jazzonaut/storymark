@@ -69,7 +69,7 @@
 
 - `ILogger<T>`. Structured logging — never string-interpolate values into the message.
 - Log levels: `Trace` (chatty, off in prod), `Debug` (local only), `Information` (lifecycle events), `Warning` (recoverable), `Error` (failed user action or unhandled), `Critical` (process should restart).
-- Don't log secrets. The bearer token, encryption key, and user-pasted API keys are off-limits.
+- Don't log secrets. Passwords, the settings encryption key, and user-pasted API keys are off-limits.
 
 ## FastEndpoints
 

@@ -90,15 +90,15 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("IsPublic")
+                        .HasDatabaseName("books_public")
+                        .HasFilter("is_public");
+
                     b.HasIndex("OwnerUserId");
 
                     b.HasIndex("ContentHash", "OwnerUserId")
                         .IsUnique()
                         .HasDatabaseName("books_content_hash_owner");
-
-                    b.HasIndex("IsPublic")
-                        .HasDatabaseName("books_public")
-                        .HasFilter("is_public");
 
                     b.ToTable("books", (string)null);
                 });
@@ -1031,6 +1031,10 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<bool>("IsAdmin")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_admin");
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean")

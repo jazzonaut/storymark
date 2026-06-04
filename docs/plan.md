@@ -136,7 +136,7 @@ Storymark Client (PWA, Capacitor later)
     - cached timeline + graph snapshots
     - pending progress writes
         |
-        | REST API (bearer token over Tailscale/LAN)
+        | REST API (cookie session over Tailscale/LAN)
         v
 Storymark API
   ASP.NET Core + FastEndpoints
@@ -352,7 +352,7 @@ An operator-grade dashboard at `/admin` (PrimeVue):
 - **Visual relationship graph** of entities up to current position
 - **Admin panel**: settings, prompts editor, LLM call log, cost meter, per-book ops
 - Settings persisted in DB; hot-reloaded; per-task model selection
-- Single bearer-token auth
+- Per-user accounts with a cookie session and an admin role (ADR-0023, ADR-0024)
 - Hangfire-backed job processing with priority queues
 - Enforce spoiler safety before any LLM call
 
@@ -593,7 +593,7 @@ export function useBooks() {
 
 ```text
 src/api/
-  http.ts                  # base URL, bearer token, retry, cancel
+  http.ts                  # base URL, auth-expired signal, retry, cancel
   booksApi.ts
   readerApi.ts
   assistantApi.ts
@@ -679,7 +679,7 @@ Capacitor wrap-up in Phase 7:
 - Android APK with "Share to / Open with Storymark" intent
 - File picker via Capacitor Filesystem
 - Safe-area handling
-- Capacitor Secure Storage for bearer token
+- Session cookie carried by the Capacitor webview (no token storage)
 - iOS later if needed
 
 ---
@@ -737,7 +737,7 @@ Storymark.Api/
       Text/
     FileStorage/
     Search/                # postgres FTS
-    Auth/                  # bearer token
+    Auth/                  # cookie session + admin claim
 
   Services/
     BookImportService.cs
@@ -798,7 +798,7 @@ Endpoint groups:
 /api/admin/books/{bookId}/regenerate-summaries
 ```
 
-All `/api/admin/*` endpoints require the admin bearer token.
+All `/api/admin/*` endpoints require a signed-in account with the admin role (ADR-0024).
 
 ---
 
@@ -1271,7 +1271,6 @@ prompts.entitySummary           # text
 prompts.selectionHint           # text
 prompts.bookMemory              # text
 upload.maxBytes                 # 209715200
-auth.bearerToken                # secret
 features.recapCardOnSectionEntry# bool
 ```
 
@@ -1769,7 +1768,7 @@ services:
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=storymark;Username=storymark;Password=storymarkpass
       Ollama__Url: http://ollama:11434
       Storage__RootPath: /data
-      Auth__BearerTokenSeed: change-me-on-first-run
+      Auth__BootstrapPassword: change-me-on-first-run
       Settings__EncryptionKey: 32-byte-base64-here
     volumes:
       - storymark_files:/data
@@ -1810,7 +1809,7 @@ docker exec -it storymark-ollama ollama pull llama3.2:1b
 docker exec -it storymark-ollama ollama pull nomic-embed-text
 ```
 
-Hangfire runs in-process inside `storymark-api`; its storage is the same Postgres database. Dashboard mounted at `/hangfire`, gated by the admin bearer token.
+Hangfire runs in-process inside `storymark-api`; its storage is the same Postgres database. Dashboard mounted at `/hangfire`, gated by the session cookie's admin claim (ADR-0024).
 
 ---
 
@@ -1882,7 +1881,7 @@ Acceptance: frontend runs, backend runs, compose starts all services, health end
 - PromptRegistry pulling from settings
 - IChatModelClient + OllamaClient + OpenAiCompatibleClient
 - LlmCallRecorder
-- /api/admin/* endpoints (bearer-auth)
+- /api/admin/* endpoints (admin-gated)
 - Admin shell with Settings editor + Prompts editor + LLM call log + Cost meter
 ```
 
@@ -2059,9 +2058,9 @@ Every assistant, entity summary, and selection-hint response carries `usedFuture
 - Bookmarks: same pattern.
 - AI artifacts: read-only on client; backend pushes by version. No client-side generation.
 
-### 25.6 Bearer Token
+### 25.6 Authentication
 
-Single secret, stored in `settings.auth.bearerToken`. Client persists it in localStorage (PWA) or Capacitor Secure Storage (mobile). Sent as `Authorization: Bearer …` on every request. Rotated from the admin panel.
+Per-user accounts with an HttpOnly session cookie ([ADR-0023](adr/0023-in-app-identity-cookie-auth.md)). Admin access is a per-user `is_admin` role carried as a claim on the same cookie ([ADR-0024](adr/0024-admin-via-user-role.md)); there is no API token.
 
 ---
 
@@ -2109,7 +2108,7 @@ Image generation:             out of scope
 - [ ] **Add llm_calls table + LlmCallRecorder**
 - [ ] **Add IChatModelClient + OllamaClient + OpenAiCompatibleClient**
 - [ ] **Add PromptRegistry seeded defaults**
-- [ ] **Add admin endpoints (bearer-token guarded)**
+- [ ] **Add admin endpoints (admin-gated)**
 - [ ] Add book upload endpoint
 - [ ] Add file storage service
 - [ ] Add SHA-256 hashing
@@ -2142,7 +2141,7 @@ Image generation:             out of scope
 - [ ] Configure pnpm workspaces + catalog, Tailwind, PrimeVue, oxlint, oxfmt
 - [ ] Configure service worker (vite-plugin-pwa)
 - [ ] Set up Dexie schema + offline sync layer
-- [ ] Build API client layer with bearer token
+- [ ] Build API client layer (cookie session)
 - [ ] Build useBooks, useUpload, useReader, useReadingProgress
 - [ ] Build useAssistant, useStoryGuide
 - [ ] Build useTimeline, useRelationshipGraph, useSelectionHint

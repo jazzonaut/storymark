@@ -18,6 +18,8 @@ internal sealed record UserItem
 
     public required bool IsLockedOut { get; init; }
 
+    public required bool IsAdmin { get; init; }
+
     public required DateTimeOffset CreatedAt { get; init; }
 
     public static UserItem From(StorymarkUser user) => new()
@@ -26,6 +28,7 @@ internal sealed record UserItem
         UserName = user.RequiredUserName,
         HasPassword = user.PasswordHash is not null,
         IsLockedOut = user.LockoutEnd > DateTimeOffset.UtcNow,
+        IsAdmin = user.IsAdmin,
         CreatedAt = user.CreatedAt,
     };
 }
@@ -52,6 +55,7 @@ internal sealed class ListUsersEndpoint(StorymarkDbContext db)
                 UserName = u.UserName!,
                 HasPassword = u.PasswordHash != null,
                 IsLockedOut = u.LockoutEnd > DateTimeOffset.UtcNow,
+                IsAdmin = u.IsAdmin,
                 CreatedAt = u.CreatedAt,
             })
             .ToListAsync(ct);
@@ -138,6 +142,58 @@ internal sealed class SetUserPasswordEndpoint(UserManager<StorymarkUser> users, 
         this.ThrowIfFailed(await users.SetLockoutEndDateAsync(user, null));
         this.ThrowIfFailed(await users.ResetAccessFailedCountAsync(user));
         await transaction.CommitAsync(ct);
+        await Send.NoContentAsync(ct);
+    }
+}
+
+internal sealed record SetUserAdminRequest
+{
+    public required bool IsAdmin { get; init; }
+}
+
+/// <summary>Grants or revokes admin (ADR-0024). Refusing to demote the last
+/// admin who can sign in keeps the instance administrable — with the shared
+/// operator token gone there is no other way in (short of
+/// <c>Auth:BootstrapPassword</c> plus a database edit).</summary>
+internal sealed class SetUserAdminEndpoint(UserManager<StorymarkUser> users, StorymarkDbContext db)
+    : Endpoint<SetUserAdminRequest>
+{
+    public override void Configure()
+    {
+        Post("users/{id}/admin");
+        Group<AdminGroup>();
+    }
+
+    public override async Task HandleAsync(SetUserAdminRequest req, CancellationToken ct)
+    {
+        var user = await users.FindByIdAsync(Route<Guid>("id").ToString());
+        if (user is null)
+        {
+            await Send.NotFoundAsync(ct);
+            return;
+        }
+
+        if (user.IsAdmin == req.IsAdmin)
+        {
+            await Send.NoContentAsync(ct);
+            return;
+        }
+
+        // Only admins with a password count — the seeded account stays admin but
+        // passwordless until activated, and a passwordless "last admin" would
+        // leave the instance with no working admin login.
+        if (!req.IsAdmin
+            && !await db.Users.AnyAsync(u => u.IsAdmin && u.PasswordHash != null && u.Id != user.Id, ct))
+        {
+            ThrowError(r => r.IsAdmin, "Cannot remove admin from the last admin who can sign in.");
+        }
+
+        user.IsAdmin = req.IsAdmin;
+        // The stamp rotation persists the flag and ends the account's existing
+        // sessions at their next stamp check — a cookie's admin claim is set at
+        // sign-in, so without it a session would keep the old role for up to
+        // 30 days (ReaderCookie).
+        this.ThrowIfFailed(await users.UpdateSecurityStampAsync(user));
         await Send.NoContentAsync(ct);
     }
 }

@@ -67,7 +67,7 @@ A CPU-only homelab box is a first-class target: background extraction takes its 
 
 ### A note on access control
 
-Storymark is **single-user by design**. The admin panel is protected by a bearer token (`STORYMARK_BEARER_TOKEN_SEED`, rotate it after first boot), but the reader itself is intentionally unauthenticated. Run it on a private network or VPN, or put your reverse proxy's auth layer (Authelia/Authentik forward-auth, OIDC) in front of it. Do **not** expose it to the open internet bare. See [`docs/deployment/04-auth-options.md`](docs/deployment/04-auth-options.md) and the rest of [`docs/deployment/`](docs/deployment/) for reverse-proxy options, CI/CD, Portainer GitOps, and backup guidance.
+Storymark has **built-in per-user accounts**: username + password sign-in with an HttpOnly session cookie, per-user libraries and reading state, and an `is_admin` role that gates the admin panel and job dashboard. First boot seeds one admin account — give it a password via `STORYMARK_BOOTSTRAP_PASSWORD` (applied only while the account has none), then manage users from `/admin`. It's still built for a private network or VPN; for MFA/SSO put your reverse proxy's auth layer (Authelia/Authentik forward-auth) in front. Do **not** expose it to the open internet bare. See [`docs/deployment/04-auth-options.md`](docs/deployment/04-auth-options.md) and the rest of [`docs/deployment/`](docs/deployment/) for reverse-proxy options, CI/CD, Portainer GitOps, and backup guidance.
 
 ---
 
@@ -126,7 +126,7 @@ storymark/
 Storymark is young and honest about it:
 
 - **Format support**: EPUB only today. The import path is pluggable; PDF and others can land as handlers.
-- **Single-user**: one library, one reading position, one admin token. Multi-user is explicitly out of scope for v1.
+- **Household-scale accounts**: per-user libraries and reading state with a single `is_admin` role. Passwords only — no MFA or OIDC built in (layer a reverse proxy for that).
 - **Quality scales with your model**: small local models (1B–3B) run everywhere but extract sparser timelines and graphs than larger ones. Prompts and per-task model choice are tunable at runtime from the admin panel.
 - **Automated tests are still thin**: the core was built against manually verified acceptance criteria ([ADR-0012](docs/adr/0012-tests-deferred.md)); a spoiler-safety harness exists (`pnpm test:spoiler`) and broader coverage is in progress.
 - **PWA today, native later**: a Capacitor wrap of the same codebase is planned for iOS/Android niceties.

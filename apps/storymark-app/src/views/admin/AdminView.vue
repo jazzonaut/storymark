@@ -1,56 +1,40 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import Menubar from "primevue/menubar";
-import Password from "primevue/password";
 import Toast from "primevue/toast";
-import { ref } from "vue";
-import { useAdmin } from "@/composables/use-admin";
+import { computed } from "vue";
+import { useRouter } from "vue-router";
+import { useAuth } from "@/composables/use-auth";
+import { useSignOut } from "@/composables/use-sign-out";
 
-const { hasToken, authenticate, signOut } = useAdmin();
+const router = useRouter();
+const { user } = useAuth();
+const signOut = useSignOut();
 
-const tokenInput = ref("");
-const authError = ref<string | null>(null);
-const isUnlocking = ref(false);
-
-async function unlock(): Promise<void> {
-  if (tokenInput.value.length === 0) {
-    return;
-  }
-
-  authError.value = null;
-  isUnlocking.value = true;
-  try {
-    const accepted = await authenticate(tokenInput.value);
-    if (accepted) {
-      tokenInput.value = "";
-    } else {
-      authError.value = "That token was rejected.";
-    }
-  } catch {
-    authError.value = "Could not reach the admin API.";
-  } finally {
-    isUnlocking.value = false;
-  }
-}
+// The router guard has already probed the session and bounced anonymous
+// visitors to /login; what's left here is the role check. `user` is null only
+// when the probe couldn't reach the server (the guard's offline pass-through) —
+// admin is useless without a server, so that reads as "no access" too.
+const isAdmin = computed<boolean>(() => user.value?.isAdmin === true);
 </script>
 
 <template>
   <Toast />
 
-  <div v-if="!hasToken" class="flex min-h-screen items-center justify-center p-6">
-    <div class="w-full max-w-sm">
+  <div v-if="!isAdmin" class="flex min-h-screen items-center justify-center p-6">
+    <div class="w-full max-w-sm text-center">
       <h1 class="mb-1 text-xl font-semibold">Storymark Admin</h1>
-      <p class="mb-6 text-sm opacity-70">Enter the admin bearer token to continue.</p>
-      <Password
-        v-model="tokenInput"
-        :feedback="false"
-        toggle-mask
-        fluid
-        placeholder="Bearer token"
-        @keyup.enter="unlock"
-      />
-      <small v-if="authError" class="mt-2 block text-red-500">{{ authError }}</small>
-      <Button class="mt-4" label="Unlock" :loading="isUnlocking" fluid @click="unlock" />
+      <p class="mb-6 text-sm opacity-70">
+        {{
+          user === null
+            ? "Couldn't verify the session — the server is unreachable."
+            : `${user.userName} doesn't have admin access. Sign in with an admin account.`
+        }}
+      </p>
+      <div class="flex justify-center gap-3">
+        <Button label="Back to the app" text @click="router.push('/')" />
+        <Button v-if="user !== null" label="Sign out" outlined @click="signOut" />
+      </div>
     </div>
   </div>
 
@@ -118,9 +102,9 @@ async function unlock(): Promise<void> {
           Cost Meter
         </RouterLink>
 
-        <!-- Hangfire is a server-rendered dashboard outside the SPA, behind its own
-             Basic-auth prompt (the admin bearer token). Open it in a new tab so the
-             admin session here is kept. -->
+        <!-- Hangfire is a server-rendered dashboard outside the SPA, gated by the
+             same session cookie's admin claim (ADR-0024) — the browser sends it
+             on its own. Open in a new tab so the admin view here is kept. -->
         <a
           href="/hangfire"
           target="_blank"

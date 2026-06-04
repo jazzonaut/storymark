@@ -73,12 +73,13 @@ export const router = createRouter({
 
 const { ensureSession, markSessionLost } = useAuth();
 
-// Reader routes need a session. /login is the target itself, and /admin gates
-// its API with the operator bearer token, not the reader cookie. An "unknown"
-// probe result (server unreachable) passes through: cached reading must keep
-// working offline (ADR-0006) — a live 401 later raises the auth-expired signal.
+// Every route but /login needs a session — /admin included, since it rides the
+// same cookie (ADR-0024); AdminView adds the admin-role check on top. An
+// "unknown" probe result (server unreachable) passes through: cached reading
+// must keep working offline (ADR-0006) — a live 401 later raises the
+// auth-expired signal.
 router.beforeEach(async (to) => {
-  if (to.name === "login" || to.path.startsWith("/admin")) {
+  if (to.name === "login") {
     return true;
   }
   if ((await ensureSession()) === "anonymous") {

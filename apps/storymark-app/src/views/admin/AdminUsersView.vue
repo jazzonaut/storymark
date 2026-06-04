@@ -11,10 +11,12 @@ import { computed, onMounted, ref } from "vue";
 import type { UserAdminItem } from "@/api/admin-types";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
+import { useAuth } from "@/composables/use-auth";
 import { formatDateTime } from "@/utils/format-date-time";
 
-const { users, loadUsers, createUser, setUserPassword } = useAdmin();
+const { users, loadUsers, createUser, setUserPassword, setUserAdmin } = useAdmin();
 const { report, reportWithValidation } = useAdminError();
+const { user: me } = useAuth();
 const toast = useToast();
 
 const loading = ref(false);
@@ -25,6 +27,8 @@ const newPassword = ref("");
 const passwordTarget = ref<UserAdminItem | null>(null);
 const passwordInput = ref("");
 const settingPassword = ref(false);
+const togglingAdminId = ref<string | null>(null);
+const demoteSelfTarget = ref<UserAdminItem | null>(null);
 
 // Mutable on purpose: toSorted already returns a fresh array and DataTable's
 // `value` prop rejects readonly arrays (same note as AdminBooksView).
@@ -109,6 +113,48 @@ async function confirmSetPassword(): Promise<void> {
   }
 }
 
+function isSelf(user: UserAdminItem): boolean {
+  return user.id === me.value?.userId;
+}
+
+// Revoking your own admin ends your own session at its next stamp check —
+// that deserves an explicit confirmation, not a one-click row action.
+function requestToggleAdmin(user: UserAdminItem): void {
+  if (user.isAdmin && isSelf(user)) {
+    demoteSelfTarget.value = user;
+    return;
+  }
+  void toggleAdmin(user);
+}
+
+async function confirmDemoteSelf(): Promise<void> {
+  const target = demoteSelfTarget.value;
+  if (target === null) {
+    return;
+  }
+  demoteSelfTarget.value = null;
+  await toggleAdmin(target);
+}
+
+async function toggleAdmin(user: UserAdminItem): Promise<void> {
+  togglingAdminId.value = user.id;
+  try {
+    await setUserAdmin(user.id, !user.isAdmin);
+    toast.add({
+      severity: "success",
+      summary: user.isAdmin ? "Admin revoked" : "Admin granted",
+      detail: isSelf(user)
+        ? "You no longer have admin access — you'll be signed out at the next session check."
+        : `${user.userName} is signed out and gets the new role at next sign-in.`,
+      life: 5000,
+    });
+  } catch (error) {
+    reportWithValidation(error, "Couldn't change role");
+  } finally {
+    togglingAdminId.value = null;
+  }
+}
+
 onMounted(() => {
   void refresh();
 });
@@ -170,6 +216,15 @@ onMounted(() => {
         </template>
       </Column>
 
+      <Column header="Role">
+        <template #body="{ data }">
+          <Tag
+            :value="(data as UserAdminItem).isAdmin ? 'Admin' : 'Reader'"
+            :severity="(data as UserAdminItem).isAdmin ? 'info' : 'secondary'"
+          />
+        </template>
+      </Column>
+
       <Column header="Created">
         <template #body="{ data }">
           <span class="whitespace-nowrap">{{
@@ -178,13 +233,21 @@ onMounted(() => {
         </template>
       </Column>
 
-      <Column header="" style="width: 9rem">
+      <Column header="" style="width: 17rem">
         <template #body="{ data }">
           <Button
             :label="(data as UserAdminItem).hasPassword ? 'Reset password' : 'Set password'"
             size="small"
             text
             @click="openPasswordDialog(data as UserAdminItem)"
+          />
+          <Button
+            :label="(data as UserAdminItem).isAdmin ? 'Revoke admin' : 'Make admin'"
+            size="small"
+            text
+            :severity="(data as UserAdminItem).isAdmin ? 'danger' : 'secondary'"
+            :loading="togglingAdminId === (data as UserAdminItem).id"
+            @click="requestToggleAdmin(data as UserAdminItem)"
           />
         </template>
       </Column>
@@ -224,6 +287,28 @@ onMounted(() => {
           :disabled="passwordInput.length === 0"
           @click="confirmSetPassword"
         />
+      </template>
+    </Dialog>
+
+    <Dialog
+      :visible="demoteSelfTarget !== null"
+      modal
+      header="Revoke your own admin access?"
+      :style="{ width: '28rem' }"
+      @update:visible="
+        (visible) => {
+          if (!visible) demoteSelfTarget = null;
+        }
+      "
+    >
+      <p class="text-sm">
+        You're removing the admin role from your own account. You'll lose access to this admin area
+        and be signed out at the next session check — only another admin can restore the role.
+      </p>
+
+      <template #footer>
+        <Button label="Cancel" text @click="demoteSelfTarget = null" />
+        <Button label="Revoke my admin" severity="danger" @click="confirmDemoteSelf" />
       </template>
     </Dialog>
   </section>

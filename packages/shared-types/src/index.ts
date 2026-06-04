@@ -267,4 +267,6 @@ export interface MemorySnapshot {
 export interface AuthUser {
   readonly userId: string;
   readonly userName: string;
+  /** Grants the admin area (`/admin` and the Hangfire dashboard). */
+  readonly isAdmin: boolean;
 }

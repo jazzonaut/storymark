@@ -47,8 +47,7 @@ internal sealed class ApplySwapEndpoint(
             ThrowError(r => r.ModelId, "modelId must be the id of a configured model.");
         }
 
-        var updatedBy = HttpContext.Items[AdminAuthPreProcessor.FingerprintItemKey] as string ?? "admin";
-        await settings.UpdateAsync(LlmSettingKeys.EmbeddingModelId, JsonSerializer.Serialize(modelId), updatedBy, ct);
+        await settings.UpdateAsync(LlmSettingKeys.EmbeddingModelId, JsonSerializer.Serialize(modelId), User.UserName(), ct);
 
         // Reindex only books that have finished the import pipeline (Indexed) or are
         // mid-embedding (an interrupted reindex). EmbeddingJob unconditionally drives a

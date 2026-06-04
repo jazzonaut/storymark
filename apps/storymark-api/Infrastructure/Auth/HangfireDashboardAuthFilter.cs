@@ -1,49 +1,25 @@
-using System.Text;
 using Hangfire.Dashboard;
 using Microsoft.AspNetCore.Http;
-using Storymark.Api.Services.Settings;
 
 namespace Storymark.Api.Infrastructure.Auth;
 
-/// <summary>Gates the Hangfire dashboard behind the same live admin bearer token
-/// as the admin API, but via HTTP Basic auth so a browser can present it: the
-/// password is compared (constant-time, fail-closed) against
-/// <c>auth.bearerToken</c> and the username is ignored. On failure it issues a
-/// <c>WWW-Authenticate: Basic</c> challenge so the browser shows a login dialog.</summary>
-internal sealed class HangfireDashboardAuthFilter(ISettingsService settings) : IDashboardAuthorizationFilter
+/// <summary>Gates the Hangfire dashboard behind the same session-cookie admin
+/// claim as the admin API (ADR-0024). The dashboard is served on the SPA's
+/// origin, so the browser sends the cookie on its own — an admin signs into the
+/// app, then opens <c>/hangfire</c>.</summary>
+internal sealed class HangfireDashboardAuthFilter : IDashboardAuthorizationFilter
 {
-    private const string Scheme = "Basic ";
-
     public bool Authorize(DashboardContext context)
     {
         var http = context.GetHttpContext();
-        var password = ExtractPassword(http.Request.Headers.Authorization.ToString());
-        if (AdminToken.Matches(password, AdminToken.Current(settings)))
+        if (http.User.IsAdmin())
         {
             return true;
         }
 
-        http.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        http.Response.Headers["WWW-Authenticate"] = "Basic realm=\"Storymark\", charset=\"UTF-8\"";
+        http.Response.StatusCode = http.User.Identity?.IsAuthenticated == true
+            ? StatusCodes.Status403Forbidden
+            : StatusCodes.Status401Unauthorized;
         return false;
-    }
-
-    private static string? ExtractPassword(string header)
-    {
-        if (!header.StartsWith(Scheme, StringComparison.Ordinal))
-        {
-            return null;
-        }
-
-        try
-        {
-            var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(header[Scheme.Length..]));
-            var colon = decoded.IndexOf(':', StringComparison.Ordinal);
-            return colon >= 0 ? decoded[(colon + 1)..] : null;
-        }
-        catch (FormatException)
-        {
-            return null;
-        }
     }
 }

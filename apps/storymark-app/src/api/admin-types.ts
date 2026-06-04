@@ -131,6 +131,7 @@ export interface UserAdminItem {
   /** False for seeded-but-not-activated accounts - they cannot sign in. */
   readonly hasPassword: boolean;
   readonly isLockedOut: boolean;
+  readonly isAdmin: boolean;
   readonly createdAt: string;
 }
 

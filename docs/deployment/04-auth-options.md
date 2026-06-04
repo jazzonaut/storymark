@@ -1,27 +1,40 @@
 # Auth Options
 
-The Storymark API has a built-in single-bearer-token auth mode. That's the **default and the floor**: every protected endpoint requires `Authorization: Bearer <token>` matching `settings.auth.bearerToken`. The frontend stores the token in `localStorage` (PWA) or Capacitor Secure Storage (mobile build).
+Storymark has built-in per-user authentication (ADR-0023, ADR-0024): username +
+password sign-in issues an HttpOnly `SameSite=Strict` session cookie (30-day
+sliding). Every endpoint — reader and admin alike — rides that session; there is
+no API token. Admin access is a per-user role: accounts with `is_admin` reach
+`/admin` and the Hangfire dashboard, everyone else gets 403.
 
-If you want stronger auth — SSO, MFA, per-user audit, account lockout — layer it at the reverse proxy. The API doesn't need to know.
+That's the **default and the floor**. If you want SSO/MFA across your homelab,
+layer it at the reverse proxy — the API doesn't need to know.
 
-## Option A — Bearer token only (default)
+## Option A — Built-in accounts only (default)
 
-Set `STORYMARK_BEARER_TOKEN_SEED` in `infra/compose/.env` before first boot. The seed value is written into `settings.auth.bearerToken` on the first run; rotate from the admin panel afterwards.
+First boot seeds one passwordless admin account (`reader`). Give it a password
+by setting `STORYMARK_BOOTSTRAP_PASSWORD` in `infra/compose/.env` before first
+boot — it's applied only while the account has no password, then ignored
+forever (rotate via the in-app password change afterwards). Create further
+accounts, set passwords, and grant/revoke admin from `/admin` → Users.
 
 Use this when:
 
 - you access Storymark over Tailscale, WireGuard, or another secured overlay,
-- it's a single-user homelab and SSO would be overkill,
-- you're getting started and want to defer the auth question.
+- it's a household deployment and SSO would be overkill.
 
-Pros: zero extra infrastructure.
-Cons: no audit log of *who* hit the API; the token is one bearer credential, not a session.
+Pros: zero extra infrastructure; per-user audit (`updated_by` records the admin's
+username); lockout after 5 failed attempts.
+Cons: passwords only — no MFA until you layer a proxy in front.
 
 ## Option B — Authelia / Authentik forward-auth
 
-Run [Authelia](https://www.authelia.com/) or [Authentik](https://goauthentik.io/) in front of your reverse proxy. Configure forward-auth so all requests to Storymark hit the auth provider first; only authenticated users reach the API.
+Run [Authelia](https://www.authelia.com/) or [Authentik](https://goauthentik.io/)
+in front of your reverse proxy. Configure forward-auth so all requests to
+Storymark hit the auth provider first; only authenticated users reach the API.
 
-The bearer token is still required by the API itself — the forward-auth provider doesn't replace it, it adds a session/SSO layer on top. In practice, the bearer token in `localStorage` is unchanged and the SSO is invisible to the app: you log into Authelia once per session, and the cookies carry through.
+The in-app login is still required — the forward-auth provider doesn't replace
+it, it adds an SSO/MFA layer on top. You log into Authelia once per session and
+then into Storymark; both cookies carry through.
 
 Example (Caddy + caddy-docker-proxy + Authelia):
 
@@ -32,38 +45,37 @@ STORYMARK_REVERSE_PROXY_LABELS={"caddy":"storymark.example.com","caddy.forward_a
 
 Use this when:
 
-- you have multiple users and want SSO + MFA across all your homelab apps,
-- you want a real audit trail of who accessed what,
+- you want MFA, or SSO across all your homelab apps,
 - you already have Authelia/Authentik running.
 
-Pros: SSO across the homelab; MFA; named user audit.
+Pros: MFA; one front door for the homelab.
 Cons: extra infrastructure to operate; an auth-provider outage locks you out.
 
 ## Option C — OIDC at the API (full token-aware auth)
 
-The API doesn't currently implement OIDC token validation. The architecture is friendly to it (an `IBearerTokenAuthFilter` already exists; an OIDC variant slots in), but it's out of scope for v1.
-
-If you want this, the integration path is:
-
-1. Configure your OIDC IdP (Authelia, Authentik, Keycloak, etc.) with a Storymark client.
-2. Replace `BearerTokenAuthFilter` with `JwtBearer` middleware (`AddJwtBearer(opts => { opts.Authority = "..."; opts.Audience = "storymark-api"; })`).
-3. Use `oidc-client-ts` in the SPA for Authorization Code + PKCE.
-
-Open an issue if you'd like to drive this — happy to merge a PR that adds it as a second auth mode rather than a replacement.
+The API doesn't implement OIDC. The architecture is friendly to it (the cookie
+scheme could gain a `JwtBearer` sibling and map IdP claims onto `users` rows),
+but it's out of scope for v1. If you want this, drive it as its own ADR.
 
 ## What about Caddy's `basic_auth`?
 
-Works fine for a one-user homelab, but it doesn't survive contact with a mobile PWA gracefully — the browser prompts on every fresh session. Use it as a stopgap; move to Authelia or a bearer-only mode if you live on mobile.
+Works as a crude extra gate, but it doesn't survive contact with a mobile PWA
+gracefully — the browser prompts on every fresh session. Prefer Option B.
 
 ## API → API access (CI, scripts)
 
-CI and scripts use the bearer token directly. Treat that token as a service credential:
-
-- Rotate from `/admin` whenever it leaks or a script is decommissioned.
-- Don't share between humans and automation if you can help it — when full OIDC lands, the human path moves there and the bearer token becomes the machine-only path.
+There is no standing machine credential. A script authenticates like a user:
+`POST /api/auth/login` with a dedicated account's credentials, keep the cookie
+jar, call the API (admin endpoints need the account to have `is_admin`). Give
+automation its own account so the audit trail distinguishes it from humans, and
+treat its password as a service credential. If real machine-to-machine traffic
+ever materialises, a scoped API-token feature should come back as its own
+decision rather than resurrecting the shared bearer token (see ADR-0024).
 
 ## What about CSRF?
 
-The API enforces `Authorization: Bearer …` on every protected endpoint — there's no cookie-based session to forge. CSRF protection is therefore unnecessary; the absence of cookies is the defence.
-
-If you switch to OIDC (Option C) and start using cookies, CSRF middleware needs to come back. Capture that in the migration ADR when it happens.
+The session cookie is `SameSite=Strict` and the SPA is served same-origin by the
+API (ADR-0013), so cross-site requests never carry the cookie — that combination
+is the CSRF posture (ADR-0023), accepted for a VPN/LAN-gated deployment. Revisit
+(antiforgery tokens, `__Host-` prefix, key-ring encryption) before any internet
+exposure.

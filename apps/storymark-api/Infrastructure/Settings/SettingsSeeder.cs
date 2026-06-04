@@ -16,7 +16,6 @@ namespace Storymark.Api.Infrastructure.Settings;
 internal sealed class SettingsSeeder(
     IServiceScopeFactory scopeFactory,
     IOptions<SettingsDefaultsOptions> defaults,
-    IConfiguration configuration,
     ISettingsEncryptor encryptor,
     ILogger<SettingsSeeder> logger)
 {
@@ -117,21 +116,12 @@ internal sealed class SettingsSeeder(
 
         // LLM routing (providers, models, task assignments) is seeded by
         // LlmRegistrySeeder, not here — see ADR-0016.
-        var bearerSeed = configuration["Auth:BearerTokenSeed"];
-        if (!string.IsNullOrWhiteSpace(bearerSeed))
-        {
-            seeds.Add(Secret("auth.bearerToken", bearerSeed));
-        }
-
         return seeds;
     }
 
     private static SettingSeed Text(string key, string value) => Scalar(key, value, SettingValueType.String);
 
     private static SettingSeed Json<T>(string key, T value) => Scalar(key, value, SettingValueType.Json);
-
-    private static SettingSeed Secret(string key, string value) =>
-        Scalar(key, value, SettingValueType.String) with { IsSecret = true };
 
     private static SettingSeed Scalar<T>(string key, T value, SettingValueType valueType) => new()
     {

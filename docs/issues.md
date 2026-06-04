@@ -60,7 +60,7 @@ Estimates are rough T-shirt sizes: **S** ≈ ½ day, **M** ≈ 1–2 days, **L**
 - EF migration: `settings(key, value jsonb, value_type, is_secret, updated_at, updated_by)`
 - `SettingsService` with in-memory cache and `LISTEN/NOTIFY 'settings_changed'` subscriber
 - AES-GCM encryption for `is_secret=true` values (key from `Settings__EncryptionKey` env var)
-- Default-seeder on startup that inserts any missing keys from `appsettings.json` (`prompts.*`, `llm.chat.taskMap.*`, `llm.embedding.modelId`, `upload.maxBytes`, `auth.bearerToken`, `features.recapCardOnSectionEntry`)
+- Default-seeder on startup that inserts any missing keys from `appsettings.json` (`prompts.*`, `llm.chat.taskMap.*`, `llm.embedding.modelId`, `upload.maxBytes`, `auth.bearerToken`, `features.recapCardOnSectionEntry`) *(the `auth.bearerToken` seed was later removed — [ADR-0024](adr/0024-admin-via-user-role.md))*
 - A throwaway internal endpoint `GET /api/_debug/setting?key=...` (guarded by env flag) for verifying the roundtrip
 **Frontend:** none yet.
 **Acceptance:** update a row in `settings` via `psql`, the debug endpoint reflects the change within 2s; encrypted values stay encrypted at rest.
@@ -82,6 +82,7 @@ Estimates are rough T-shirt sizes: **S** ≈ ½ day, **M** ≈ 1–2 days, **L**
 **Depends on:** S0.5.1
 
 ### S0.5.3 — Bearer-token auth + admin endpoints — **M**
+**Superseded:** the shared bearer token was later replaced by a per-user `is_admin` role on the cookie session ([ADR-0024](adr/0024-admin-via-user-role.md)); the endpoints remain.
 **Goal:** `/api/admin/*` is locked behind the configured bearer token; settings and prompts can be read and edited via API.
 **Backend:**
 - `BearerTokenAuthFilter` reading the active token from `settings.auth.bearerToken`

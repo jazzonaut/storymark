@@ -5,7 +5,7 @@
 #
 # Required env (provided by .env or Portainer stack env):
 #   POSTGRES_PASSWORD                  - Storymark Postgres password
-#   STORYMARK_BEARER_TOKEN_SEED        - initial admin bearer token; rotate from /admin
+#   STORYMARK_BOOTSTRAP_PASSWORD       - seeded admin account's initial password; inert once set
 #   STORYMARK_SETTINGS_ENCRYPTION_KEY  - base64 32-byte key for encrypting secret settings
 #
 # Optional env:
@@ -32,7 +32,7 @@ services:
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=storymark;Username=storymark;Password=${POSTGRES_PASSWORD}
       Ollama__Url: http://ollama:11434
       Storage__RootPath: /data
-      Auth__BearerTokenSeed: ${STORYMARK_BEARER_TOKEN_SEED}
+      Auth__BootstrapPassword: ${STORYMARK_BOOTSTRAP_PASSWORD}
       Settings__EncryptionKey: ${STORYMARK_SETTINGS_ENCRYPTION_KEY}
       Storymark__PublicUrl: ${STORYMARK_PUBLIC_URL:-}
       Storymark__DebugEndpointsEnabled: ${STORYMARK_DEBUG_ENDPOINTS:-false}

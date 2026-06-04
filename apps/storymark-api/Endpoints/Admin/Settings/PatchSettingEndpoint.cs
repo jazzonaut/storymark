@@ -45,8 +45,7 @@ internal sealed class PatchSettingEndpoint(ISettingsService settings)
             ThrowError(r => r.Value, $"Value is not a valid {existing.ValueType}.");
         }
 
-        var updatedBy = HttpContext.Items[AdminAuthPreProcessor.FingerprintItemKey] as string ?? "admin";
-        await settings.UpdateAsync(req.Key, req.Value.GetRawText(), updatedBy, ct);
+        await settings.UpdateAsync(req.Key, req.Value.GetRawText(), User.UserName(), ct);
 
         if (!settings.TryGetSnapshot(req.Key, out var updated))
         {

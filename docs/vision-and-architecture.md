@@ -18,7 +18,7 @@ The reader is the first-class surface, not the AI. Storymark is meant to replace
 
 ## What it isn't
 
-- Not a multi-user platform (single bearer-token, intended for solo use on a homelab; could be extended to multi-user later but that's explicitly out of scope for v1).
+- Not a multi-tenant platform (household-scale accounts with per-user libraries and an admin role — ADR-0023/0024 — intended for one homelab, not a public service).
 - Not a chatbot wrapped around books — the reader is primary, AI is the assistive layer.
 - Not married to a specific LLM or vendor — model selection is per-task and runtime-configurable from the admin panel.
 
@@ -32,7 +32,7 @@ Storymark Client (PWA → Capacitor in Phase 7)
     - cached summaries, entity cards, timeline/graph snapshots
     - bookmarks, pending progress writes
         |
-        | REST (bearer token)
+        | REST (cookie session)
         v
 Storymark API
   ASP.NET Core + FastEndpoints
@@ -78,4 +78,4 @@ The architecture is intentionally generous about what can be swapped without rew
 - Vector backend (today: pgvector) is reachable behind `SpoilerSafeRetrievalService` — a hypothetical "switch to Qdrant" doesn't ripple past that boundary.
 - LLM providers live behind `IChatModelClient`. Anthropic, Google, vLLM, llama.cpp can all land as new adapters without touching prompt sites.
 - The reader is format-agnostic via `IBookImportHandler` (today: EPUB only). PDF, MOBI/AZW, plain text, web articles can be added as handlers.
-- Auth is currently a single bearer token, but the API runs behind a reverse proxy that can layer Authelia/Authentik forward-auth or full OIDC without backend code changes. See [`deployment/04-auth-options.md`](deployment/04-auth-options.md).
+- Auth is built-in per-user accounts on a cookie session (ADR-0023/0024), and the API runs behind a reverse proxy that can layer Authelia/Authentik forward-auth for MFA/SSO without backend code changes. See [`deployment/04-auth-options.md`](deployment/04-auth-options.md).

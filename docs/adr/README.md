@@ -30,7 +30,8 @@ If a decision is small enough that "look at the code" answers it, it's not an AD
 | 0020 | [Reading-progress conflict policy: server receive-time wins](0020-reading-progress-conflict-policy.md) | accepted |
 | 0021 | [Stateless assistant conversations, client-carried](0021-stateless-assistant-conversations.md) | accepted |
 | 0022 | [Offline fallback may serve a cache row stamped ahead of the reader](0022-offline-ahead-fallback.md) | accepted |
-| 0023 | [In-app identity via IdentityCore + cookie session; per-user books](0023-in-app-identity-cookie-auth.md) | accepted |
+| 0023 | [In-app identity via IdentityCore + cookie session; per-user books](0023-in-app-identity-cookie-auth.md) | accepted; admin-token aspect superseded by 0024 |
+| 0024 | [Admin access via a per-user `IsAdmin` flag on the cookie session](0024-admin-via-user-role.md) | accepted |
 
 ## When to write one
 

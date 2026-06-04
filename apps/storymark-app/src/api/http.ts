@@ -32,16 +32,12 @@ export function raiseAuthExpired(): void {
   authExpiredHandler?.();
 }
 
-/** A reader-endpoint 401 means the session cookie expired or was revoked.
- * `/api/auth/*` is excluded (a login 401 is a credential failure and the `me`
- * probe answers 401 for "anonymous"); `/api/admin/*` is excluded because it is
- * gated by the operator bearer token, not the reader session. */
+/** A 401 means the session cookie expired or was revoked — admin endpoints
+ * included, since they ride the same session (ADR-0024). `/api/auth/*` is
+ * excluded (a login 401 is a credential failure and the `me` probe answers 401
+ * for "anonymous"). */
 function notifyIfAuthExpired(path: string, response: Response): void {
-  if (
-    response.status === 401 &&
-    !path.startsWith("/api/auth/") &&
-    !path.startsWith("/api/admin/")
-  ) {
+  if (response.status === 401 && !path.startsWith("/api/auth/")) {
     raiseAuthExpired();
   }
 }

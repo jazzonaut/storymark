@@ -23,6 +23,7 @@ internal sealed class UsersConfiguration : IEntityTypeConfiguration<StorymarkUse
         builder.Property(u => u.LockoutEnabled).HasColumnName("lockout_enabled");
         builder.Property(u => u.AccessFailedCount).HasColumnName("access_failed_count");
         builder.Property(u => u.CreatedAt).HasColumnName("created_at");
+        builder.Property(u => u.IsAdmin).HasColumnName("is_admin");
 
         builder.HasIndex(u => u.NormalizedUserName).IsUnique();
 

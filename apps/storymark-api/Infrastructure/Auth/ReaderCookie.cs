@@ -26,6 +26,7 @@ internal static class ReaderCookie
         var identity = new ClaimsIdentity(CookieAuthenticationDefaults.AuthenticationScheme);
         identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()));
         identity.AddClaim(new Claim(ClaimTypes.Name, user.RequiredUserName));
+        identity.AddClaim(ReaderClaims.IsAdminClaim(user.IsAdmin));
         identity.AddClaim(new Claim(SecurityStampClaimType, await users.GetSecurityStampAsync(user)));
 
         // IsPersistent makes the browser keep the cookie for the full 30-day

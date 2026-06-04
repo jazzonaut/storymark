@@ -1,6 +1,6 @@
 # 0023 — In-app identity via IdentityCore + cookie session; per-user books
 
-**Status:** accepted
+**Status:** accepted — the admin-bearer-token aspect is superseded by [ADR-0024](0024-admin-via-user-role.md)
 **Date:** 2026-06-03
 
 ## Context

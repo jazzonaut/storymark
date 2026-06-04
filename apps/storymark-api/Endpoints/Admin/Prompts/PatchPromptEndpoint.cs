@@ -40,11 +40,9 @@ internal sealed class PatchPromptEndpoint(ISettingsService settings)
             ThrowError(r => r.Text, $"Prompt must contain the placeholder(s): {string.Join(", ", missing)}.");
         }
 
-        var updatedBy = HttpContext.Items[AdminAuthPreProcessor.FingerprintItemKey] as string ?? "admin";
-
         try
         {
-            await settings.UpdateAsync(fullKey, JsonSerializer.Serialize(req.Text), updatedBy, ct);
+            await settings.UpdateAsync(fullKey, JsonSerializer.Serialize(req.Text), User.UserName(), ct);
         }
         catch (KeyNotFoundException)
         {

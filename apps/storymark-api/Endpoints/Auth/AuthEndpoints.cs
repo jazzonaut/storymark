@@ -12,6 +12,8 @@ internal sealed record AuthUserView
     public required Guid UserId { get; init; }
 
     public required string UserName { get; init; }
+
+    public required bool IsAdmin { get; init; }
 }
 
 internal sealed record LoginRequest
@@ -55,7 +57,9 @@ internal sealed class PostLoginEndpoint(UserManager<StorymarkUser> users)
 
         await ReaderCookie.SignInAsync(HttpContext, users, user);
 
-        await Send.OkAsync(new AuthUserView { UserId = user.Id, UserName = user.RequiredUserName }, ct);
+        await Send.OkAsync(
+            new AuthUserView { UserId = user.Id, UserName = user.RequiredUserName, IsAdmin = user.IsAdmin },
+            ct);
     }
 }
 
@@ -87,7 +91,9 @@ internal sealed class GetMeEndpoint : EndpointWithoutRequest<AuthUserView>
 
     public override async Task HandleAsync(CancellationToken ct)
     {
-        await Send.OkAsync(new AuthUserView { UserId = User.UserId(), UserName = User.UserName() }, ct);
+        await Send.OkAsync(
+            new AuthUserView { UserId = User.UserId(), UserName = User.UserName(), IsAdmin = User.IsAdmin() },
+            ct);
     }
 }
 

@@ -22,7 +22,7 @@ If you don't run a reverse proxy, just expose the published port directly (the e
 Two values must be set before first boot, in `infra/compose/.env`:
 
 - `POSTGRES_PASSWORD` — Postgres password for the Storymark database.
-- `STORYMARK_BEARER_TOKEN_SEED` — the initial admin bearer token (rotate from the admin panel afterwards).
+- `STORYMARK_BOOTSTRAP_PASSWORD` — the seeded admin account's initial password; applied only while the account has none, then inert (change it in-app afterwards).
 - `STORYMARK_SETTINGS_ENCRYPTION_KEY` — base64-encoded 32-byte key for encrypting secret settings at rest.
 
 `infra/compose/.env.example` lists every supported variable with defaults and comments.

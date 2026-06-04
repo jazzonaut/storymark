@@ -34,13 +34,12 @@ export class AdminApiError extends Error {
   }
 }
 
-async function send(token: string, path: string, init?: RequestInit): Promise<Response> {
+// Authentication is the session cookie (ADR-0024), sent by the browser on its
+// own — admin requests carry no credential header.
+async function send(path: string, init?: RequestInit): Promise<Response> {
   const response = await apiFetch(`/api/admin/${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { "Content-Type": "application/json" },
   });
 
   if (!response.ok) {
@@ -51,87 +50,92 @@ async function send(token: string, path: string, init?: RequestInit): Promise<Re
   return response;
 }
 
-async function request<T>(token: string, path: string, init?: RequestInit): Promise<T> {
-  const response = await send(token, path, init);
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await send(path, init);
   return (await response.json()) as T;
 }
 
-async function requestVoid(token: string, path: string, init: RequestInit): Promise<void> {
-  await send(token, path, init);
+async function requestVoid(path: string, init: RequestInit): Promise<void> {
+  await send(path, init);
 }
 
 export const adminApi = {
-  listSettings: (token: string): Promise<readonly SettingItem[]> => request(token, "settings"),
+  listSettings: (): Promise<readonly SettingItem[]> => request("settings"),
 
-  patchSetting: (token: string, body: PatchSettingBody): Promise<SettingItem> =>
-    request(token, "settings", { method: "PATCH", body: JSON.stringify(body) }),
+  patchSetting: (body: PatchSettingBody): Promise<SettingItem> =>
+    request("settings", { method: "PATCH", body: JSON.stringify(body) }),
 
-  listPrompts: (token: string): Promise<readonly PromptItem[]> => request(token, "prompts"),
+  listPrompts: (): Promise<readonly PromptItem[]> => request("prompts"),
 
-  patchPrompt: (token: string, key: string, text: string): Promise<PromptItem> =>
-    request(token, `prompts/${encodeURIComponent(key)}`, {
+  patchPrompt: (key: string, text: string): Promise<PromptItem> =>
+    request(`prompts/${encodeURIComponent(key)}`, {
       method: "PATCH",
       body: JSON.stringify({ text }),
     }),
 
-  listLlmCalls: (token: string, limit: number): Promise<readonly LlmCallItem[]> =>
-    request(token, `llm-calls?limit=${limit}`),
+  listLlmCalls: (limit: number): Promise<readonly LlmCallItem[]> =>
+    request(`llm-calls?limit=${limit}`),
 
-  getCostSummary: (token: string): Promise<CostSummary> => request(token, "llm-calls/cost-summary"),
+  getCostSummary: (): Promise<CostSummary> => request("llm-calls/cost-summary"),
 
-  getEmbeddingImpact: (token: string): Promise<EmbeddingImpactPreview> =>
-    request(token, "embedding/impact-preview"),
+  getEmbeddingImpact: (): Promise<EmbeddingImpactPreview> => request("embedding/impact-preview"),
 
-  applyEmbeddingSwap: (token: string, modelId: string): Promise<ApplySwapResult> =>
-    request(token, "embedding/apply-swap", {
+  applyEmbeddingSwap: (modelId: string): Promise<ApplySwapResult> =>
+    request("embedding/apply-swap", {
       method: "POST",
       body: JSON.stringify({ modelId }),
     }),
 
-  backfillSectionTitles: (token: string): Promise<BackfillSectionTitlesResult> =>
-    request(token, "books/backfill-section-titles", { method: "POST" }),
+  backfillSectionTitles: (): Promise<BackfillSectionTitlesResult> =>
+    request("books/backfill-section-titles", { method: "POST" }),
 
-  recoverStuckBooks: (token: string, staleMinutes: number): Promise<RecoverStuckBooksResult> =>
-    request(token, "books/recover-stuck", {
+  recoverStuckBooks: (staleMinutes: number): Promise<RecoverStuckBooksResult> =>
+    request("books/recover-stuck", {
       method: "POST",
       body: JSON.stringify({ staleMinutes }),
     }),
 
-  reprocessBook: (token: string, bookId: string): Promise<ReprocessBookResult> =>
-    request(token, `books/reprocess/${encodeURIComponent(bookId)}`, { method: "POST" }),
+  reprocessBook: (bookId: string): Promise<ReprocessBookResult> =>
+    request(`books/reprocess/${encodeURIComponent(bookId)}`, { method: "POST" }),
 
-  listProviders: (token: string): Promise<readonly ProviderItem[]> =>
-    request(token, "models/providers"),
+  listProviders: (): Promise<readonly ProviderItem[]> => request("models/providers"),
 
-  createProvider: (token: string, body: ProviderUpsertBody): Promise<ProviderItem> =>
-    request(token, "models/providers", { method: "POST", body: JSON.stringify(body) }),
+  createProvider: (body: ProviderUpsertBody): Promise<ProviderItem> =>
+    request("models/providers", { method: "POST", body: JSON.stringify(body) }),
 
-  updateProvider: (token: string, id: string, body: ProviderUpsertBody): Promise<ProviderItem> =>
-    request(token, `models/providers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  updateProvider: (id: string, body: ProviderUpsertBody): Promise<ProviderItem> =>
+    request(`models/providers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
 
-  deleteProvider: (token: string, id: string): Promise<void> =>
-    requestVoid(token, `models/providers/${id}`, { method: "DELETE" }),
+  deleteProvider: (id: string): Promise<void> =>
+    requestVoid(`models/providers/${id}`, { method: "DELETE" }),
 
-  listModels: (token: string): Promise<readonly ModelItem[]> => request(token, "models"),
+  listModels: (): Promise<readonly ModelItem[]> => request("models"),
 
-  createModel: (token: string, body: ModelUpsertBody): Promise<ModelItem> =>
-    request(token, "models", { method: "POST", body: JSON.stringify(body) }),
+  createModel: (body: ModelUpsertBody): Promise<ModelItem> =>
+    request("models", { method: "POST", body: JSON.stringify(body) }),
 
-  updateModel: (token: string, id: string, body: ModelUpsertBody): Promise<ModelItem> =>
-    request(token, `models/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  updateModel: (id: string, body: ModelUpsertBody): Promise<ModelItem> =>
+    request(`models/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
 
-  deleteModel: (token: string, id: string): Promise<void> =>
-    requestVoid(token, `models/${id}`, { method: "DELETE" }),
+  deleteModel: (id: string): Promise<void> => requestVoid(`models/${id}`, { method: "DELETE" }),
 
-  listUsers: (token: string): Promise<readonly UserAdminItem[]> => request(token, "users"),
+  listUsers: (): Promise<readonly UserAdminItem[]> => request("users"),
 
-  createUser: (token: string, body: CreateUserBody): Promise<UserAdminItem> =>
-    request(token, "users", { method: "POST", body: JSON.stringify(body) }),
+  createUser: (body: CreateUserBody): Promise<UserAdminItem> =>
+    request("users", { method: "POST", body: JSON.stringify(body) }),
 
   /** Set-or-reset; the endpoint also clears any lockout (the recovery path). */
-  setUserPassword: (token: string, id: string, password: string): Promise<void> =>
-    requestVoid(token, `users/${encodeURIComponent(id)}/password`, {
+  setUserPassword: (id: string, password: string): Promise<void> =>
+    requestVoid(`users/${encodeURIComponent(id)}/password`, {
       method: "POST",
       body: JSON.stringify({ password }),
+    }),
+
+  /** Grants or revokes admin. The server rotates the account's security stamp,
+   * so the affected user's sessions end and the change applies at next sign-in. */
+  setUserAdmin: (id: string, isAdmin: boolean): Promise<void> =>
+    requestVoid(`users/${encodeURIComponent(id)}/admin`, {
+      method: "POST",
+      body: JSON.stringify({ isAdmin }),
     }),
 } as const;
