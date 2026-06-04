@@ -20,11 +20,15 @@ accounts, set passwords, and grant/revoke admin from `/admin` → Users.
 Use this when:
 
 - you access Storymark over Tailscale, WireGuard, or another secured overlay,
+- you expose it publicly behind a TLS-terminating reverse proxy — the stack is
+  hardened for that (ADR-0025): `Secure` session cookies via the forwarded
+  proto, per-account lockout plus a per-IP login throttle,
 - it's a household deployment and SSO would be overkill.
 
 Pros: zero extra infrastructure; per-user audit (`updated_by` records the admin's
-username); lockout after 5 failed attempts.
-Cons: passwords only — no MFA until you layer a proxy in front.
+username); lockout after 5 failed attempts; per-IP throttle on the login route.
+Cons: passwords only — no MFA until you layer a proxy in front. Public exposure
+**must** be TLS-only (Caddy's automatic HTTPS counts).
 
 ## Option B — Authelia / Authentik forward-auth
 
@@ -76,6 +80,7 @@ decision rather than resurrecting the shared bearer token (see ADR-0024).
 
 The session cookie is `SameSite=Strict` and the SPA is served same-origin by the
 API (ADR-0013), so cross-site requests never carry the cookie — that combination
-is the CSRF posture (ADR-0023), accepted for a VPN/LAN-gated deployment. Revisit
-(antiforgery tokens, `__Host-` prefix, key-ring encryption) before any internet
-exposure.
+is the CSRF posture (ADR-0023), revisited and accepted for internet exposure in
+ADR-0025 (no antiforgery tokens; `__Host-` prefix rejected because it would
+break plain-HTTP LAN sign-in). The posture leans on TLS-only public ingress —
+don't publish the API over plain HTTP.

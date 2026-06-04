@@ -33,6 +33,9 @@ internal sealed class PostLoginEndpoint(UserManager<StorymarkUser> users)
     {
         Post("auth/login");
         AllowAnonymous();
+        // Per-IP throttle on top of per-account lockout (ADR-0025) — lockout
+        // alone can't stop cross-account spraying from one source.
+        Options(b => b.RequireRateLimiting(LoginRateLimit.PolicyName));
     }
 
     public override async Task HandleAsync(LoginRequest req, CancellationToken ct)

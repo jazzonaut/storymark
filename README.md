@@ -67,7 +67,7 @@ A CPU-only homelab box is a first-class target: background extraction takes its 
 
 ### A note on access control
 
-Storymark has **built-in per-user accounts**: username + password sign-in with an HttpOnly session cookie, per-user libraries and reading state, and an `is_admin` role that gates the admin panel and job dashboard. First boot seeds one admin account — give it a password via `STORYMARK_BOOTSTRAP_PASSWORD` (applied only while the account has none), then manage users from `/admin`. It's still built for a private network or VPN; for MFA/SSO put your reverse proxy's auth layer (Authelia/Authentik forward-auth) in front. Do **not** expose it to the open internet bare. See [`docs/deployment/04-auth-options.md`](docs/deployment/04-auth-options.md) and the rest of [`docs/deployment/`](docs/deployment/) for reverse-proxy options, CI/CD, Portainer GitOps, and backup guidance.
+Storymark has **built-in per-user accounts**: username + password sign-in with an HttpOnly session cookie, per-user libraries and reading state, and an `is_admin` role that gates the admin panel and job dashboard. First boot seeds one admin account — give it a password via `STORYMARK_BOOTSTRAP_PASSWORD` (applied only while the account has none), then manage users from `/admin`. Public exposure behind a TLS-terminating reverse proxy is supported and hardened for (`Secure` cookies, login rate limiting, per-account lockout — see ADR-0025); for MFA/SSO put your reverse proxy's auth layer (Authelia/Authentik forward-auth) in front. See [`docs/deployment/04-auth-options.md`](docs/deployment/04-auth-options.md) and the rest of [`docs/deployment/`](docs/deployment/) for reverse-proxy options, CI/CD, Portainer GitOps, and backup guidance.
 
 ---
 

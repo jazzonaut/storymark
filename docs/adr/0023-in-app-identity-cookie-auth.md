@@ -1,6 +1,6 @@
 # 0023 — In-app identity via IdentityCore + cookie session; per-user books
 
-**Status:** accepted — the admin-bearer-token aspect is superseded by [ADR-0024](0024-admin-via-user-role.md)
+**Status:** accepted — the admin-bearer-token aspect is superseded by [ADR-0024](0024-admin-via-user-role.md); the internet-exposure checkpoints are resolved by [ADR-0025](0025-internet-exposure-hardening.md)
 **Date:** 2026-06-03
 
 ## Context
@@ -61,8 +61,8 @@ request), so it needs no changes.
 - Storymark stays self-contained: no Authelia/OIDC dependency to deploy, and the
   password store upgrades cleanly to 2FA/email confirmation later if wanted.
 - CSRF is handled by `SameSite=Strict` plus the same-origin-only API — no
-  antiforgery token. Acceptable for a VPN-gated deployment; revisit before any
-  internet exposure.
+  antiforgery token. Acceptable for a VPN-gated deployment; revisited for
+  internet exposure in ADR-0025 (accepted as-is, TLS-only public ingress).
 - Flipping a public book private orphans other readers' state for it: their
   progress/bookmark/answer rows are kept but unreachable (the book 404s for
   them, indistinguishable from absent) and resurface if the owner re-publishes.
@@ -72,8 +72,8 @@ request), so it needs no changes.
   persisted unencrypted under the storage root (Program.cs), so anyone who can
   read that directory can forge any reader's session. Key confidentiality rides
   entirely on host filesystem trust, the same trust the book files already
-  require. Revisit (`ProtectKeysWith*`) together with the CSRF posture before
-  any internet exposure.
+  require. Revisited together with the CSRF posture in ADR-0025: exposure
+  changes the HTTP surface, not disk access, so the host-trust argument stands.
 - `UserOnlyStore` methods for user claims/logins/tokens would touch entities we
   deliberately leave unmapped and will throw if ever called. Only features we
   don't use reach them; mapping those tables is the known fix if one ever does.

@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using FastEndpoints;
 using Hangfire;
 using Hangfire.Dashboard;
@@ -5,6 +6,8 @@ using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.StaticFiles;
@@ -139,7 +142,10 @@ try
             options.Cookie.Name = "storymark.auth";
             options.Cookie.HttpOnly = true;
             // Strict + the same-origin SPA (ADR-0013) is the CSRF posture
-            // (ADR-0023); SameAsRequest keeps plain-HTTP LAN access working.
+            // (ADR-0023, ADR-0025). SameAsRequest marks the cookie Secure
+            // behind TLS — the forwarded proto makes the request look HTTPS
+            // (UseForwardedHeaders below) — while keeping plain-HTTP LAN
+            // access working.
             options.Cookie.SameSite = SameSiteMode.Strict;
             options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
             options.ExpireTimeSpan = TimeSpan.FromDays(30);
@@ -162,6 +168,23 @@ try
         });
     builder.Services.AddAuthorization();
 
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        // Partitioned by source address — the real client once forwarded
+        // headers have run, not the proxy. Lockout (per account) and this
+        // (per IP) cover different attacks: targeted guessing vs
+        // cross-account spraying (ADR-0025).
+        options.AddPolicy(LoginRateLimit.PolicyName, context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = LoginRateLimit.PermitLimit,
+                    Window = LoginRateLimit.Window,
+                }));
+    });
+
     builder.Services.AddFastEndpoints();
 
     var app = builder.Build();
@@ -177,6 +200,19 @@ try
     await app.Services.GetRequiredService<LlmRegistrySeeder>().SeedAsync(CancellationToken.None);
     await app.Services.GetRequiredService<ISettingsService>().LoadAllAsync(CancellationToken.None);
 
+    // Caddy terminates TLS, so without the forwarded scheme the cookie handler
+    // sees plain HTTP and never marks the session cookie Secure (ADR-0025).
+    // Trusting any proxy is deliberate: production ingress is the caddy docker
+    // network only (the API publishes no host port), and a direct LAN caller
+    // spoofing X-Forwarded-* gains nothing the LAN doesn't already grant.
+    var forwardedHeaders = new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    };
+    forwardedHeaders.KnownIPNetworks.Clear();
+    forwardedHeaders.KnownProxies.Clear();
+    app.UseForwardedHeaders(forwardedHeaders);
+
     app.UseSerilogRequestLogging();
 
     // The built SPA ships in wwwroot (ADR-0013) and is served on the same origin
@@ -189,6 +225,7 @@ try
 
     app.UseAuthentication();
     app.UseAuthorization();
+    app.UseRateLimiter();
 
     app.UseHangfireDashboard("/hangfire", new DashboardOptions
     {

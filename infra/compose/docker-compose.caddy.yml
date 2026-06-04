@@ -24,9 +24,11 @@
 #
 # The `caddy` network is external and must already exist on the host
 # (`docker network create caddy`) — it's the network your caddy-docker-proxy
-# container watches. `import lan_vpn_only` restricts access to the LAN/VPN; the
-# app's own reader surface is otherwise unauthenticated. Authelia (SSO) is
-# deferred — add `caddy.1_import: authelia` here when it lands.
+# container watches. Every surface (reader, /admin, /hangfire) requires the
+# cookie session (ADR-0023/0024), and the stack is hardened for public exposure
+# behind TLS (ADR-0025) — Caddy's automatic HTTPS satisfies that. To restrict
+# to LAN/VPN anyway, or to layer SSO/MFA in front, add a `caddy.0_import` of
+# your own snippet or forward-auth labels — see docs/deployment/04-auth-options.md.
 
 services:
   api:
@@ -63,7 +65,6 @@ services:
     labels:
       org.storymark.role: api
       caddy: ${STORYMARK_PUBLIC_HOSTS:?set STORYMARK_PUBLIC_HOSTS}
-      caddy.0_import: lan_vpn_only
       caddy.reverse_proxy: "{{upstreams 8080}}"
 
   postgres:
