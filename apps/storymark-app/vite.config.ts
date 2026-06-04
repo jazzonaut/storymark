@@ -79,15 +79,12 @@ export default defineConfig({
               expiration: { maxEntries: 256, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
-          {
-            // The library list: fresh when online, last-seen list when offline.
-            urlPattern: /\/api\/books$/,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "books-list",
-              networkTimeoutSeconds: 5,
-            },
-          },
+          // Deliberately no cache for /api/books: the list is per-user
+          // (ADR-0023) and a URL-keyed SW cache is user-blind — it would hand
+          // one account's library to another on a shared device. The offline
+          // fallback lives in the per-user Dexie partition (books-api.list).
+          // Covers/images above stay shared: they're only reachable through
+          // partition-gated content.
         ],
       },
     }),

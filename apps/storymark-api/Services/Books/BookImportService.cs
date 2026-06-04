@@ -45,7 +45,8 @@ internal sealed class BookImportService(
 {
     private const string Format = "epub";
 
-    public async Task<BookImportOutcome> ImportAsync(string fileName, Stream content, CancellationToken ct)
+    public async Task<BookImportOutcome> ImportAsync(
+        string fileName, Stream content, Guid userId, CancellationToken ct)
     {
         var maxBytes = settings.GetInt("upload.maxBytes");
         var stored = await storage.StoreBookOriginalAsync(content, maxBytes, ct);
@@ -68,30 +69,26 @@ internal sealed class BookImportService(
         var contentHash = stored.ContentHash;
         var filePath = stored.FilePath;
 
-        var existing = await db.Books.FirstOrDefaultAsync(b => b.ContentHash == contentHash, ct);
+        // Dedup is scoped to the uploader's own rows: a second copy of content
+        // someone else holds — public included — becomes its own row sharing the
+        // on-disk directory, never a reuse that would entangle ownership (the
+        // uploader must own what their upload returns; ADR-0023).
+        var existing = await db.Books
+            .FirstOrDefaultAsync(b => b.ContentHash == contentHash && b.OwnerUserId == userId, ct);
         if (existing is not null)
         {
             return BookImportOutcome.Ok(existing);
         }
 
-        return await CreateBookAsync(fileName, contentHash, filePath, maxBytes, ct);
+        return await CreateBookAsync(fileName, contentHash, filePath, userId, maxBytes, ct);
     }
 
     private async Task<BookImportOutcome> CreateBookAsync(
-        string fileName, string contentHash, string filePath, long maxBytes, CancellationToken ct)
+        string fileName, string contentHash, string filePath, Guid userId, long maxBytes, CancellationToken ct)
     {
-        var handler = handlers.First(h => h.CanHandle(Format));
-
-        BookMetadata metadata;
-        try
+        var metadata = await SniffMetadataAsync(filePath, ct);
+        if (metadata is null)
         {
-            metadata = await handler.SniffMetadataAsync(filePath, ct);
-        }
-        catch (InvalidDataException)
-        {
-            // The archive's declared decompressed size/entry count exceeds the safety
-            // limits (zip-bomb guard). The original is already stored under its hash;
-            // leave it as a bounded, recoverable orphan and reject the upload cleanly.
             return BookImportOutcome.Failed(BookImportError.DecompressedTooLarge, maxBytes);
         }
 
@@ -104,6 +101,7 @@ internal sealed class BookImportService(
         {
             Id = Guid.NewGuid(),
             ContentHash = contentHash,
+            OwnerUserId = userId,
             Title = title,
             Author = metadata.Author,
             Language = metadata.Language,
@@ -121,12 +119,14 @@ internal sealed class BookImportService(
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            // A concurrent upload of identical content won the race on the unique
-            // books_content_hash index between the dedup check above and this insert.
-            // Return its row (the same outcome the dedup branch would) instead of
-            // surfacing the constraint violation as a 500. It already enqueued the job.
+            // The same user's concurrent upload of identical content won the race
+            // on the unique books_content_hash_owner index between the dedup check
+            // above and this insert. Return its row (the same outcome the dedup
+            // branch would) instead of surfacing the constraint violation as a 500.
+            // It already enqueued the job.
             db.Entry(book).State = EntityState.Detached;
-            var winner = await db.Books.FirstOrDefaultAsync(b => b.ContentHash == contentHash, ct);
+            var winner = await db.Books.FirstOrDefaultAsync(
+                b => b.ContentHash == contentHash && b.OwnerUserId == userId, ct);
             if (winner is not null)
             {
                 return BookImportOutcome.Ok(winner);
@@ -139,6 +139,23 @@ internal sealed class BookImportService(
         // existing row (already processed or in flight) without re-queuing.
         jobs.Enqueue<ProcessBookJob>(j => j.RunAsync(book.Id, CancellationToken.None));
         return BookImportOutcome.Ok(book);
+    }
+
+    /// <summary>Null when the archive's declared decompressed size/entry count
+    /// exceeds the safety limits (zip-bomb guard). The original is already stored
+    /// under its hash; it stays a bounded, recoverable orphan and the upload is
+    /// rejected cleanly.</summary>
+    private async Task<BookMetadata?> SniffMetadataAsync(string filePath, CancellationToken ct)
+    {
+        var handler = handlers.First(h => h.CanHandle(Format));
+        try
+        {
+            return await handler.SniffMetadataAsync(filePath, ct);
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
     }
 
     private static bool IsUniqueViolation(DbUpdateException ex) =>

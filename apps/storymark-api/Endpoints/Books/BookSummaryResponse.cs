@@ -34,6 +34,12 @@ internal sealed record BookSummaryResponse
 
     public DateTimeOffset? LastOpenedAt { get; init; }
 
+    public required bool IsPublic { get; init; }
+
+    /// <summary>True when the requesting reader owns the book — gates the
+    /// delete and make-public actions in the UI (ADR-0023).</summary>
+    public required bool IsOwned { get; init; }
+
     /// <summary>When the book's derived data was last rewritten (extraction,
     /// embedding, or memory snapshots). The client stores it as a version token on
     /// its cached memory surfaces, so a reprocess invalidates them.</summary>
@@ -41,17 +47,19 @@ internal sealed record BookSummaryResponse
 
     // A freshly imported book has no chunks or sections yet (status Uploaded), so it
     // has no progress of either kind — map it through an empty entry.
-    public static BookSummaryResponse From(Book book) =>
-        From(new BookCatalogEntry
-        {
-            Book = book,
-            EmbeddedChunks = 0,
-            TotalChunks = 0,
-            ExtractedSections = 0,
-            TotalSections = 0,
-        });
+    public static BookSummaryResponse From(Book book, Guid userId) =>
+        From(
+            new BookCatalogEntry
+            {
+                Book = book,
+                EmbeddedChunks = 0,
+                TotalChunks = 0,
+                ExtractedSections = 0,
+                TotalSections = 0,
+            },
+            userId);
 
-    public static BookSummaryResponse From(BookCatalogEntry entry)
+    public static BookSummaryResponse From(BookCatalogEntry entry, Guid userId)
     {
         var book = entry.Book;
         return new BookSummaryResponse
@@ -64,6 +72,8 @@ internal sealed record BookSummaryResponse
             ProcessingStatus = book.ProcessingStatus.ToString(),
             ProcessingError = book.ProcessingError,
             UpdatedAt = book.UpdatedAt,
+            IsPublic = book.IsPublic,
+            IsOwned = book.OwnerUserId == userId,
             EmbeddingProgress =
                 book.ProcessingStatus == Domain.Books.ProcessingStatus.Embedding && entry.TotalChunks > 0
                     ? new EmbeddingProgressResponse { Embedded = entry.EmbeddedChunks, Total = entry.TotalChunks }

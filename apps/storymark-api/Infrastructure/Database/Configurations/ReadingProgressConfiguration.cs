@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Storymark.Api.Domain.Books;
+using Storymark.Api.Domain.Users;
 
 namespace Storymark.Api.Infrastructure.Database.Configurations;
 
@@ -12,6 +13,7 @@ internal sealed class ReadingProgressConfiguration : IEntityTypeConfiguration<Re
         builder.HasKey(p => p.Id);
         builder.Property(p => p.Id).HasColumnName("id");
         builder.Property(p => p.BookId).HasColumnName("book_id");
+        builder.Property(p => p.UserId).HasColumnName("user_id");
         builder.Property(p => p.DeviceId).HasColumnName("device_id");
         builder.Property(p => p.SectionIndex).HasColumnName("section_index");
         builder.Property(p => p.ParagraphIndex).HasColumnName("paragraph_index");
@@ -25,15 +27,20 @@ internal sealed class ReadingProgressConfiguration : IEntityTypeConfiguration<Re
             .HasForeignKey(p => p.BookId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasIndex(p => new { p.BookId, p.DeviceId })
-            .HasDatabaseName("reading_progress_book_device")
+        builder.HasOne<StorymarkUser>()
+            .WithMany()
+            .HasForeignKey(p => p.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(p => new { p.BookId, p.UserId, p.DeviceId })
+            .HasDatabaseName("reading_progress_book_user_device")
             .IsUnique();
 
-        // Matches GetLatestAsync: filter by book, take the newest by server receive
-        // time. The unique (book, device) index above shares the leading column but
+        // Matches GetLatestAsync: filter by book + user, take the newest by server
+        // receive time. The unique index above shares the leading columns but
         // can't serve the UpdatedAt ordering.
-        builder.HasIndex(p => new { p.BookId, p.UpdatedAt })
-            .HasDatabaseName("reading_progress_book_updated")
-            .IsDescending(false, true);
+        builder.HasIndex(p => new { p.BookId, p.UserId, p.UpdatedAt })
+            .HasDatabaseName("reading_progress_book_user_updated")
+            .IsDescending(false, false, true);
     }
 }

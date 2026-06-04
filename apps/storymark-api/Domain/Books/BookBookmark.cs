@@ -9,6 +9,8 @@ internal sealed class BookBookmark
 
     public Guid BookId { get; set; }
 
+    public Guid UserId { get; set; }
+
     public int SectionIndex { get; set; }
 
     public int? ParagraphIndex { get; set; }

@@ -5,20 +5,26 @@ using Storymark.Api.Infrastructure.Database;
 namespace Storymark.Api.Services.Books;
 
 /// <summary>Backend-authoritative reading progress (docs/plan.md §12.5). One row
-/// per <c>(book, device)</c>; the canonical position is the latest across devices.</summary>
+/// per <c>(book, user, device)</c>; a reader's canonical position is the latest
+/// across their devices.</summary>
 internal sealed class ReadingProgressService(StorymarkDbContext db)
 {
-    /// <summary>Upserts the given device's position. Returns the canonical latest
-    /// position after the write, or <c>null</c> if the book does not exist.</summary>
-    public async Task<ProgressView?> SaveAsync(Guid bookId, SaveProgressInput input, CancellationToken ct)
+    /// <summary>Upserts the given device's position for the reader. Returns the
+    /// canonical latest position after the write, or <c>null</c> if the book does
+    /// not exist.</summary>
+    public async Task<ProgressView?> SaveAsync(
+        Guid bookId,
+        Guid userId,
+        SaveProgressInput input,
+        CancellationToken ct)
     {
-        if (!await db.Books.AnyAsync(b => b.Id == bookId, ct))
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
         {
             return null;
         }
 
-        var existing = await db.ReadingProgress
-            .FirstOrDefaultAsync(p => p.BookId == bookId && p.DeviceId == input.DeviceId, ct);
+        var existing = await db.ReadingProgress.FirstOrDefaultAsync(
+            p => p.BookId == bookId && p.UserId == userId && p.DeviceId == input.DeviceId, ct);
 
         if (existing is null)
         {
@@ -26,6 +32,7 @@ internal sealed class ReadingProgressService(StorymarkDbContext db)
             {
                 Id = Guid.NewGuid(),
                 BookId = bookId,
+                UserId = userId,
                 DeviceId = input.DeviceId,
                 SectionIndex = input.SectionIndex,
                 ParagraphIndex = input.ParagraphIndex,
@@ -49,22 +56,22 @@ internal sealed class ReadingProgressService(StorymarkDbContext db)
             await db.SaveChangesAsync(ct);
         }
 
-        return await GetLatestAsync(bookId, ct);
+        return await GetLatestAsync(bookId, userId, ct);
     }
 
-    /// <summary>The latest position across all devices, or <c>null</c> if there is
-    /// none (or the book does not exist — callers needing that distinction use
-    /// <see cref="BookExistsAsync"/>).
+    /// <summary>The reader's latest position across all their devices, or <c>null</c>
+    /// if there is none (or the book does not exist — callers needing that distinction
+    /// gate on IsVisibleAsync first, as the progress endpoint does).
     ///
     /// <para>Cross-device ordering is by server receive time (<see cref="ReadingProgress.UpdatedAt"/>),
     /// not the client wall-clock: a device with a skewed clock can otherwise pin the book
     /// to an old position with a future <see cref="ReadingProgress.ClientTimestamp"/>. The
     /// client timestamp stays the same-device stale-flush guard in <see cref="SaveAsync"/>,
     /// where it's internally consistent.</para></summary>
-    public Task<ProgressView?> GetLatestAsync(Guid bookId, CancellationToken ct)
+    public Task<ProgressView?> GetLatestAsync(Guid bookId, Guid userId, CancellationToken ct)
     {
         return db.ReadingProgress.AsNoTracking()
-            .Where(p => p.BookId == bookId)
+            .Where(p => p.BookId == bookId && p.UserId == userId)
             .OrderByDescending(p => p.UpdatedAt)
             .Select(p => new ProgressView
             {
@@ -75,10 +82,5 @@ internal sealed class ReadingProgressService(StorymarkDbContext db)
                 ClientTimestamp = p.ClientTimestamp,
             })
             .FirstOrDefaultAsync(ct);
-    }
-
-    public Task<bool> BookExistsAsync(Guid bookId, CancellationToken ct)
-    {
-        return db.Books.AnyAsync(b => b.Id == bookId, ct);
     }
 }

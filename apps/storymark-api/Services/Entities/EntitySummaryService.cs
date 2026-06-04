@@ -38,8 +38,15 @@ internal sealed class EntitySummaryService(
     /// entity is unknown, or the entity is not visible at the position (the caller maps
     /// that to 404 — you can't summarise something you haven't met).</summary>
     public async Task<EntitySummaryView?> GetOrCreateAsync(
-        Guid bookId, Guid entityId, int section, int location, CancellationToken ct)
+        Guid bookId, Guid userId, Guid entityId, int section, int location, CancellationToken ct)
     {
+        // Entities aren't user-scoped, so the entity lookup alone would leak a
+        // non-visible book's people to anyone holding ids — gate the book first.
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
+        {
+            return null;
+        }
+
         var entity = await db.BookEntities.AsNoTracking()
             .FirstOrDefaultAsync(e => e.Id == entityId && e.BookId == bookId, ct);
         if (entity is null || !IsVisible(entity, section, location))

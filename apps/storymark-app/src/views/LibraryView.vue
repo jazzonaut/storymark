@@ -1,16 +1,29 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import type { BookSummary } from "@storymark/shared-types";
 import BookCard from "@/components/BookCard.vue";
 import DeleteBookDialog from "@/components/DeleteBookDialog.vue";
+import { useAuth } from "@/composables/use-auth";
 import { useBooks } from "@/composables/use-books";
 import { useOfflineSync } from "@/composables/use-offline-sync";
 import { usePwaInstall } from "@/composables/use-pwa-install";
 
-const { books, isLoading, offline, loadBooks, hasPending, remove } = useBooks();
+const { books, isLoading, offline, loadBooks, hasPending, remove, setVisibility } = useBooks();
 const { isOnline } = useOfflineSync();
 const { canInstall, promptInstall } = usePwaInstall();
+const { user, logout } = useAuth();
+const router = useRouter();
+
+async function signOut(): Promise<void> {
+  try {
+    await logout();
+  } catch {
+    // Unreachable server: the cookie outlives this click, but the reader asked
+    // to leave — drop to the login screen and let a re-login overwrite it.
+  }
+  await router.replace({ name: "login" });
+}
 
 // Either the browser reports offline, or a list load couldn't reach the API
 // (the off-VPN case navigator.onLine misses) — both mean "showing cached/no data".
@@ -26,6 +39,15 @@ const deleteError = ref<string | null>(null);
 function requestDelete(book: BookSummary): void {
   deleteError.value = null;
   pendingDelete.value = book;
+}
+
+async function toggleVisibility(book: BookSummary): Promise<void> {
+  try {
+    await setVisibility(book.bookId, !book.isPublic);
+  } catch {
+    // Server-first: the card simply doesn't flip when the API is unreachable;
+    // the state shown is always the server's.
+  }
 }
 
 function cancelDelete(): void {
@@ -98,6 +120,14 @@ onUnmounted(() => {
         >
           Install app
         </button>
+        <button
+          type="button"
+          class="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+          :title="user ? `Signed in as ${user.userName}` : 'Sign out'"
+          @click="signOut"
+        >
+          Sign out
+        </button>
         <RouterLink
           to="/upload"
           class="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
@@ -127,6 +157,7 @@ onUnmounted(() => {
         :key="book.bookId"
         :book="book"
         @request-delete="requestDelete"
+        @toggle-visibility="toggleVisibility"
       />
     </div>
 

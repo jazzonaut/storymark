@@ -1,4 +1,5 @@
 using FastEndpoints;
+using Storymark.Api.Infrastructure.Auth;
 using Storymark.Api.Services.Books;
 using Storymark.Api.Services.Entities;
 
@@ -12,8 +13,7 @@ internal sealed record MergeEntitiesRequest
 }
 
 /// <summary>Merges one or more duplicate entities into a survivor when the extractor split
-/// one real person/place/thing across rows (docs/plan.md §16). Public, like the other
-/// reader endpoints. The survivor keeps its canonical name; the losers' names fold into its
+/// one real person/place/thing across rows (docs/plan.md §16). The survivor keeps its canonical name; the losers' names fold into its
 /// aliases. 400 if no losers are given; 404 if the book, survivor, or any loser is unknown
 /// or belongs to another book.</summary>
 internal sealed class MergeEntitiesEndpoint(EntityMergeService merge)
@@ -22,7 +22,6 @@ internal sealed class MergeEntitiesEndpoint(EntityMergeService merge)
     public override void Configure()
     {
         Post("books/{bookId}/entities/{survivorId}/merge");
-        AllowAnonymous();
     }
 
     public override async Task HandleAsync(MergeEntitiesRequest req, CancellationToken ct)
@@ -35,6 +34,7 @@ internal sealed class MergeEntitiesEndpoint(EntityMergeService merge)
 
         var survivor = await merge.MergeAsync(
             Route<Guid>("bookId"),
+            User.UserId(),
             Route<Guid>("survivorId"),
             req.LoserIds,
             ct);

@@ -1,4 +1,4 @@
-# Storymark — Phase 0–6 Backlog
+# Storymark — Phase 0–7 Backlog
 
 Each item below is a **vertical slice**: an independently grabbable piece of work that, when merged, delivers something demonstrable end-to-end. Pure schema-only or pure-UI-with-mocks issues are avoided — every slice cuts through the stack as far as it needs to.
 
@@ -453,6 +453,61 @@ Estimates are rough T-shirt sizes: **S** ≈ ½ day, **M** ≈ 1–2 days, **L**
 
 ---
 
+## Phase 7 — Multi-user accounts
+
+Design decisions for this phase are in [ADR-0023](adr/0023-in-app-identity-cookie-auth.md): IdentityCore + cookie session, no self-registration, per-user books with a public flag, per-user device caches. Spoiler machinery is untouched (position stays client-supplied per request).
+
+### S7.1 — Identity foundation: users, login, 30-day sessions — **L**
+**Goal:** The app requires login. The seeded user gets a password via the admin API, signs in from a login screen, stays signed in for 30 days across restarts, and is locked out after repeated failures. Anonymous API access is gone.
+**Backend:**
+- Pin `Microsoft.AspNetCore.Identity.EntityFrameworkCore` in `Directory.Packages.props`
+- `StorymarkUser : IdentityUser<Guid>` trimmed to `users` (snake_case; email/phone/2FA columns `Ignore()`d, lockout + security-stamp columns kept)
+- EF migration: create `users` and insert the initial passwordless user (`reader`, well-known id) via raw SQL — a null password hash cannot log in, so no default credentials exist
+- `AddIdentityCore` + `UserOnlyStore<StorymarkUser, StorymarkDbContext, Guid>`; cookie scheme (`storymark.auth`, HttpOnly, `SameSite=Strict`, 30-day sliding) with `OnRedirectToLogin`/`OnRedirectToAccessDenied` overridden to 401/403; `UseAuthentication` + `UseAuthorization` before FastEndpoints
+- Endpoints: `POST /api/auth/login` (lockout via `AccessFailedAsync`), `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/password`
+- Admin (existing `AdminGroup`): `GET/POST /api/admin/users`, `POST /api/admin/users/{id}/password`
+- Remove `AllowAnonymous()` from all reader endpoints (FastEndpoints is secure-by-default once an auth scheme is registered — no route group needed) and add a `ReaderClaims.UserId()` accessor. Data is *not* yet user-scoped — state is still shared, as today
+**Frontend:**
+- `LoginView.vue` + `/login` route; router guard redirects unauthenticated to `/login` and back after sign-in; `use-auth.ts` composable hydrated from `/api/auth/me`
+- 401 from any API call raises an auth-expired signal → login view, without touching IndexedDB
+**Acceptance:** anonymous `curl /api/books` → 401; after UI login, library and reader work as before; 5 wrong passwords lock the account; cookie survives a browser restart; logout returns to `/login`; the admin bearer token still gates `/api/admin/*` independently.
+**Depends on:** Phase 0–6 (shipped)
+
+### S7.2 — Per-user reader state — **M**
+**Goal:** Two users reading the same book have fully independent progress, bookmarks, and Q&A history.
+**Backend:**
+- EF migration: `user_id` on `reading_progress`, `book_bookmarks`, `question_answers` — backfilled to the seeded user in the same migration, then `NOT NULL`; progress unique index becomes `(book_id, user_id, device_id)`
+- `ReadingProgressService` ("canonical latest" query), `BookmarkService`, and Q&A history filter by `User.UserId()`; endpoints pass it through
+**Frontend:** none — the user comes from the session cookie; request and response shapes are unchanged.
+**Acceptance:** two users (two browsers) open the same book: positions, bookmark lists, and assistant history never bleed across accounts; the pre-existing single user's progress survived the migration.
+**Depends on:** S7.1
+
+### S7.3 — Per-user books with make-public — **L**
+**Goal:** Uploaded books belong to the uploader and are invisible to other users until made public from the book card menu.
+**Backend:**
+- EF migration: `owner_user_id` (backfilled to the seeded user, `NOT NULL`) + `is_public` (default false) on `books`
+- One visibility seam (`owner_user_id = @user OR is_public`) applied by every book-scoped reader read path — library list, manifest, sections, images, progress, bookmarks, ask, entities, events, relationships, memory. A non-visible book is a 404, indistinguishable from absent
+- Upload assigns ownership; delete and `POST /api/books/{id}/visibility` (`{ isPublic }`) are owner-only; admin endpoints keep seeing all books
+**Frontend:**
+- `BookCard.vue` overlay menu gains "Make public" / "Make private" alongside Delete (owner-only), plus a public badge on the card
+- Delete action hidden for books the user doesn't own
+**Acceptance:** user B cannot see or fetch user A's private book (library, direct manifest/section/ask URLs all 404); after A makes it public, B can read it with independent progress (S7.2); only A can flip visibility or delete it.
+**Depends on:** S7.2
+
+### S7.4 — Per-user device cache + offline session expiry — **M**
+**Goal:** A shared device keeps each account's cached content, settings, and write queue isolated, and an expired session while offline degrades gracefully instead of bricking the reader.
+**Frontend:**
+- One Dexie database per account (`storymark.u.<userId>`) behind a swappable handle — the database name carries the partition, so keys, indexes, and every cache call site stay unchanged (no version bump, which also sidesteps the documented blocked-upgrade pitfall in `storymark-db.ts`). `readerSettings`' `"global"` row becomes per-account by living inside the partition
+- One-time migration moves the legacy unpartitioned `storymark` database into the seeded initial account's partition (mirroring the server-side adoptions), preserving offline books and any unsynced progress/bookmark queue, then deletes it
+- Remove the service worker's `books-list` runtime cache: a URL-keyed SW cache is user-blind and would serve one account's library to another offline; the per-user Dexie row (v2) is the offline fallback. Cover/image SW caches stay shared — only reachable through partition-gated content
+- Last-known user id in `localStorage`; on offline session expiry the app keeps serving that user's partition and queues progress/bookmark writes (extends the S2.4 queue and the ADR-0022 offline posture); reconnect 401 → login prompt → re-login triggers a queue flush. Signing in as a *different* account restarts the app shell with a full navigation (module-level state still holds the previous partition's data)
+- Logout returns to `/login` leaving partitions intact (re-login resumes a warm cache); `deviceId` stays device-scoped
+**Backend:** none.
+**Acceptance:** switching accounts on one device shows no foreign settings, bookmarks, progress, or cached private-book content; with the cookie expired while offline, the current book stays readable and page turns queue; on reconnect the user is prompted to sign in and the queue flushes.
+**Depends on:** S7.1, S7.2, S7.3
+
+---
+
 ## Cross-cutting (parallel to phases)
 
 ### CC.1 — CI: lint + typecheck + build + image push — **M**
@@ -488,6 +543,8 @@ S0.2 ─┼─ S0.3 ─ S0.5.1 ─ S0.5.2 ─ S0.5.3 ─ S0.5.4 ─ S0.5.5
                                        │                   
                                        └─ S6.1 ─ S6.2     
                                                 └─ S6.3 ─ S6.4
+
+(after Phase 6)  S7.1 ─ S7.2 ─ S7.3 ─ S7.4
 ```
 
 ## Suggested order of attack
@@ -500,5 +557,6 @@ S0.2 ─┼─ S0.3 ─ S0.5.1 ─ S0.5.2 ─ S0.5.3 ─ S0.5.4 ─ S0.5.5
 6. **S4.1 → S4.2** for assistant; **S4.3 → S4.4** for selection.
 7. **S5.1 → S5.2 → S5.3 → S5.4** for recap UX.
 8. **S6.1 → (S6.2, S6.3)** parallel → **S6.4** wraps the Memory panel.
+9. **S7.1 → S7.2 → S7.3 → S7.4** as a strict chain — each slice's migration backfills against the previous one's schema.
 
 At any point after S4.2, you have a usable daily reader that already answers questions about what you've read. Everything after that is depth.

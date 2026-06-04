@@ -16,14 +16,14 @@ namespace Storymark.Api.Services.Books;
 /// which outlives the book.</summary>
 internal sealed class BookDeletionService(StorymarkDbContext db, FileStorageService storage)
 {
-    /// <returns><c>true</c> if the book existed and was deleted; <c>false</c> if no
-    /// book has that id.</returns>
-    public async Task<bool> DeleteAsync(Guid bookId, CancellationToken ct)
+    /// <summary>Deletes the caller's book. Only the owner may delete (ADR-0023);
+    /// a book the caller can't see reports <see cref="OwnedBookOutcome.NotFound"/>.</summary>
+    public async Task<OwnedBookOutcome> DeleteAsync(Guid bookId, Guid userId, CancellationToken ct)
     {
-        var book = await db.Books.FirstOrDefaultAsync(b => b.Id == bookId, ct);
+        var (outcome, book) = await db.Books.ResolveOwnedAsync(bookId, userId, ct);
         if (book is null)
         {
-            return false;
+            return outcome;
         }
 
         var contentHash = book.ContentHash;
@@ -31,7 +31,13 @@ internal sealed class BookDeletionService(StorymarkDbContext db, FileStorageServ
         db.Books.Remove(book);
         await db.SaveChangesAsync(ct);
 
-        storage.DeleteBookDirectory(contentHash);
-        return true;
+        // Per-owner copies of identical content share the on-disk directory
+        // (dedup by hash, ADR-0023): remove it only once no row references it.
+        if (!await db.Books.AnyAsync(b => b.ContentHash == contentHash, ct))
+        {
+            storage.DeleteBookDirectory(contentHash);
+        }
+
+        return OwnedBookOutcome.Succeeded;
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Storymark.Api.Domain.Books;
+using Storymark.Api.Domain.Users;
 
 namespace Storymark.Api.Infrastructure.Database.Configurations;
 
@@ -14,6 +15,7 @@ internal sealed class QuestionAnswerConfiguration : IEntityTypeConfiguration<Que
         builder.HasKey(q => q.Id);
         builder.Property(q => q.Id).HasColumnName("id");
         builder.Property(q => q.BookId).HasColumnName("book_id");
+        builder.Property(q => q.UserId).HasColumnName("user_id");
         builder.Property(q => q.Question).HasColumnName("question");
         builder.Property(q => q.Answer).HasColumnName("answer");
         builder.Property(q => q.CurrentSection).HasColumnName("current_section");
@@ -37,6 +39,11 @@ internal sealed class QuestionAnswerConfiguration : IEntityTypeConfiguration<Que
         builder.HasOne<Book>()
             .WithMany()
             .HasForeignKey(q => q.BookId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne<StorymarkUser>()
+            .WithMany()
+            .HasForeignKey(q => q.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(q => new { q.BookId, q.CreatedAt })

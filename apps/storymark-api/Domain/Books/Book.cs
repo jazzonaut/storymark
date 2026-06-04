@@ -7,9 +7,16 @@ internal sealed class Book
 {
     public Guid Id { get; set; }
 
-    /// <summary>SHA-256 of the original file; the dedup key and the on-disk
-    /// directory name under <c>/data/books/</c>.</summary>
+    /// <summary>SHA-256 of the original file; the per-owner dedup key and the
+    /// on-disk directory name under <c>/data/books/</c>. Two owners' private
+    /// copies of the same content share the directory (ADR-0023), so deletion
+    /// only removes it once no row references the hash.</summary>
     public required string ContentHash { get; set; }
+
+    /// <summary>The uploader. Visibility is owner-or-public (ADR-0023).</summary>
+    public Guid OwnerUserId { get; set; }
+
+    public bool IsPublic { get; set; }
 
     public required string Title { get; set; }
 

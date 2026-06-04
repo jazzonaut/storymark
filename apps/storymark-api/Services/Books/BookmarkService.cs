@@ -9,17 +9,17 @@ namespace Storymark.Api.Services.Books;
 /// replay them safely.</summary>
 internal sealed class BookmarkService(StorymarkDbContext db)
 {
-    /// <summary>All bookmarks for a book, ordered by reading position, or
+    /// <summary>The reader's bookmarks for a book, ordered by reading position, or
     /// <c>null</c> if the book does not exist.</summary>
-    public async Task<IReadOnlyList<BookmarkView>?> ListAsync(Guid bookId, CancellationToken ct)
+    public async Task<IReadOnlyList<BookmarkView>?> ListAsync(Guid bookId, Guid userId, CancellationToken ct)
     {
-        if (!await db.Books.AnyAsync(b => b.Id == bookId, ct))
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
         {
             return null;
         }
 
         return await db.BookBookmarks.AsNoTracking()
-            .Where(b => b.BookId == bookId)
+            .Where(b => b.BookId == bookId && b.UserId == userId)
             .OrderBy(b => b.SectionIndex)
             .ThenBy(b => b.LocationStart)
             .Select(b => new BookmarkView
@@ -34,22 +34,26 @@ internal sealed class BookmarkService(StorymarkDbContext db)
             .ToListAsync(ct);
     }
 
-    /// <summary>Creates or replaces a bookmark by its id, scoped to the route book.
-    /// Returns <see cref="BookmarkUpsertOutcome.BookNotFound"/> if the book does not
-    /// exist, or <see cref="BookmarkUpsertOutcome.IdBelongsToAnotherBook"/> if the id is
-    /// already owned by a different book (the mutation never reassigns a bookmark across
-    /// books — the route book id scopes it).</summary>
-    public async Task<BookmarkUpsertResult> UpsertAsync(Guid bookId, SaveBookmarkInput input, CancellationToken ct)
+    /// <summary>Creates or replaces a bookmark by its id, scoped to the route book and
+    /// the reader. Returns <see cref="BookmarkUpsertOutcome.BookNotFound"/> if the book
+    /// does not exist, or <see cref="BookmarkUpsertOutcome.IdBelongsToAnotherOwner"/> if
+    /// the id is already owned by a different book or a different reader (the mutation
+    /// never reassigns a bookmark across either boundary).</summary>
+    public async Task<BookmarkUpsertResult> UpsertAsync(
+        Guid bookId,
+        Guid userId,
+        SaveBookmarkInput input,
+        CancellationToken ct)
     {
-        if (!await db.Books.AnyAsync(b => b.Id == bookId, ct))
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
         {
             return new BookmarkUpsertResult { Outcome = BookmarkUpsertOutcome.BookNotFound };
         }
 
         var existing = await db.BookBookmarks.FirstOrDefaultAsync(b => b.Id == input.Id, ct);
-        if (existing is not null && existing.BookId != bookId)
+        if (existing is not null && (existing.BookId != bookId || existing.UserId != userId))
         {
-            return new BookmarkUpsertResult { Outcome = BookmarkUpsertOutcome.IdBelongsToAnotherBook };
+            return new BookmarkUpsertResult { Outcome = BookmarkUpsertOutcome.IdBelongsToAnotherOwner };
         }
 
         if (existing is null)
@@ -58,6 +62,7 @@ internal sealed class BookmarkService(StorymarkDbContext db)
             {
                 Id = input.Id,
                 BookId = bookId,
+                UserId = userId,
                 SectionIndex = input.SectionIndex,
                 ParagraphIndex = input.ParagraphIndex,
                 LocationStart = input.LocationStart,
@@ -67,7 +72,7 @@ internal sealed class BookmarkService(StorymarkDbContext db)
         }
         else
         {
-            // existing.BookId == bookId here, so the upsert stays within the route book.
+            // existing matches (bookId, userId) here, so the upsert stays in scope.
             existing.SectionIndex = input.SectionIndex;
             existing.ParagraphIndex = input.ParagraphIndex;
             existing.LocationStart = input.LocationStart;
@@ -92,12 +97,12 @@ internal sealed class BookmarkService(StorymarkDbContext db)
         };
     }
 
-    /// <summary>Removes a bookmark by id. Idempotent — a no-op if it is already
-    /// gone.</summary>
-    public async Task DeleteAsync(Guid bookId, Guid bookmarkId, CancellationToken ct)
+    /// <summary>Removes the reader's bookmark by id. Idempotent — a no-op if it is
+    /// already gone (or never theirs).</summary>
+    public async Task DeleteAsync(Guid bookId, Guid userId, Guid bookmarkId, CancellationToken ct)
     {
         await db.BookBookmarks
-            .Where(b => b.Id == bookmarkId && b.BookId == bookId)
+            .Where(b => b.Id == bookmarkId && b.BookId == bookId && b.UserId == userId)
             .ExecuteDeleteAsync(ct);
     }
 }

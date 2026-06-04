@@ -16,21 +16,53 @@ export function isTimeout(caught: unknown): boolean {
   return caught instanceof DOMException && caught.name === "TimeoutError";
 }
 
+let authExpiredHandler: (() => void) | null = null;
+
+/** Registered once by `use-auth` (a callback rather than an import so this
+ * module stays dependency-free — `use-auth` imports the API layer). */
+export function setAuthExpiredHandler(handler: () => void): void {
+  authExpiredHandler = handler;
+}
+
+/** Raises the auth-expired signal directly — for authed content the browser
+ * loads itself (`<img>` covers and inline book images), whose 401s never pass
+ * through {@link apiFetch}. `use-auth` probes the session after such a failure
+ * and calls this when the session is gone. */
+export function raiseAuthExpired(): void {
+  authExpiredHandler?.();
+}
+
+/** A reader-endpoint 401 means the session cookie expired or was revoked.
+ * `/api/auth/*` is excluded (a login 401 is a credential failure and the `me`
+ * probe answers 401 for "anonymous"); `/api/admin/*` is excluded because it is
+ * gated by the operator bearer token, not the reader session. */
+function notifyIfAuthExpired(path: string, response: Response): void {
+  if (
+    response.status === 401 &&
+    !path.startsWith("/api/auth/") &&
+    !path.startsWith("/api/admin/")
+  ) {
+    raiseAuthExpired();
+  }
+}
+
 /** The single fetch primitive for the app: identical to `fetch` but with a
  * mandatory abort timeout so no request can hang forever. A timeout surfaces as
  * the standard `TimeoutError` (an `AbortError`-family `DOMException`) — see
  * {@link isTimeout}. A caller-supplied `init.signal` is honoured alongside the
  * timeout. */
-export function apiFetch(
+export async function apiFetch(
   path: string,
   init: RequestInit = {},
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<Response> {
   const timeout = AbortSignal.timeout(timeoutMs);
-  return fetch(path, {
+  const response = await fetch(path, {
     ...init,
     signal: init.signal != null ? AbortSignal.any([init.signal, timeout]) : timeout,
   });
+  notifyIfAuthExpired(path, response);
+  return response;
 }
 
 /** The happy-path JSON wrapper: fetches with a timeout and parses the body,

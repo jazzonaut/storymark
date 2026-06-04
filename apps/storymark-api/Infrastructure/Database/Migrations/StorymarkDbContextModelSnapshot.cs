@@ -58,9 +58,17 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasColumnType("text")
                         .HasColumnName("format");
 
+                    b.Property<bool>("IsPublic")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_public");
+
                     b.Property<string>("Language")
                         .HasColumnType("text")
                         .HasColumnName("language");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
 
                     b.Property<string>("ProcessingError")
                         .HasColumnType("text")
@@ -82,9 +90,15 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ContentHash")
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("ContentHash", "OwnerUserId")
                         .IsUnique()
-                        .HasDatabaseName("books_content_hash");
+                        .HasDatabaseName("books_content_hash_owner");
+
+                    b.HasIndex("IsPublic")
+                        .HasDatabaseName("books_public")
+                        .HasFilter("is_public");
 
                     b.ToTable("books", (string)null);
                 });
@@ -120,10 +134,16 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("section_index");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("BookId")
-                        .HasDatabaseName("book_bookmarks_book");
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("BookId", "UserId")
+                        .HasDatabaseName("book_bookmarks_book_user");
 
                     b.ToTable("book_bookmarks", (string)null);
                 });
@@ -664,7 +684,13 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("sources");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("BookId", "CreatedAt")
                         .IsDescending(false, true)
@@ -713,15 +739,21 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("BookId", "DeviceId")
-                        .IsUnique()
-                        .HasDatabaseName("reading_progress_book_device");
+                    b.HasIndex("UserId");
 
-                    b.HasIndex("BookId", "UpdatedAt")
-                        .IsDescending(false, true)
-                        .HasDatabaseName("reading_progress_book_updated");
+                    b.HasIndex("BookId", "UserId", "DeviceId")
+                        .IsUnique()
+                        .HasDatabaseName("reading_progress_book_user_device");
+
+                    b.HasIndex("BookId", "UserId", "UpdatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("reading_progress_book_user_updated");
 
                     b.ToTable("reading_progress", (string)null);
                 });
@@ -980,11 +1012,82 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                     b.ToTable("settings", (string)null);
                 });
 
+            modelBuilder.Entity("Storymark.Api.Domain.Users.StorymarkUser", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AccessFailedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("access_failed_count");
+
+                    b.Property<string>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("text")
+                        .HasColumnName("concurrency_stamp");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("LockoutEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("lockout_enabled");
+
+                    b.Property<DateTimeOffset?>("LockoutEnd")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lockout_end");
+
+                    b.Property<string>("NormalizedUserName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("normalized_user_name");
+
+                    b.Property<string>("PasswordHash")
+                        .HasColumnType("text")
+                        .HasColumnName("password_hash");
+
+                    b.Property<string>("SecurityStamp")
+                        .HasColumnType("text")
+                        .HasColumnName("security_stamp");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("user_name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormalizedUserName")
+                        .IsUnique();
+
+                    b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("Storymark.Api.Domain.Books.Book", b =>
+                {
+                    b.HasOne("Storymark.Api.Domain.Users.StorymarkUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Storymark.Api.Domain.Books.BookBookmark", b =>
                 {
                     b.HasOne("Storymark.Api.Domain.Books.Book", null)
                         .WithMany()
                         .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Storymark.Api.Domain.Users.StorymarkUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -1107,6 +1210,12 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasForeignKey("BookId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("Storymark.Api.Domain.Users.StorymarkUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Storymark.Api.Domain.Books.ReadingProgress", b =>
@@ -1114,6 +1223,12 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                     b.HasOne("Storymark.Api.Domain.Books.Book", null)
                         .WithMany()
                         .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Storymark.Api.Domain.Users.StorymarkUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

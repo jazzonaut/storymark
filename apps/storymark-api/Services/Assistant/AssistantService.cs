@@ -7,6 +7,7 @@ using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Infrastructure.Text;
 using Storymark.Api.Prompts;
+using Storymark.Api.Services.Books;
 using Storymark.Api.Services.Llm;
 using Storymark.Api.Services.Retrieval;
 using Storymark.Api.Services.Settings;
@@ -64,10 +65,11 @@ internal sealed class AssistantService(
     /// exist (the caller maps that to 404).</summary>
     public async Task<AssistantAnswer?> AnswerAsync(
         Guid bookId,
+        Guid userId,
         AssistantQuestion request,
         CancellationToken ct)
     {
-        if (!await db.Books.AnyAsync(b => b.Id == bookId, ct))
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
         {
             return null;
         }
@@ -108,6 +110,7 @@ internal sealed class AssistantService(
         {
             Id = Guid.NewGuid(),
             BookId = bookId,
+            UserId = userId,
             Question = question,
             Answer = answer,
             CurrentSection = currentSection,

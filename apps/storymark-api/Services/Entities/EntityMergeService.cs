@@ -26,6 +26,22 @@ internal sealed class EntityMergeService(StorymarkDbContext db)
     /// unknown or belongs to another book, or nothing remains to merge once the survivor is
     /// removed from the loser set.</summary>
     public async Task<StoryGuideEntityView?> MergeAsync(
+        Guid bookId, Guid userId, Guid survivorId, IReadOnlyList<Guid> loserIds, CancellationToken ct)
+    {
+        // Merging mutates the shared extraction data; any reader the book is
+        // visible to may curate it (a public book is household-curated), but a
+        // non-visible book must stay a 404.
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
+        {
+            return null;
+        }
+
+        return await MergeUnscopedAsync(bookId, survivorId, loserIds, ct);
+    }
+
+    /// <summary>Pipeline-side merge (the alias reconciliation pass in
+    /// <c>SectionExtractionJob</c>): no reader in context, so no visibility gate.</summary>
+    public async Task<StoryGuideEntityView?> MergeUnscopedAsync(
         Guid bookId, Guid survivorId, IReadOnlyList<Guid> loserIds, CancellationToken ct)
     {
         var distinctLosers = loserIds.Where(id => id != survivorId).Distinct().ToList();

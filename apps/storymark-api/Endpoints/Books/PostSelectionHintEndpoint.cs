@@ -1,4 +1,5 @@
 using FastEndpoints;
+using Storymark.Api.Infrastructure.Auth;
 using Storymark.Api.Services.Selection;
 
 namespace Storymark.Api.Endpoints.Books;
@@ -31,7 +32,7 @@ internal sealed record SelectionHintResponse
 
 /// <summary>Resolves a text selection to an instant entity card or a fast 1B
 /// hint, using only content the reader has already passed (docs/plan.md §5.5,
-/// §11.7). Public, like the other reader endpoints. 400 on a blank selection,
+/// §11.7). 400 on a blank selection,
 /// 404 if the book is unknown.</summary>
 internal sealed class PostSelectionHintEndpoint(SelectionHintService selection)
     : Endpoint<SelectionHintRequest, SelectionHintResponse>
@@ -39,7 +40,6 @@ internal sealed class PostSelectionHintEndpoint(SelectionHintService selection)
     public override void Configure()
     {
         Post("books/{id}/selection/hint");
-        AllowAnonymous();
     }
 
     public override async Task HandleAsync(SelectionHintRequest req, CancellationToken ct)
@@ -52,6 +52,7 @@ internal sealed class PostSelectionHintEndpoint(SelectionHintService selection)
 
         var result = await selection.GetHintAsync(
             Route<Guid>("id"),
+            User.UserId(),
             req.SelectedText,
             req.SectionIndex,
             req.CurrentLocation,

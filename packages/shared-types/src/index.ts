@@ -48,6 +48,10 @@ export interface BookSummary {
   readonly extractionProgress: ExtractionProgress | null;
   readonly lastReadSection: number | null;
   readonly lastOpenedAt: string | null;
+  readonly isPublic: boolean;
+  /** True when the signed-in reader owns the book — gates the delete and
+   * make-public actions. */
+  readonly isOwned: boolean;
   /** Bumped (ISO 8601) whenever a processing job rewrites the book's derived data
    * — extraction, embedding, or memory snapshots. The client stores it with each
    * cached memory surface (timeline, graph, Story Guide, summary) as a version
@@ -256,4 +260,11 @@ export interface MemorySnapshot {
   readonly summarySoFar: string;
   readonly timeline: readonly string[];
   readonly openThreads: readonly string[];
+}
+
+/** The signed-in reader, as returned by `POST /api/auth/login` and
+ * `GET /api/auth/me`. Mirrors AuthUserView. */
+export interface AuthUser {
+  readonly userId: string;
+  readonly userName: string;
 }

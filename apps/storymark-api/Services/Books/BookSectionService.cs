@@ -12,9 +12,10 @@ internal sealed class BookSectionService(
     StorymarkDbContext db, FileStorageService storage, BookEntityService entities)
 {
     /// <summary>The section manifest, or <c>null</c> if the book does not exist.</summary>
-    public async Task<IReadOnlyList<SectionSummaryView>?> GetManifestAsync(Guid bookId, CancellationToken ct)
+    public async Task<IReadOnlyList<SectionSummaryView>?> GetManifestAsync(
+        Guid bookId, Guid userId, CancellationToken ct)
     {
-        if (!await db.Books.AnyAsync(b => b.Id == bookId, ct))
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
         {
             return null;
         }
@@ -34,8 +35,16 @@ internal sealed class BookSectionService(
 
     /// <summary>Full content for one section, or <c>null</c> if the book/section
     /// does not exist.</summary>
-    public async Task<SectionContentView?> GetSectionAsync(Guid bookId, int sectionIndex, CancellationToken ct)
+    public async Task<SectionContentView?> GetSectionAsync(
+        Guid bookId, Guid userId, int sectionIndex, CancellationToken ct)
     {
+        // The section lookup alone would serve a non-visible book's content to
+        // anyone holding its id — the visibility gate is the 404, not the join.
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
+        {
+            return null;
+        }
+
         var section = await db.BookSections.AsNoTracking()
             .FirstOrDefaultAsync(s => s.BookId == bookId && s.SectionIndex == sectionIndex, ct);
         if (section is null)
@@ -75,9 +84,11 @@ internal sealed class BookSectionService(
     /// <summary>Resolves an inline resource request to a servable image file, or
     /// <c>null</c> if the book is unknown, the path escapes/doesn't exist, or the
     /// file is not an image type we serve.</summary>
-    public async Task<BookResourceView?> ResolveResourceAsync(Guid bookId, string requestPath, CancellationToken ct)
+    public async Task<BookResourceView?> ResolveResourceAsync(
+        Guid bookId, Guid userId, string requestPath, CancellationToken ct)
     {
-        var hash = await db.Books.Where(b => b.Id == bookId)
+        var hash = await db.Books.VisibleTo(userId)
+            .Where(b => b.Id == bookId)
             .Select(b => b.ContentHash)
             .FirstOrDefaultAsync(ct);
         if (hash is null)

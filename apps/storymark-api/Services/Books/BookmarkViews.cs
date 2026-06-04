@@ -38,9 +38,10 @@ internal enum BookmarkUpsertOutcome
     Saved,
     BookNotFound,
 
-    /// <summary>The bookmark id already belongs to a different book. The route book
-    /// scopes the mutation, so the write is rejected rather than moving the bookmark.</summary>
-    IdBelongsToAnotherBook,
+    /// <summary>The bookmark id already belongs to a different book or a different
+    /// reader. The route book and the session user scope the mutation, so the write
+    /// is rejected rather than moving the bookmark.</summary>
+    IdBelongsToAnotherOwner,
 }
 
 /// <summary>The result of <see cref="BookmarkService.UpsertAsync"/>: an outcome plus the

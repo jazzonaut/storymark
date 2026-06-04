@@ -31,6 +31,7 @@ interface UseBooks {
   hasPending: () => boolean;
   cacheParams: (bookId: string) => BookCacheParams;
   upsert: (book: BookSummary) => void;
+  setVisibility: (bookId: string, isPublic: boolean) => Promise<void>;
   remove: (bookId: string) => Promise<void>;
 }
 
@@ -80,6 +81,13 @@ export function useBooks(): UseBooks {
     books.value = [book, ...without];
   }
 
+  // Server-first: the list only changes once the server confirmed the flip, so
+  // an offline toggle visibly does nothing rather than lying.
+  async function setVisibility(bookId: string, isPublic: boolean): Promise<void> {
+    const updated = await booksApi.setVisibility(bookId, isPublic);
+    books.value = books.value.map((existing) => (existing.bookId === bookId ? updated : existing));
+  }
+
   // Wipe the book server-side, then drop its local caches and the in-memory list
   // entry. Server-first: if the request fails we keep the book rather than hiding
   // a book that still exists.
@@ -89,5 +97,15 @@ export function useBooks(): UseBooks {
     books.value = books.value.filter((existing) => existing.bookId !== bookId);
   }
 
-  return { books, isLoading, offline, loadBooks, hasPending, cacheParams, upsert, remove };
+  return {
+    books,
+    isLoading,
+    offline,
+    loadBooks,
+    hasPending,
+    cacheParams,
+    upsert,
+    setVisibility,
+    remove,
+  };
 }

@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import type { Ref } from "vue";
 import type { Section } from "@storymark/shared-types";
+import { apiFetch } from "@/api/http";
 import { readerApi } from "@/api/reader-api";
 import { useBooks } from "@/composables/use-books";
 import type { BookVersion } from "@/db/storymark-db";
@@ -47,8 +48,10 @@ async function warmImageCache(urls: readonly string[]): Promise<void> {
   for (let start = 0; start < urls.length; start += IMAGE_BATCH_SIZE) {
     const batch = urls.slice(start, start + IMAGE_BATCH_SIZE);
     // Batches run sequentially to avoid opening a connection per image in image-heavy books.
+    // apiFetch rather than bare fetch: a 401 here (session died mid-warm) then
+    // raises the auth-expired signal instead of silently failing every image.
     // eslint-disable-next-line no-await-in-loop
-    await Promise.all(batch.map((url) => fetch(url).catch(() => undefined)));
+    await Promise.all(batch.map((url) => apiFetch(url).catch(() => undefined)));
   }
 }
 

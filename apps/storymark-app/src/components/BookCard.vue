@@ -5,13 +5,21 @@ import type { BookSummary, ProcessingStatus } from "@storymark/shared-types";
 
 const props = defineProps<{ book: BookSummary }>();
 
-const emit = defineEmits<{ (e: "request-delete", book: BookSummary): void }>();
+const emit = defineEmits<{
+  (e: "request-delete", book: BookSummary): void;
+  (e: "toggle-visibility", book: BookSummary): void;
+}>();
 
 const menuOpen = ref(false);
 
 function requestDelete(): void {
   menuOpen.value = false;
   emit("request-delete", props.book);
+}
+
+function toggleVisibility(): void {
+  menuOpen.value = false;
+  emit("toggle-visibility", props.book);
 }
 
 // Sections exist from Parsed onward (S2.1); only then can the reader open.
@@ -92,6 +100,15 @@ const coverFailed = ref(false);
         >
           {{ statusLabel }}
         </span>
+        <span
+          v-if="book.isPublic"
+          class="absolute bottom-1 right-1 inline-block w-fit rounded-sm bg-sky-100 px-1.5 py-px text-[10px] font-medium text-sky-800 opacity-90 dark:bg-sky-900 dark:text-sky-200"
+          :title="
+            book.isOwned ? 'Visible to everyone in the household' : 'Shared by another reader'
+          "
+        >
+          Public
+        </span>
       </div>
       <h2 class="mt-2 line-clamp-2 text-sm font-medium" :title="book.title">{{ book.title }}</h2>
       <p class="text-xs text-[var(--sm-muted)]">{{ book.author ?? "Unknown author" }}</p>
@@ -104,7 +121,10 @@ const coverFailed = ref(false);
       </p>
     </component>
 
+    <!-- Owner-only: a public book from another reader has no actions (delete and
+         visibility are owner-gated server-side, ADR-0023). -->
     <button
+      v-if="book.isOwned"
       type="button"
       aria-label="Book actions"
       class="absolute right-1.5 top-1.5 z-10 flex size-7 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition hover:bg-black/65"
@@ -118,6 +138,13 @@ const coverFailed = ref(false);
       <div
         class="absolute right-1.5 top-9 z-20 w-32 overflow-hidden rounded-md border border-[var(--sm-muted)]/20 bg-[var(--sm-bg)] py-1 shadow-lg"
       >
+        <button
+          type="button"
+          class="block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--sm-surface)]"
+          @click="toggleVisibility"
+        >
+          {{ book.isPublic ? "Make private" : "Make public" }}
+        </button>
         <button
           type="button"
           class="block w-full px-3 py-1.5 text-left text-sm text-red-700 hover:bg-[var(--sm-surface)] dark:text-red-300"

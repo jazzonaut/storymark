@@ -8,13 +8,11 @@ namespace Storymark.Api.Services.Books;
 /// "story so far" without leaking anything past the reader's position.</summary>
 internal sealed class BookMemoryService(StorymarkDbContext db)
 {
-    /// <summary>Distinguishes "book unknown" (404) from "book known, no snapshot yet"
-    /// (204) at the endpoint.</summary>
-    public async Task<bool> BookExistsAsync(Guid bookId, CancellationToken ct) =>
-        await db.Books.AnyAsync(b => b.Id == bookId, ct);
-
     /// <summary>The most recent snapshot whose boundary is at-or-before
-    /// <c>(upToSection, upToLocation)</c>, or <c>null</c> if none exists yet.</summary>
+    /// <c>(upToSection, upToLocation)</c>, or <c>null</c> if none exists yet.
+    /// Callers gate visibility first (the memory endpoint's IsVisibleAsync,
+    /// CurrentSceneService's own gate) — exactly once, so this method does not
+    /// re-run the check.</summary>
     public async Task<MemoryView?> GetLatestAsync(
         Guid bookId, int upToSection, int upToLocation, CancellationToken ct) =>
         await db.BookMemorySnapshots.AsNoTracking()

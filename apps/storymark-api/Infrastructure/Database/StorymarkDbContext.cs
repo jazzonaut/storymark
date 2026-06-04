@@ -3,12 +3,15 @@ using Storymark.Api.Domain.Books;
 using Storymark.Api.Domain.Llm;
 using Storymark.Api.Domain.LlmCalls;
 using Storymark.Api.Domain.Settings;
+using Storymark.Api.Domain.Users;
 
 namespace Storymark.Api.Infrastructure.Database;
 
 internal sealed class StorymarkDbContext(DbContextOptions<StorymarkDbContext> options) : DbContext(options)
 {
     public DbSet<Setting> Settings => Set<Setting>();
+
+    public DbSet<StorymarkUser> Users => Set<StorymarkUser>();
 
     public DbSet<LlmCall> LlmCalls => Set<LlmCall>();
 

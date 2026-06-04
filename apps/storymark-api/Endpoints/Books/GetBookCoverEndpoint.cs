@@ -2,24 +2,24 @@ using System.Net;
 using System.Text;
 using FastEndpoints;
 using Storymark.Api.Domain.Books;
+using Storymark.Api.Infrastructure.Auth;
 using Storymark.Api.Services.Books;
 
 namespace Storymark.Api.Endpoints.Books;
 
 /// <summary>Serves a book cover. Until S2.1 extracts real covers, no book has a
-/// <c>cover_path</c>, so this returns a generated SVG placeholder. Public.</summary>
+/// <c>cover_path</c>, so this returns a generated SVG placeholder.</summary>
 internal sealed class GetBookCoverEndpoint(BookCatalogService catalog) : EndpointWithoutRequest
 {
     public override void Configure()
     {
         Get("books/{id}/cover");
-        AllowAnonymous();
     }
 
     public override async Task HandleAsync(CancellationToken ct)
     {
         var id = Route<Guid>("id");
-        var book = await catalog.FindAsync(id, ct);
+        var book = await catalog.FindAsync(id, User.UserId(), ct);
         if (book is null)
         {
             await Send.NotFoundAsync(ct);

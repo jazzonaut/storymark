@@ -2,12 +2,17 @@ using FastEndpoints;
 using Hangfire;
 using Hangfire.Dashboard;
 using Hangfire.PostgreSql;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Pgvector.EntityFrameworkCore;
 using Serilog;
 using Serilog.Formatting.Compact;
+using Storymark.Api.Domain.Users;
 using Storymark.Api.Infrastructure.Auth;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Infrastructure.Llm;
@@ -105,6 +110,58 @@ try
 
     builder.Services.AddSingleton<AdminAuthPreProcessor>();
 
+    // Cookie tickets are encrypted with data-protection keys; the default key
+    // store is the container filesystem, which a redeploy wipes — signing every
+    // reader out. Persist keys under the storage root instead (ADR-0023).
+    var storageRoot = builder.Configuration.GetValue<string>("Storage:RootPath")
+        ?? throw new InvalidOperationException("Storage:RootPath is not configured.");
+    var dataProtectionKeysPath = Directory.CreateDirectory(Path.Combine(storageRoot, "dataprotection-keys"));
+    builder.Services.AddDataProtection().PersistKeysToFileSystem(dataProtectionKeysPath);
+
+    builder.Services
+        .AddIdentityCore<StorymarkUser>(options =>
+        {
+            options.Lockout.MaxFailedAccessAttempts = 5;
+            options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+            // Length-only policy: composition rules push a household toward
+            // weaker memorable-but-mangled passwords; a longer minimum doesn't.
+            options.Password.RequiredLength = 8;
+            options.Password.RequireDigit = false;
+            options.Password.RequireLowercase = false;
+            options.Password.RequireUppercase = false;
+            options.Password.RequireNonAlphanumeric = false;
+        })
+        .AddUserStore<UserOnlyStore<StorymarkUser, StorymarkDbContext, Guid>>();
+
+    builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+        .AddCookie(options =>
+        {
+            options.Cookie.Name = "storymark.auth";
+            options.Cookie.HttpOnly = true;
+            // Strict + the same-origin SPA (ADR-0013) is the CSRF posture
+            // (ADR-0023); SameAsRequest keeps plain-HTTP LAN access working.
+            options.Cookie.SameSite = SameSiteMode.Strict;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            options.ExpireTimeSpan = TimeSpan.FromDays(30);
+            options.SlidingExpiration = true;
+            // An API answers 401/403; the cookie handler's default is an MVC
+            // login-page redirect.
+            options.Events.OnRedirectToLogin = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            };
+            options.Events.OnRedirectToAccessDenied = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            };
+            // A password set/change/reset rotates the account's security stamp;
+            // this is what makes that rotation actually end other sessions.
+            options.Events.OnValidatePrincipal = ReaderCookie.ValidatePrincipalAsync;
+        });
+    builder.Services.AddAuthorization();
+
     builder.Services.AddFastEndpoints();
 
     var app = builder.Build();
@@ -128,6 +185,9 @@ try
     staticContentTypes.Mappings[".webmanifest"] = "application/manifest+json";
     app.UseDefaultFiles();
     app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = staticContentTypes });
+
+    app.UseAuthentication();
+    app.UseAuthorization();
 
     var settingsService = app.Services.GetRequiredService<ISettingsService>();
     app.UseHangfireDashboard("/hangfire", new DashboardOptions

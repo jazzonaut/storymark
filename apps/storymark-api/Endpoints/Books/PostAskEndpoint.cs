@@ -1,5 +1,6 @@
 using FastEndpoints;
 using Storymark.Api.Domain.Books;
+using Storymark.Api.Infrastructure.Auth;
 using Storymark.Api.Services.Assistant;
 
 namespace Storymark.Api.Endpoints.Books;
@@ -38,7 +39,7 @@ internal sealed record AskResponse
 /// <summary>Answers a question about the book using only content the reader has
 /// already passed (docs/plan.md §11.6, §18). The optional selection and history
 /// make a turn conversational while staying stateless server-side — the client
-/// carries the thread (docs/adr/0021). Public, like the other reader endpoints.
+/// carries the thread (docs/adr/0021).
 /// 400 on a blank question, 404 if the book is unknown.</summary>
 internal sealed class PostAskEndpoint(AssistantService assistant)
     : Endpoint<AskRequest, AskResponse>
@@ -46,7 +47,6 @@ internal sealed class PostAskEndpoint(AssistantService assistant)
     public override void Configure()
     {
         Post("books/{id}/ask");
-        AllowAnonymous();
     }
 
     public override async Task HandleAsync(AskRequest req, CancellationToken ct)
@@ -59,6 +59,7 @@ internal sealed class PostAskEndpoint(AssistantService assistant)
 
         var answer = await assistant.AnswerAsync(
             Route<Guid>("id"),
+            User.UserId(),
             new AssistantQuestion
             {
                 Question = req.Question.Trim(),

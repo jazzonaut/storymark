@@ -1,4 +1,5 @@
 using FastEndpoints;
+using Storymark.Api.Infrastructure.Auth;
 using Storymark.Api.Services.Books;
 
 namespace Storymark.Api.Endpoints.Books;
@@ -19,7 +20,7 @@ internal sealed record SaveProgressRequest
 }
 
 /// <summary>Records a device's reading position and returns the canonical latest
-/// across devices (docs/plan.md §12.5). Public, like the other reader endpoints.
+/// across devices (docs/plan.md §12.5).
 /// 404 if the book is unknown.</summary>
 internal sealed class PostProgressEndpoint(ReadingProgressService progress)
     : Endpoint<SaveProgressRequest, ProgressView>
@@ -27,7 +28,6 @@ internal sealed class PostProgressEndpoint(ReadingProgressService progress)
     public override void Configure()
     {
         Post("books/{id}/progress");
-        AllowAnonymous();
     }
 
     public override async Task HandleAsync(SaveProgressRequest req, CancellationToken ct)
@@ -40,6 +40,7 @@ internal sealed class PostProgressEndpoint(ReadingProgressService progress)
 
         var latest = await progress.SaveAsync(
             Route<Guid>("id"),
+            User.UserId(),
             new SaveProgressInput
             {
                 DeviceId = req.DeviceId,

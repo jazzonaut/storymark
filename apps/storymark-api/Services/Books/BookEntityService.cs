@@ -33,9 +33,9 @@ internal sealed class BookEntityService(StorymarkDbContext db)
     /// each with its latest cached short summary at-or-before that position if any. Null
     /// if the book does not exist.</summary>
     public async Task<IReadOnlyList<StoryGuideEntityView>?> GetVisibleListAsync(
-        Guid bookId, int upToSection, int upToLocation, CancellationToken ct)
+        Guid bookId, Guid userId, int upToSection, int upToLocation, CancellationToken ct)
     {
-        if (!await db.Books.AnyAsync(b => b.Id == bookId, ct))
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
         {
             return null;
         }

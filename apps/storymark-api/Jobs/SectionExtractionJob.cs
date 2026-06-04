@@ -189,7 +189,7 @@ internal sealed class SectionExtractionJob(
         foreach (var group in FindAliasMerges(entities).GroupBy(p => p.SurvivorId))
         {
             var losers = group.Select(p => p.LoserId).ToList();
-            if (await entityMerge.MergeAsync(book.Id, group.Key, losers, ct) is not null)
+            if (await entityMerge.MergeUnscopedAsync(book.Id, group.Key, losers, ct) is not null)
             {
                 merged += losers.Count;
             }

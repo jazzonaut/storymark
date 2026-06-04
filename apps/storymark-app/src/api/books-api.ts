@@ -50,6 +50,18 @@ export const booksApi = {
     return (await response.json()) as BookSummary;
   },
 
+  /** Owner-only. Returns the updated summary so the card refreshes in place. */
+  setVisibility: (bookId: string, isPublic: boolean): Promise<BookSummary> =>
+    fetchJson<BookSummary>(
+      `/api/books/${encodeURIComponent(bookId)}/visibility`,
+      "Failed to change book visibility",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublic }),
+      },
+    ),
+
   remove: async (bookId: string): Promise<void> => {
     const response = await apiFetch(`/api/books/${encodeURIComponent(bookId)}`, {
       method: "DELETE",

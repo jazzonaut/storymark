@@ -116,18 +116,19 @@ export interface CachedEntitySummary {
 }
 
 /** The library list, cached as a single row keyed by the literal `"all"`. The list
- * is the one reader read path with no Dexie cache of its own — it leant entirely on
- * the service worker's NetworkFirst cache, so an unreachable API (e.g. off-VPN) with
- * a cold SW cache showed an empty library. `cachedAt` (epoch ms) is informational;
- * the list is fetched network-first and this row is the fallback. */
+ * is fetched network-first (books-api) and this row is the offline fallback. It is
+ * deliberately the *only* offline copy: a service-worker cache for `/api/books` would
+ * be keyed by URL alone and so serve one account's library to another on a shared
+ * device (ADR-0023) — this row lives in the per-user partition instead. `cachedAt`
+ * (epoch ms) is informational. */
 export interface CachedLibrary {
   readonly id: "all";
   readonly books: readonly BookSummary[];
   readonly cachedAt: number;
 }
 
-/** Reader typography/theme settings. App-global (single-user), so there is
- * exactly one row, keyed by the literal `"global"`. */
+/** Reader typography/theme settings. One row per cache partition (i.e. per
+ * account, ADR-0023), keyed by the literal `"global"` within it. */
 export interface StoredReaderSettings {
   readonly id: "global";
   readonly fontFamily: ReaderFontFamily;
@@ -213,61 +214,175 @@ type StorymarkDb = Dexie & {
   panelState: Table<StoredPanelState, string>;
 };
 
-export const db = new Dexie("storymark") as StorymarkDb;
+function createDb(name: string): StorymarkDb {
+  const instance = new Dexie(name) as StorymarkDb;
 
-// The schema string is the source of truth for indexes. `synced`/`deleted` flags
-// are not indexed — booleans aren't valid IndexedDB key types, and with a handful
-// of books the reconnect flush filters unsynced rows in memory.
-db.version(1).stores({
-  manifests: "bookId",
-  sections: "[bookId+sectionIndex]",
-  readerSettings: "id",
-  progress: "bookId",
-  bookmarks: "id, bookId",
-  memorySnapshots: "[bookId+enteringSection]",
-  bookOpens: "bookId",
-  timelines: "[bookId+upToSection]",
-  graphs: "[bookId+upToSection]",
-  entities: "[bookId+upToSection]",
-  panelState: "bookId",
-});
+  // The schema string is the source of truth for indexes. `synced`/`deleted` flags
+  // are not indexed — booleans aren't valid IndexedDB key types, and with a handful
+  // of books the reconnect flush filters unsynced rows in memory.
+  instance.version(1).stores({
+    manifests: "bookId",
+    sections: "[bookId+sectionIndex]",
+    readerSettings: "id",
+    progress: "bookId",
+    bookmarks: "id, bookId",
+    memorySnapshots: "[bookId+enteringSection]",
+    bookOpens: "bookId",
+    timelines: "[bookId+upToSection]",
+    graphs: "[bookId+upToSection]",
+    entities: "[bookId+upToSection]",
+    panelState: "bookId",
+  });
 
-// v2 adds the library list cache. Dexie carries the v1 stores forward, so only the
-// new store is declared here. The single row is keyed by the literal "all".
-db.version(2).stores({
-  library: "id",
-});
+  // v2 adds the library list cache. Dexie carries the v1 stores forward, so only the
+  // new store is declared here. The single row is keyed by the literal "all".
+  instance.version(2).stores({
+    library: "id",
+  });
 
-// v3 adds `upToLocation` to the timeline/graph/entity rows so the read-through cache
-// can gate them by the reader's in-section position (see CachedTimeline). The key
-// (still [bookId+upToSection]) is unchanged, so no schema delta — but legacy rows
-// lack the new field, which would defeat the boundary check, so they are cleared and
-// refetched on next open.
-db.version(3).upgrade(async (tx) => {
-  await Promise.all([
-    tx.table("timelines").clear(),
-    tx.table("graphs").clear(),
-    tx.table("entities").clear(),
-  ]);
-});
+  // v3 adds `upToLocation` to the timeline/graph/entity rows so the read-through cache
+  // can gate them by the reader's in-section position (see CachedTimeline). The key
+  // (still [bookId+upToSection]) is unchanged, so no schema delta — but legacy rows
+  // lack the new field, which would defeat the boundary check, so they are cleared and
+  // refetched on next open.
+  instance.version(3).upgrade(async (tx) => {
+    await Promise.all([
+      tx.table("timelines").clear(),
+      tx.table("graphs").clear(),
+      tx.table("entities").clear(),
+    ]);
+  });
 
-// v4 adds the per-entity summary cache (keyed [bookId+entityId+upToSection]) so a
-// tapped entity renders offline instead of "unavailable". A new store starts empty,
-// so there is no upgrade body. Dexie carries the prior stores forward.
-db.version(4).stores({
-  entitySummaries: "[bookId+entityId+upToSection]",
-});
+  // v4 adds the per-entity summary cache (keyed [bookId+entityId+upToSection]) so a
+  // tapped entity renders offline instead of "unavailable". A new store starts empty,
+  // so there is no upgrade body. Dexie carries the prior stores forward.
+  instance.version(4).stores({
+    entitySummaries: "[bookId+entityId+upToSection]",
+  });
 
-// A release that adds a db.version() above upgrades the on-device database on
-// first open, and IndexedDB runs that upgrade only once every *other* connection
-// to it has closed. If a second tab — or the still-resident installed PWA — holds
-// the previous version open, the upgrade blocks indefinitely and every query
-// against `db` hangs with no error (a silent "stuck on first load" after a release
-// that adds a store). Closing on `versionchange` yields to the newer instance
-// instead of deadlocking against it.
-db.on("versionchange", () => {
-  db.close();
-});
+  // A release that adds a db.version() above upgrades the on-device database on
+  // first open, and IndexedDB runs that upgrade only once every *other* connection
+  // to it has closed. If a second tab — or the still-resident installed PWA — holds
+  // the previous version open, the upgrade blocks indefinitely and every query
+  // against `db` hangs with no error (a silent "stuck on first load" after a release
+  // that adds a store). Closing on `versionchange` yields to the newer instance
+  // instead of deadlocking against it.
+  instance.on("versionchange", () => {
+    instance.close();
+  });
+
+  return instance;
+}
+
+const LAST_USER_STORAGE_KEY = "storymark.lastUserId";
+
+// The cache is one IndexedDB database per account (ADR-0023): the database name
+// carries the partition, so keys, indexes, and every call site stay unchanged, and
+// nothing cached for one account — private book content included — is reachable
+// from another's partition. The last-known user picks the partition before the
+// session can be probed (offline cold start), and keeps serving it when a cookie
+// expires offline; only an actual sign-in moves it.
+function partitionName(userId: string | null): string {
+  return userId === null ? "storymark.u.none" : `storymark.u.${userId}`;
+}
+
+let currentUserId: string | null = localStorage.getItem(LAST_USER_STORAGE_KEY);
+let current = createDb(partitionName(currentUserId));
+
+// A swappable handle rather than a per-call-site lookup: a dozen modules read
+// `db.<table>` at call time, and this keeps the partition switch in one place
+// instead of threading a user id through every cache access. Methods are bound
+// so `db.close()`-style calls keep their receiver.
+export const db = new Proxy({} as StorymarkDb, {
+  get(_target, property): unknown {
+    const value: unknown = Reflect.get(current, property);
+    return typeof value === "function" ? value.bind(current) : value;
+  },
+}) as StorymarkDb;
+
+/** Points the cache at the given account's partition and persists it as the
+ * device's last-known user. Returns true when this moved away from a
+ * *different* signed-in account — module-level state (library list, reader
+ * settings, sync registrations) still holds the previous partition's data in
+ * memory, so the caller must restart the app shell with a full navigation. */
+export function switchCachePartition(userId: string): boolean {
+  // Persisted even when the partition doesn't move: a logout removed the
+  // stored pointer (forgetLastUser) while this handle kept serving the same
+  // account, and a re-login must restore it for the next cold start.
+  localStorage.setItem(LAST_USER_STORAGE_KEY, userId);
+  if (userId === currentUserId) {
+    return false;
+  }
+  const previous = currentUserId;
+  currentUserId = userId;
+  current.close();
+  current = createDb(partitionName(userId));
+  return previous !== null;
+}
+
+/** Forgets the device's last-known user so the next cold start opens the empty
+ * anonymous partition instead of the signed-out account's — an offline cold
+ * start must not hand that account's library to whoever holds the device. The
+ * partition data itself is kept (cached books stay warm for a re-login), as is
+ * the in-memory handle: it still backs the current tab, and the next sign-in
+ * either re-persists it (same account) or swaps it (different account). */
+export function forgetLastUser(): void {
+  localStorage.removeItem(LAST_USER_STORAGE_KEY);
+}
+
+/** Whether the device remembers a signed-in account — i.e. whether an
+ * unreachable session probe has a cached partition to fall back on. False on a
+ * fresh device and after an explicit sign-out ({@link forgetLastUser}). */
+export function hasLastKnownUser(): boolean {
+  return localStorage.getItem(LAST_USER_STORAGE_KEY) !== null;
+}
+
+/** The account the server's AddUsers migration seeds; the client needs it offline
+ * (this migration runs before any session probe), so the id is duplicated here by
+ * necessity — it must match the migration's value. */
+const SEED_USER_ID = "00000000-0000-0000-0000-000000000001";
+
+/** One-time move of the pre-multi-user cache (the unpartitioned `storymark`
+ * database) into the seeded initial account's partition — all pre-auth local
+ * state belonged to that account, mirroring the server-side adoptions in the
+ * AddUsers/AddUserScopeToReaderState migrations. Copying rather than clearing
+ * preserves offline books and any unsynced progress/bookmark queue across the
+ * upgrade. A no-op once the legacy database is gone. */
+export async function migrateLegacyCache(): Promise<void> {
+  if (!(await Dexie.exists("storymark"))) {
+    return;
+  }
+
+  // No version spec: Dexie opens the legacy database in dynamic mode, with
+  // whatever schema it last had.
+  const legacy = new Dexie("storymark");
+  await legacy.open();
+  const target = createDb(partitionName(SEED_USER_ID));
+  try {
+    await Promise.all(
+      legacy.tables.map(async (table) => {
+        const rows = await table.toArray();
+        if (rows.length > 0) {
+          await target.table(table.name).bulkPut(rows);
+        }
+      }),
+    );
+  } finally {
+    legacy.close();
+    target.close();
+  }
+
+  await Dexie.delete("storymark");
+
+  // The migrated rows belong to the seed account, so when no user is known yet
+  // (always the case on the pre-auth device's first post-upgrade launch) the
+  // partition must follow them: an offline first launch would otherwise open
+  // the empty anonymous partition and the migrated library — including any
+  // unsynced write queue — would be unreachable until a successful sign-in.
+  if (currentUserId === null) {
+    switchCachePartition(SEED_USER_ID);
+  }
+}
 
 // Dexie.minKey/.maxKey sort below/above every value and IndexedDB compares array
 // keys element-wise (a shorter prefix sorts first), so these two-element bounds span

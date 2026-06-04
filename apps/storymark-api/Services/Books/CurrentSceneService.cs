@@ -33,11 +33,12 @@ internal sealed class CurrentSceneService(
 
     public async Task<CurrentSceneView?> GetAsync(
         Guid bookId,
+        Guid userId,
         int currentSection,
         int currentLocation,
         CancellationToken ct)
     {
-        if (!await db.Books.AnyAsync(b => b.Id == bookId, ct))
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
         {
             return null;
         }

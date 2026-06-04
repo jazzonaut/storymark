@@ -5,6 +5,7 @@ using Storymark.Api.Domain.Books;
 using Storymark.Api.Domain.Llm;
 using Storymark.Api.Infrastructure.Database;
 using Storymark.Api.Prompts;
+using Storymark.Api.Services.Books;
 using Storymark.Api.Services.Llm;
 using Storymark.Api.Services.Retrieval;
 using Storymark.Api.Services.Settings;
@@ -30,12 +31,13 @@ internal sealed class SelectionHintService(
     /// <c>null</c> if the book does not exist (the caller maps that to 404).</summary>
     public async Task<SelectionHintResult?> GetHintAsync(
         Guid bookId,
+        Guid userId,
         string selectedText,
         int currentSection,
         int currentLocation,
         CancellationToken ct)
     {
-        if (!await db.Books.AnyAsync(b => b.Id == bookId, ct))
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
         {
             return null;
         }

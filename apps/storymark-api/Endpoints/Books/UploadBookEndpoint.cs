@@ -1,5 +1,6 @@
 using FastEndpoints;
 using Microsoft.AspNetCore.Http;
+using Storymark.Api.Infrastructure.Auth;
 using Storymark.Api.Services.Books;
 
 namespace Storymark.Api.Endpoints.Books;
@@ -15,7 +16,7 @@ internal sealed record UploadErrorResponse
 }
 
 /// <summary>Uploads an EPUB (docs/plan.md §11.1): validate → SHA-256 → store →
-/// dedup → create/reuse book row. Public. The original is streamed to disk; the
+/// dedup → create/reuse book row. The original is streamed to disk; the
 /// size cap and signature check happen mid-stream in the file storage service.</summary>
 internal sealed class UploadBookEndpoint(BookImportService import)
     : Endpoint<UploadBookRequest, BookSummaryResponse>
@@ -23,7 +24,6 @@ internal sealed class UploadBookEndpoint(BookImportService import)
     public override void Configure()
     {
         Post("books");
-        AllowAnonymous();
         AllowFileUploads();
     }
 
@@ -42,8 +42,9 @@ internal sealed class UploadBookEndpoint(BookImportService import)
             return;
         }
 
+        var userId = User.UserId();
         await using var stream = file.OpenReadStream();
-        var outcome = await import.ImportAsync(file.FileName, stream, ct);
+        var outcome = await import.ImportAsync(file.FileName, stream, userId, ct);
 
         switch (outcome.Error)
         {
@@ -69,7 +70,7 @@ internal sealed class UploadBookEndpoint(BookImportService import)
             return;
         }
 
-        await Send.OkAsync(BookSummaryResponse.From(outcome.Book), ct);
+        await Send.OkAsync(BookSummaryResponse.From(outcome.Book, userId), ct);
     }
 
     private async Task SendErrorAsync(int statusCode, string message) =>

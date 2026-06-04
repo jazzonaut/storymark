@@ -13,9 +13,9 @@ internal sealed class BookExtractionService(StorymarkDbContext db)
     /// <summary>Events visible at <c>(upToSection, upToLocation)</c>, ordered by
     /// position, or <c>null</c> if the book does not exist.</summary>
     public async Task<IReadOnlyList<EventView>?> GetEventsAsync(
-        Guid bookId, int upToSection, int upToLocation, CancellationToken ct)
+        Guid bookId, Guid userId, int upToSection, int upToLocation, CancellationToken ct)
     {
-        if (!await db.Books.AnyAsync(b => b.Id == bookId, ct))
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
         {
             return null;
         }
@@ -44,9 +44,9 @@ internal sealed class BookExtractionService(StorymarkDbContext db)
     /// <summary>Relationships first seen at-or-before <c>(upToSection, upToLocation)</c>,
     /// ordered by first-seen position, or <c>null</c> if the book does not exist.</summary>
     public async Task<IReadOnlyList<RelationshipView>?> GetRelationshipsAsync(
-        Guid bookId, int upToSection, int upToLocation, CancellationToken ct)
+        Guid bookId, Guid userId, int upToSection, int upToLocation, CancellationToken ct)
     {
-        if (!await db.Books.AnyAsync(b => b.Id == bookId, ct))
+        if (!await db.Books.IsVisibleAsync(bookId, userId, ct))
         {
             return null;
         }
