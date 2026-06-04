@@ -506,6 +506,18 @@ Design decisions for this phase are in [ADR-0023](adr/0023-in-app-identity-cooki
 **Acceptance:** switching accounts on one device shows no foreign settings, bookmarks, progress, or cached private-book content; with the cookie expired while offline, the current book stays readable and page turns queue; on reconnect the user is prompted to sign in and the queue flushes.
 **Depends on:** S7.1, S7.2, S7.3
 
+### S7.5 — Admin Users view — **S**
+**Goal:** The operator manages reader accounts from `/admin` instead of curl: create users, see activation/lockout state, set or reset passwords.
+**Frontend:**
+- `/admin/users` view + nav entry, same PrimeVue patterns as the other admin views
+- Table from `GET /api/admin/users`: username, status (Active / Not activated / Locked out), created date
+- Create-user form (username + optional password — omitting it creates a not-yet-activated account)
+- Per-row "Set password" dialog (`POST /api/admin/users/{id}/password`) — doubles as reset *and* lockout recovery, since the endpoint clears lockout
+- Identity validation failures (password too short, duplicate username) surface as toasts from the 400's `generalErrors`
+**Backend:** none — the S7.1 endpoints cover it. Deliberately out of scope: delete-user (no endpoint; `books.owner_user_id` is `Restrict`, so it needs a reassign-books story first) and self-service password reset.
+**Acceptance:** bootstrap works end-to-end in the browser: unlock `/admin`, set the seeded `reader` password, sign in at `/login`; creating a user with/without a password shows the right status; setting a password on a locked account unlocks it; a 7-character password shows the validation message.
+**Depends on:** S7.1
+
 ---
 
 ## Cross-cutting (parallel to phases)

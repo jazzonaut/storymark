@@ -122,3 +122,20 @@ export interface ReprocessBookResult {
   readonly queued: boolean;
   readonly status: string | null;
 }
+
+/** A reader account as the admin Users view sees it. Mirrors UserItem in
+ * apps/storymark-api/Endpoints/Admin/Users/UsersEndpoints.cs. */
+export interface UserAdminItem {
+  readonly id: string;
+  readonly userName: string;
+  /** False for seeded-but-not-activated accounts - they cannot sign in. */
+  readonly hasPassword: boolean;
+  readonly isLockedOut: boolean;
+  readonly createdAt: string;
+}
+
+export interface CreateUserBody {
+  readonly userName: string;
+  /** Null creates the account not-yet-activated; set a password later to activate. */
+  readonly password: string | null;
+}

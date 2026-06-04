@@ -3,6 +3,7 @@ import type {
   ApplySwapResult,
   BackfillSectionTitlesResult,
   CostSummary,
+  CreateUserBody,
   EmbeddingImpactPreview,
   LlmCallItem,
   ModelItem,
@@ -14,6 +15,7 @@ import type {
   RecoverStuckBooksResult,
   ReprocessBookResult,
   SettingItem,
+  UserAdminItem,
 } from "@/api/admin-types";
 
 /** Thrown on any non-2xx admin response. `status` drives 401 handling; `body` is
@@ -120,4 +122,16 @@ export const adminApi = {
 
   deleteModel: (token: string, id: string): Promise<void> =>
     requestVoid(token, `models/${id}`, { method: "DELETE" }),
+
+  listUsers: (token: string): Promise<readonly UserAdminItem[]> => request(token, "users"),
+
+  createUser: (token: string, body: CreateUserBody): Promise<UserAdminItem> =>
+    request(token, "users", { method: "POST", body: JSON.stringify(body) }),
+
+  /** Set-or-reset; the endpoint also clears any lockout (the recovery path). */
+  setUserPassword: (token: string, id: string, password: string): Promise<void> =>
+    requestVoid(token, `users/${encodeURIComponent(id)}/password`, {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
 } as const;

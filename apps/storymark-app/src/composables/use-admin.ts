@@ -5,6 +5,7 @@ import type {
   ApplySwapResult,
   BackfillSectionTitlesResult,
   CostSummary,
+  CreateUserBody,
   EmbeddingImpactPreview,
   LlmCallItem,
   ModelItem,
@@ -16,6 +17,7 @@ import type {
   RecoverStuckBooksResult,
   ReprocessBookResult,
   SettingItem,
+  UserAdminItem,
 } from "@/api/admin-types";
 
 const TOKEN_STORAGE_KEY = "storymark.admin.token";
@@ -31,6 +33,7 @@ const llmCalls = shallowRef<readonly LlmCallItem[]>([]);
 const costSummary = shallowRef<CostSummary | null>(null);
 const providers = shallowRef<readonly ProviderItem[]>([]);
 const models = shallowRef<readonly ModelItem[]>([]);
+const users = shallowRef<readonly UserAdminItem[]>([]);
 const isLoading = ref(false);
 
 interface UseAdmin {
@@ -41,6 +44,7 @@ interface UseAdmin {
   readonly costSummary: ShallowRef<CostSummary | null>;
   readonly providers: ShallowRef<readonly ProviderItem[]>;
   readonly models: ShallowRef<readonly ModelItem[]>;
+  readonly users: ShallowRef<readonly UserAdminItem[]>;
   readonly llmCallsWindow: number;
   readonly isLoading: ShallowRef<boolean>;
   authenticate: (candidate: string) => Promise<boolean>;
@@ -66,6 +70,9 @@ interface UseAdmin {
   loadModels: () => Promise<void>;
   saveModel: (id: string | null, body: ModelUpsertBody) => Promise<void>;
   deleteModel: (id: string) => Promise<void>;
+  loadUsers: () => Promise<void>;
+  createUser: (body: CreateUserBody) => Promise<void>;
+  setUserPassword: (id: string, password: string) => Promise<void>;
 }
 
 export function useAdmin(): UseAdmin {
@@ -87,6 +94,7 @@ export function useAdmin(): UseAdmin {
     costSummary.value = null;
     providers.value = [];
     models.value = [];
+    users.value = [];
   }
 
   async function authenticate(candidate: string): Promise<boolean> {
@@ -214,6 +222,20 @@ export function useAdmin(): UseAdmin {
     await loadModels();
   }
 
+  async function loadUsers(): Promise<void> {
+    users.value = await adminApi.listUsers(requireToken());
+  }
+
+  async function createUser(body: CreateUserBody): Promise<void> {
+    await adminApi.createUser(requireToken(), body);
+    await loadUsers();
+  }
+
+  async function setUserPassword(id: string, password: string): Promise<void> {
+    await adminApi.setUserPassword(requireToken(), id, password);
+    await loadUsers();
+  }
+
   return {
     hasToken,
     settings,
@@ -243,5 +265,9 @@ export function useAdmin(): UseAdmin {
     loadModels,
     saveModel,
     deleteModel,
+    users,
+    loadUsers,
+    createUser,
+    setUserPassword,
   };
 }
