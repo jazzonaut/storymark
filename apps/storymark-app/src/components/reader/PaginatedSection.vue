@@ -185,6 +185,20 @@ function measure(): void {
   }
   const width = scroll.clientWidth || 1;
   content.style.columnWidth = `${String(width)}px`;
+  // Cap inline images to the usable column height (content box, i.e. minus the
+  // block padding) so a full-page image — a cover or title plate — fits one page
+  // instead of overflowing the column. Set before reading scrollWidth so the
+  // clamped image height is what the page count measures. A zero-height pass
+  // (hidden ancestor, pre-layout) would produce a negative value that invalidates
+  // max-height and disables the cap — keep the last good value instead.
+  const styles = getComputedStyle(content);
+  const pageHeight =
+    content.clientHeight -
+    Number.parseFloat(styles.paddingTop) -
+    Number.parseFloat(styles.paddingBottom);
+  if (pageHeight > 0) {
+    content.style.setProperty("--reader-page-height", `${String(pageHeight)}px`);
+  }
   totalPages.value = Math.max(1, Math.round(scroll.scrollWidth / width));
 }
 
@@ -1196,7 +1210,18 @@ onBeforeUnmount(() => {
 
 .reader-para :deep(img) {
   max-width: 100%;
+  max-height: var(--reader-page-height, 100dvh);
   height: auto;
+}
+
+/* Scene-break rule: a short centred hairline rather than the full-width UA
+   default, which reads as a chapter boundary instead of a beat. */
+.reader-para :deep(hr) {
+  width: 40%;
+  margin-inline: auto;
+  border: none;
+  border-top: 1px solid currentColor;
+  opacity: 0.35;
 }
 
 .reader-para :deep(p) {

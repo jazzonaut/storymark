@@ -12,9 +12,10 @@ namespace Storymark.Api.Services.Books;
 /// Default-deny: only the explicit tag/attribute allow-lists survive, so the
 /// output can contain no <c>&lt;script&gt;</c>, no <c>on*</c> handlers, no inline
 /// <c>style</c>, and no external (<c>http(s)://</c>) references — the S2.1 spoiler-
-/// independent security invariants. Inline <c>&lt;img&gt;</c> sources are resolved
-/// against the section's path and rewritten to the book's resource endpoint;
-/// anything external or unresolved is dropped.</summary>
+/// independent security invariants. Inline <c>&lt;img&gt;</c> sources (including raster
+/// images hoisted out of <c>&lt;svg&gt;</c> shells) are resolved against the section's
+/// path and rewritten to the book's resource endpoint; anything external or
+/// unresolved is dropped.</summary>
 internal sealed class ContentSanitizationService
 {
     // A heading longer than this is prose styled as a heading, not a section title;
@@ -30,14 +31,16 @@ internal sealed class ContentSanitizationService
         "p", "div", "span", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote",
         "em", "strong", "i", "b", "u", "s", "sub", "sup", "br", "hr",
         "ul", "ol", "li", "dl", "dt", "dd", "a", "img",
-        "table", "thead", "tbody", "tfoot", "tr", "td", "th",
+        "table", "caption", "thead", "tbody", "tfoot", "tr", "td", "th",
         "pre", "code", "small", "cite", "q", "figure", "figcaption", "section", "article",
     };
 
     // Elements whose entire subtree is discarded (their text content is not prose).
+    // svg is handled separately: its subtree is dropped too, but any raster <image>
+    // it wraps is hoisted out first (see ReplaceSvgImages).
     private static readonly HashSet<string> DropTags = new(StringComparer.Ordinal)
     {
-        "script", "style", "head", "title", "svg", "math", "object", "iframe", "embed", "link", "meta",
+        "script", "style", "head", "title", "math", "object", "iframe", "embed", "link", "meta",
     };
 
     private static readonly HashSet<string> GlobalAttributes = new(StringComparer.Ordinal)
@@ -51,6 +54,24 @@ internal sealed class ContentSanitizationService
     };
 
     private static readonly string ParagraphBlockSelector = string.Join(',', ParagraphBlocks);
+
+    // Containers that must stay whole to keep their meaning: splitting an <ol> into
+    // bare <li> paragraphs loses the numbering, and recursing into a <table> whose
+    // cells hold <p>s shreds it into disconnected paragraphs. Each becomes a single
+    // paragraph even though it contains paragraph blocks.
+    private static readonly HashSet<string> AtomicBlocks = new(StringComparer.Ordinal)
+    {
+        "ul", "ol", "dl", "table",
+    };
+
+    // Tags whose edges render as a break even when the source markup has no
+    // whitespace around them: every paragraph block, plus forced line breaks and
+    // table structure. TextContent fuses words across these ("line one<br/>line two"
+    // → "line oneline two"), and the plain text feeds embeddings and LLM evidence,
+    // not just display — so text extraction inserts a space at each edge instead
+    // (see ExtractText).
+    private static readonly HashSet<string> TextBoundaryTags = new(
+        ParagraphBlocks.Concat(["br", "hr", "td", "th", "tr", "caption"]), StringComparer.Ordinal);
 
     // First-block title signal for EPUBs with no <h*>: a chapter/part/number opener.
     // All-caps and fully-emphasised lines are recognised separately.
@@ -113,6 +134,12 @@ internal sealed class ContentSanitizationService
     private void SanitizeElement(IElement element, SanitizeContext context)
     {
         var tag = element.LocalName;
+        if (string.Equals(tag, "svg", StringComparison.Ordinal))
+        {
+            ReplaceSvgImages(element, context);
+            return;
+        }
+
         if (DropTags.Contains(tag))
         {
             element.RemoveFromParent();
@@ -190,6 +217,47 @@ internal sealed class ContentSanitizationService
         return value.StartsWith('#') || !EpubPath.IsAbsoluteUrl(value);
     }
 
+    // EPUB 3 books commonly wrap full-page raster images — covers especially — in an
+    // <svg><image href|xlink:href=...> shell for aspect-ratio scaling. We render no
+    // vector content, but each raster image the shell references is hoisted out as a
+    // plain <img> (alt from the svg's accessible name) so the page itself isn't lost.
+    private static void ReplaceSvgImages(IElement svg, SanitizeContext context)
+    {
+        var parent = svg.Parent;
+        var document = svg.Owner;
+        if (parent is not null && document is not null)
+        {
+            var alt = svg.QuerySelector("title, desc")?.TextContent;
+            foreach (var image in svg.QuerySelectorAll("image"))
+            {
+                // The HTML parser only namespace-adjusts the literal "xlink:href"; a
+                // non-standard xlink prefix (xmlns:xl=... xl:href=...) survives as a
+                // plain "<prefix>:href" attribute, so match href under any prefix.
+                var href = image.Attributes
+                    .FirstOrDefault(a => string.Equals(a.Name, "href", StringComparison.Ordinal)
+                        || a.Name.EndsWith(":href", StringComparison.Ordinal))?.Value;
+                if (string.IsNullOrWhiteSpace(href))
+                {
+                    continue;
+                }
+
+                var img = document.CreateElement("img");
+                img.SetAttribute("src", href);
+                if (!string.IsNullOrWhiteSpace(alt))
+                {
+                    img.SetAttribute("alt", NormalizeWhitespace(alt));
+                }
+
+                if (TryRewriteImage(img, context))
+                {
+                    parent.InsertBefore(img, svg);
+                }
+            }
+        }
+
+        svg.RemoveFromParent();
+    }
+
     private static bool TryRewriteImage(IElement element, SanitizeContext context)
     {
         var src = element.GetAttribute("src");
@@ -240,7 +308,7 @@ internal sealed class ContentSanitizationService
         // never silently lost to unusual markup.
         if (paragraphs.Count == 0)
         {
-            var text = NormalizeWhitespace(body.TextContent);
+            var text = ExtractText(body);
             if (text.Length > 0)
             {
                 builder.Append(text);
@@ -272,11 +340,19 @@ internal sealed class ContentSanitizationService
             if (child is IElement element)
             {
                 var isBlock = ParagraphBlocks.Contains(element.LocalName);
-                var hasBlockDescendant = element.QuerySelector(ParagraphBlockSelector) is not null;
-                if (isBlock && !hasBlockDescendant)
+                var isAtomic = AtomicBlocks.Contains(element.LocalName);
+                // Atomic containers decide the branch on their own, so skip the
+                // descendant query — it would walk their whole subtree for nothing.
+                var hasBlockDescendant = !isAtomic && element.QuerySelector(ParagraphBlockSelector) is not null;
+                if (isAtomic || (isBlock && !hasBlockDescendant))
                 {
                     FlushRun(run, builder, paragraphs);
-                    AppendParagraph(element.OuterHtml, NormalizeWhitespace(element.TextContent), builder, paragraphs);
+                    AppendParagraph(
+                        element.OuterHtml,
+                        ExtractText(element),
+                        HasVisibleNonText(element),
+                        builder,
+                        paragraphs);
                     continue;
                 }
 
@@ -303,20 +379,33 @@ internal sealed class ContentSanitizationService
             return;
         }
 
-        var text = NormalizeWhitespace(string.Concat(run.Select(node => node.TextContent)));
-        if (text.Length > 0)
+        var text = ExtractText(run);
+        var hasVisual = run.Any(node => node is IElement element && HasVisibleNonText(element));
+        if (text.Length > 0 || hasVisual)
         {
             var html = string.Concat(run.Select(node => node.ToHtml()));
-            AppendParagraph($"<p>{html}</p>", text, builder, paragraphs);
+            // A text-free run (an image plate, an <hr> scene break) is emitted bare:
+            // wrapping it in <p> would be invalid for <hr> (the parser re-opens the
+            // paragraph around it), and the reader gives every paragraph its own block.
+            AppendParagraph(text.Length > 0 ? $"<p>{html}</p>" : html, text, hasVisual, builder, paragraphs);
         }
 
         run.Clear();
     }
 
+    // Content that renders without any text: an image plate or an <hr> scene break.
+    private const string VisualSelector = "img, hr";
+
+    private static bool HasVisibleNonText(IElement element) =>
+        element.Matches(VisualSelector) || element.QuerySelector(VisualSelector) is not null;
+
+    // A text-free paragraph (an image plate, an <hr> scene break) gets an empty
+    // half-open range [pos, pos) and no separator, so the plain-text coordinate
+    // space is identical to what a text-only extraction would produce.
     private static void AppendParagraph(
-        string html, string text, StringBuilder builder, List<SanitizedParagraph> paragraphs)
+        string html, string text, bool hasVisual, StringBuilder builder, List<SanitizedParagraph> paragraphs)
     {
-        if (text.Length == 0)
+        if (text.Length == 0 && !hasVisual)
         {
             return;
         }
@@ -330,7 +419,10 @@ internal sealed class ContentSanitizationService
             LocationStart = start,
             LocationEnd = builder.Length,
         });
-        builder.Append("\n\n");
+        if (text.Length > 0)
+        {
+            builder.Append("\n\n");
+        }
     }
 
     /// <summary>Extracts the first-heading title from already-sanitised section HTML,
@@ -352,19 +444,19 @@ internal sealed class ContentSanitizationService
         var heading = body.QuerySelector("h1, h2, h3, h4, h5, h6");
         if (heading is not null)
         {
-            var headingText = NormalizeWhitespace(heading.TextContent);
+            var headingText = ExtractText(heading);
             return headingText.Length is > 0 and <= MaxHeadingTitleLength ? headingText : null;
         }
 
         var firstBlock = body.QuerySelectorAll(ParagraphBlockSelector)
             .FirstOrDefault(block => block.QuerySelector(ParagraphBlockSelector) is null
-                && NormalizeWhitespace(block.TextContent).Length > 0);
+                && ExtractText(block).Length > 0);
         if (firstBlock is null)
         {
             return null;
         }
 
-        var text = NormalizeWhitespace(firstBlock.TextContent);
+        var text = ExtractText(firstBlock);
         return LooksLikeTitle(firstBlock, text) ? text : null;
     }
 
@@ -414,8 +506,7 @@ internal sealed class ContentSanitizationService
         foreach (var element in block.QuerySelectorAll("strong, b, [class]"))
         {
             if (IsEmphasis(element)
-                && string.Equals(
-                    NormalizeWhitespace(element.TextContent), normalizedText, StringComparison.Ordinal))
+                && string.Equals(ExtractText(element), normalizedText, StringComparison.Ordinal))
             {
                 return true;
             }
@@ -444,6 +535,56 @@ internal sealed class ContentSanitizationService
         Paragraphs = [],
         UsedImagePaths = used,
     };
+
+    /// <summary>The element's rendered text on one line: like
+    /// <c>TextContent</c> + <see cref="NormalizeWhitespace"/>, but with a space at
+    /// every <see cref="TextBoundaryTags"/> edge so words don't fuse across breaks
+    /// the source markup doesn't separate with whitespace.</summary>
+    private static string ExtractText(IElement element) => ExtractText(element.ChildNodes);
+
+    private static string ExtractText(IEnumerable<INode> nodes)
+    {
+        var builder = new StringBuilder();
+        foreach (var node in nodes)
+        {
+            AppendNodeText(node, builder);
+        }
+
+        return NormalizeWhitespace(builder.ToString());
+    }
+
+    private static void AppendNodeText(INode node, StringBuilder builder)
+    {
+        switch (node)
+        {
+            case IText text:
+                builder.Append(text.Data);
+                break;
+            case IElement element:
+                {
+                    var isBoundary = TextBoundaryTags.Contains(element.LocalName);
+                    if (isBoundary)
+                    {
+                        builder.Append(' ');
+                    }
+
+                    foreach (var child in element.ChildNodes)
+                    {
+                        AppendNodeText(child, builder);
+                    }
+
+                    if (isBoundary)
+                    {
+                        builder.Append(' ');
+                    }
+
+                    break;
+                }
+
+            default:
+                break;
+        }
+    }
 
     /// <summary>Collapses every run of whitespace (including newlines from the
     /// source markup) to a single space and trims the ends.</summary>

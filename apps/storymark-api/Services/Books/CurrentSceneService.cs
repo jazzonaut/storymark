@@ -114,8 +114,11 @@ internal sealed class CurrentSceneService(
         int currentLocation,
         CancellationToken ct)
     {
+        // Image-only paragraphs (empty plain text) carry no evidence and would
+        // displace prose from the fixed-size window.
         var rows = await db.BookParagraphs.AsNoTracking()
             .Where(p => p.BookId == bookId
+                && p.PlainText != ""
                 && (p.SectionIndex < currentSection
                     || (p.SectionIndex == currentSection && p.LocationEnd <= currentLocation)))
             .OrderByDescending(p => p.SectionIndex)

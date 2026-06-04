@@ -14,9 +14,12 @@ internal static class SectionChunkingService
     private const int MaxWords = 900;
     private const int OverlapWords = 125; // midpoint of the 100–150 overlap band
 
-    /// <param name="paragraphs">The section's paragraphs in reading order.</param>
-    public static IReadOnlyList<ChunkDraft> Chunk(IReadOnlyList<BookParagraph> paragraphs)
+    /// <param name="allParagraphs">The section's paragraphs in reading order. Image-only
+    /// paragraphs (empty plain text) are excluded — they carry no retrievable evidence
+    /// and would otherwise produce empty chunks for image-only sections like covers.</param>
+    public static IReadOnlyList<ChunkDraft> Chunk(IReadOnlyList<BookParagraph> allParagraphs)
     {
+        var paragraphs = allParagraphs.Where(p => p.PlainText.Length > 0).ToList();
         var drafts = new List<ChunkDraft>();
         if (paragraphs.Count == 0)
         {
@@ -75,7 +78,7 @@ internal static class SectionChunkingService
         return drafts;
     }
 
-    private static ChunkDraft BuildDraft(IReadOnlyList<BookParagraph> paragraphs, int start, int end)
+    private static ChunkDraft BuildDraft(List<BookParagraph> paragraphs, int start, int end)
     {
         var text = string.Join("\n\n", Enumerable.Range(start, end - start).Select(i => paragraphs[i].PlainText));
         return new ChunkDraft
