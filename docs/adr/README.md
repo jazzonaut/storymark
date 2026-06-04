@@ -33,6 +33,7 @@ If a decision is small enough that "look at the code" answers it, it's not an AD
 | 0023 | [In-app identity via IdentityCore + cookie session; per-user books](0023-in-app-identity-cookie-auth.md) | accepted; admin-token aspect superseded by 0024 |
 | 0024 | [Admin access via a per-user `IsAdmin` flag on the cookie session](0024-admin-via-user-role.md) | accepted |
 | 0025 | [Internet exposure: forwarded TLS, Secure cookies, login throttle](0025-internet-exposure-hardening.md) | accepted |
+| 0026 | [Relaxed EPUB parsing for uploads](0026-relaxed-epub-parsing.md) | accepted |
 
 ## When to write one
 

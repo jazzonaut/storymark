@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Storymark.Api.Domain.Books;
 using Storymark.Api.Infrastructure.Storage;
 using VersOne.Epub;
+using VersOne.Epub.Options;
 
 namespace Storymark.Api.Services.Books;
 
@@ -13,6 +14,12 @@ namespace Storymark.Api.Services.Books;
 /// memory (<see cref="EnsureWithinLimits"/>), so a zip bomb can't OOM the worker.</summary>
 internal sealed class EpubImportHandler(IOptions<StorageOptions> options) : IBookImportHandler
 {
+    // Commercial EPUBs routinely ship publisher defects (e.g. an NCX entry pointing
+    // at a file absent from the manifest); the default STRICT preset rejects the
+    // whole book over them, and the uploader can't fix the file. RELAXED skips the
+    // broken pieces but still fails on unreadable archives (ADR-0026).
+    private static readonly EpubReaderOptions ReaderOptions = new(EpubReaderOptionsPreset.RELAXED);
+
     private readonly long _maxDecompressedBytes = options.Value.MaxDecompressedBytes;
     private readonly int _maxEntries = options.Value.MaxArchiveEntries;
 
@@ -22,7 +29,7 @@ internal sealed class EpubImportHandler(IOptions<StorageOptions> options) : IBoo
     public async Task<BookMetadata> SniffMetadataAsync(string filePath, CancellationToken ct)
     {
         EnsureWithinLimits(filePath);
-        var epub = await EpubReader.ReadBookAsync(filePath);
+        var epub = await ReadBookAsync(filePath);
 
         var author = string.IsNullOrWhiteSpace(epub.Author) ? null : epub.Author;
         var language = epub.Schema.Package.Metadata.Languages
@@ -40,7 +47,7 @@ internal sealed class EpubImportHandler(IOptions<StorageOptions> options) : IBoo
     public async Task<BookContent> ParseAsync(string filePath, CancellationToken ct)
     {
         EnsureWithinLimits(filePath);
-        var epub = await EpubReader.ReadBookAsync(filePath);
+        var epub = await ReadBookAsync(filePath);
         var (wholeFileTitles, fragmentTitles) = BuildTitleMaps(epub.Navigation);
 
         var sections = epub.ReadingOrder
@@ -70,6 +77,15 @@ internal sealed class EpubImportHandler(IOptions<StorageOptions> options) : IBoo
             Sections = sections,
             ImagesByPath = images,
         };
+    }
+
+    // Unlike the parameterless overload, the options overload is annotated as
+    // returning EpubBook? even though it never returns null (it either builds the
+    // book or throws), so narrow here once for both call sites.
+    private static async Task<EpubBook> ReadBookAsync(string filePath)
+    {
+        var epub = await EpubReader.ReadBookAsync(filePath, ReaderOptions);
+        return epub ?? throw new InvalidDataException($"EPUB reader returned no book for \"{filePath}\".");
     }
 
     /// <summary>Rejects an archive whose declared uncompressed size or entry count
