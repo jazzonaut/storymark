@@ -16,6 +16,20 @@ const { canInstall, promptInstall } = usePwaInstall();
 const { user } = useAuth();
 const signOut = useSignOut();
 
+const isAdmin = computed<boolean>(() => user.value?.isAdmin === true);
+
+const menuOpen = ref(false);
+
+function installFromMenu(): void {
+  menuOpen.value = false;
+  void promptInstall();
+}
+
+function signOutFromMenu(): void {
+  menuOpen.value = false;
+  void signOut();
+}
+
 // Either the browser reports offline, or a list load couldn't reach the API
 // (the off-VPN case navigator.onLine misses) — both mean "showing cached/no data".
 const apiUnreachable = computed<boolean>(() => !isOnline.value || offline.value);
@@ -90,7 +104,7 @@ onUnmounted(() => {
 
 <template>
   <main class="min-h-screen p-6">
-    <header class="mb-10 flex items-center justify-between gap-3">
+    <header class="relative mb-10 flex items-center justify-between gap-3">
       <h1 class="flex items-center gap-2 text-2xl font-semibold">
         <img src="/favicon.ico" alt="" class="h-10 w-10 rounded-md" />
         Storymark
@@ -102,7 +116,8 @@ onUnmounted(() => {
           Offline
         </span>
       </h1>
-      <div class="flex items-center gap-2">
+
+      <div class="hidden items-center gap-2 sm:flex">
         <button
           v-if="canInstall"
           type="button"
@@ -111,6 +126,13 @@ onUnmounted(() => {
         >
           Install app
         </button>
+        <RouterLink
+          v-if="isAdmin"
+          to="/admin"
+          class="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+        >
+          Admin
+        </RouterLink>
         <button
           type="button"
           class="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
@@ -126,6 +148,56 @@ onUnmounted(() => {
           Upload
         </RouterLink>
       </div>
+
+      <button
+        type="button"
+        aria-label="Menu"
+        :aria-expanded="menuOpen"
+        class="flex size-10 items-center justify-center rounded-md border border-zinc-300 hover:bg-zinc-100 sm:hidden dark:border-zinc-700 dark:hover:bg-zinc-800"
+        @click="menuOpen = !menuOpen"
+      >
+        <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+        </svg>
+      </button>
+
+      <template v-if="menuOpen">
+        <div class="fixed inset-0 z-10" @click="menuOpen = false"></div>
+        <div
+          class="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-md border border-[var(--sm-muted)]/20 bg-[var(--sm-bg)] py-1 shadow-lg sm:hidden"
+        >
+          <RouterLink
+            to="/upload"
+            class="block w-full px-3 py-2 text-left text-sm hover:bg-[var(--sm-surface)]"
+            @click="menuOpen = false"
+          >
+            Upload
+          </RouterLink>
+          <button
+            v-if="canInstall"
+            type="button"
+            class="block w-full px-3 py-2 text-left text-sm hover:bg-[var(--sm-surface)]"
+            @click="installFromMenu"
+          >
+            Install app
+          </button>
+          <RouterLink
+            v-if="isAdmin"
+            to="/admin"
+            class="block w-full px-3 py-2 text-left text-sm hover:bg-[var(--sm-surface)]"
+            @click="menuOpen = false"
+          >
+            Admin
+          </RouterLink>
+          <button
+            type="button"
+            class="block w-full px-3 py-2 text-left text-sm hover:bg-[var(--sm-surface)]"
+            @click="signOutFromMenu"
+          >
+            Sign out
+          </button>
+        </div>
+      </template>
     </header>
 
     <p v-if="books.length === 0 && !isLoading && apiUnreachable" class="text-[var(--sm-muted)]">

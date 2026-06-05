@@ -68,11 +68,11 @@ watch(
         <span class="font-semibold">Storymark Admin</span>
         <Button
           class="ml-auto"
-          label="Sign out"
-          icon="pi pi-sign-out"
+          label="Back to the app"
+          icon="pi pi-arrow-left"
           text
           severity="secondary"
-          @click="signOut"
+          @click="router.push('/')"
         />
       </header>
 
