@@ -1,0 +1,190 @@
+<script setup lang="ts">
+import Button from "primevue/button";
+import Dialog from "primevue/dialog";
+import InputText from "primevue/inputtext";
+import Select from "primevue/select";
+import { computed, ref, watch } from "vue";
+import type { ModelItem, ModelUpsertBody, ProviderItem } from "@/api/admin-types";
+
+const props = defineProps<{
+  /** The model to edit, `"new"` to create, or null when closed. */
+  target: ModelItem | "new" | null;
+  providers: readonly ProviderItem[];
+  /** Preselected provider when creating from a provider card. */
+  defaultProviderId: string | null;
+  saving: boolean;
+}>();
+
+const emit = defineEmits<{
+  (e: "save", body: ModelUpsertBody): void;
+  (e: "close"): void;
+}>();
+
+const label = ref("");
+const providerId = ref("");
+const modelName = ref("");
+const inputCost = ref("");
+const outputCost = ref("");
+
+const visible = computed<boolean>(() => props.target !== null);
+const isNew = computed<boolean>(() => props.target === "new");
+
+const providerOptions = computed(() =>
+  props.providers.map((provider) => ({ label: provider.name, value: provider.id })),
+);
+
+/** null for blank (no rate configured), the number when valid, undefined when invalid. */
+function parseCost(value: string): number | null | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  const numeric = Number(trimmed);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : undefined;
+}
+
+const costsValid = computed<boolean>(
+  () => parseCost(inputCost.value) !== undefined && parseCost(outputCost.value) !== undefined,
+);
+const canSave = computed<boolean>(
+  () =>
+    label.value.trim().length > 0 &&
+    modelName.value.trim().length > 0 &&
+    providerId.value.length > 0 &&
+    costsValid.value,
+);
+
+watch(
+  () => props.target,
+  (target) => {
+    if (target === null) {
+      return;
+    }
+    if (target === "new") {
+      label.value = "";
+      providerId.value = props.defaultProviderId ?? props.providers[0]?.id ?? "";
+      modelName.value = "";
+      inputCost.value = "";
+      outputCost.value = "";
+      return;
+    }
+    label.value = target.label;
+    providerId.value = target.providerId;
+    modelName.value = target.modelName;
+    inputCost.value = target.inputPerMillion === null ? "" : String(target.inputPerMillion);
+    outputCost.value = target.outputPerMillion === null ? "" : String(target.outputPerMillion);
+  },
+);
+
+function save(): void {
+  const input = parseCost(inputCost.value);
+  const output = parseCost(outputCost.value);
+  if (!canSave.value || input === undefined || output === undefined) {
+    return;
+  }
+  emit("save", {
+    label: label.value.trim(),
+    providerId: providerId.value,
+    modelName: modelName.value.trim(),
+    inputPerMillion: input,
+    outputPerMillion: output,
+  });
+}
+</script>
+
+<template>
+  <Dialog
+    :visible="visible"
+    modal
+    :header="isNew ? 'Add model' : 'Edit model'"
+    :closable="!saving"
+    class="w-[28rem] max-w-[calc(100vw-2rem)]"
+    @update:visible="
+      (open) => {
+        if (!open) emit('close');
+      }
+    "
+  >
+    <div class="space-y-4">
+      <div>
+        <label for="model-label" class="mb-1 block text-sm text-muted-color">Label</label>
+        <InputText
+          id="model-label"
+          v-model="label"
+          placeholder="GPT-4o mini"
+          fluid
+          autofocus
+          @keyup.enter="save"
+        />
+      </div>
+      <div>
+        <label for="model-provider" class="mb-1 block text-sm text-muted-color">Provider</label>
+        <Select
+          id="model-provider"
+          v-model="providerId"
+          :options="providerOptions"
+          option-label="label"
+          option-value="value"
+          placeholder="Select a provider"
+          fluid
+        />
+      </div>
+      <div>
+        <label for="model-name" class="mb-1 block text-sm text-muted-color">Model name</label>
+        <InputText
+          id="model-name"
+          v-model="modelName"
+          placeholder="openai/gpt-4o-mini"
+          class="font-mono"
+          fluid
+          @keyup.enter="save"
+        />
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label for="model-cost-in" class="mb-1 block text-sm text-muted-color">
+            Cost in ($/1M)
+          </label>
+          <InputText
+            id="model-cost-in"
+            v-model="inputCost"
+            inputmode="decimal"
+            placeholder="0.15"
+            fluid
+            @keyup.enter="save"
+          />
+        </div>
+        <div>
+          <label for="model-cost-out" class="mb-1 block text-sm text-muted-color">
+            Cost out ($/1M)
+          </label>
+          <InputText
+            id="model-cost-out"
+            v-model="outputCost"
+            inputmode="decimal"
+            placeholder="0.60"
+            fluid
+            @keyup.enter="save"
+          />
+        </div>
+      </div>
+      <p v-if="!costsValid" class="text-sm text-red-600 dark:text-red-300">
+        Costs must be non-negative numbers; leave blank when there's no rate.
+      </p>
+      <p v-else class="text-sm text-muted-color">
+        Blank costs mean no rate is configured (e.g. local models) — the cost meter shows no
+        estimate for them.
+      </p>
+    </div>
+
+    <template #footer>
+      <Button label="Cancel" text :disabled="saving" @click="emit('close')" />
+      <Button
+        :label="isNew ? 'Add model' : 'Save'"
+        :loading="saving"
+        :disabled="!canSave"
+        @click="save"
+      />
+    </template>
+  </Dialog>
+</template>
