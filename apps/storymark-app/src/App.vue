@@ -6,7 +6,7 @@ import { useReaderSettings } from "@/composables/use-reader-settings";
 // direct navigation to any non-reader route (admin, library) renders with the
 // default light theme regardless of what the user chose. Deliberately not
 // awaited: a one-frame default-theme flash beats blocking first paint.
-void useReaderSettings().load();
+void useReaderSettings().load("app");
 </script>
 
 <template>

@@ -2,7 +2,6 @@
 import Button from "primevue/button";
 import Column from "primevue/column";
 import DataTable from "primevue/datatable";
-import Dialog from "primevue/dialog";
 import InputNumber from "primevue/inputnumber";
 import Tag from "primevue/tag";
 import { useToast } from "primevue/usetoast";
@@ -11,6 +10,7 @@ import { TERMINAL_PROCESSING_STATUSES } from "@storymark/shared-types";
 import type { BookSummary, ProcessingStatus } from "@storymark/shared-types";
 import { AdminApiError } from "@/api/admin-api";
 import { booksApi } from "@/api/books-api";
+import AdminDialog from "@/components/admin/AdminDialog.vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
@@ -230,17 +230,12 @@ onMounted(() => {
       </DataTable>
     </div>
 
-    <Dialog
+    <AdminDialog
       :visible="pendingReprocess !== null"
-      modal
       header="Reprocess book"
-      :closable="reprocessingId === null"
-      :style="{ width: '32rem' }"
-      @update:visible="
-        (visible) => {
-          if (!visible) pendingReprocess = null;
-        }
-      "
+      :busy="reprocessingId !== null"
+      wide
+      @close="pendingReprocess = null"
     >
       <p v-if="pendingReprocess" class="mb-3">
         Re-run parsing, extraction, memory, and embeddings for
@@ -262,6 +257,6 @@ onMounted(() => {
         />
         <Button label="Reprocess" :loading="reprocessingId !== null" @click="confirmReprocess" />
       </template>
-    </Dialog>
+    </AdminDialog>
   </section>
 </template>

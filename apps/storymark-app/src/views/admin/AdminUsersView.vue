@@ -2,7 +2,6 @@
 import Button from "primevue/button";
 import Column from "primevue/column";
 import DataTable from "primevue/datatable";
-import Dialog from "primevue/dialog";
 import InputText from "primevue/inputtext";
 import Password from "primevue/password";
 import Tag from "primevue/tag";
@@ -13,6 +12,7 @@ import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
 import { useAuth } from "@/composables/use-auth";
 import { formatDateTime } from "@/utils/format-date-time";
+import AdminDialog from "@/components/admin/AdminDialog.vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 
 const { users, loadUsers, createUser, setUserPassword, setUserAdmin } = useAdmin();
@@ -96,7 +96,8 @@ function openPasswordDialog(user: UserAdminItem): void {
 
 async function confirmSetPassword(): Promise<void> {
   const target = passwordTarget.value;
-  if (target === null || passwordInput.value.length === 0) {
+  // `settingPassword` guards the Enter-key path (same note as submitCreate).
+  if (target === null || passwordInput.value.length === 0 || settingPassword.value) {
     return;
   }
   settingPassword.value = true;
@@ -264,17 +265,11 @@ onMounted(() => {
       </DataTable>
     </div>
 
-    <Dialog
+    <AdminDialog
       :visible="passwordTarget !== null"
-      modal
       :header="`Set password — ${passwordTarget?.userName ?? ''}`"
-      :closable="!settingPassword"
-      :style="{ width: '28rem' }"
-      @update:visible="
-        (visible) => {
-          if (!visible) passwordTarget = null;
-        }
-      "
+      :busy="settingPassword"
+      @close="passwordTarget = null"
     >
       <Password
         v-model="passwordInput"
@@ -299,18 +294,13 @@ onMounted(() => {
           @click="confirmSetPassword"
         />
       </template>
-    </Dialog>
+    </AdminDialog>
 
-    <Dialog
+    <AdminDialog
       :visible="demoteSelfTarget !== null"
-      modal
       header="Revoke your own admin access?"
-      :style="{ width: '28rem' }"
-      @update:visible="
-        (visible) => {
-          if (!visible) demoteSelfTarget = null;
-        }
-      "
+      :busy="false"
+      @close="demoteSelfTarget = null"
     >
       <p class="text-sm">
         You're removing the admin role from your own account. You'll lose access to this admin area
@@ -321,6 +311,6 @@ onMounted(() => {
         <Button label="Cancel" text @click="demoteSelfTarget = null" />
         <Button label="Revoke my admin" severity="danger" @click="confirmDemoteSelf" />
       </template>
-    </Dialog>
+    </AdminDialog>
   </section>
 </template>

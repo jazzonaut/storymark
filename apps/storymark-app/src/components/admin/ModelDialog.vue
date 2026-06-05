@@ -79,7 +79,8 @@ watch(
 function save(): void {
   const input = parseCost(inputCost.value);
   const output = parseCost(outputCost.value);
-  if (!canSave.value || input === undefined || output === undefined) {
+  // `saving` guards the Enter-key path; the footer button is already disabled.
+  if (props.saving || !canSave.value || input === undefined || output === undefined) {
     return;
   }
   emit("save", {

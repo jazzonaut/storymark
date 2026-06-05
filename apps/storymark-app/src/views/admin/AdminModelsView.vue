@@ -58,7 +58,6 @@ const initialLoading = ref(true);
 
 const chatTasks = ref<ChatTaskRow[]>([]);
 const embeddingModelId = ref("");
-const embeddingSaved = ref("");
 const draftTrimLocal = ref(true);
 const draftMaxChunks = ref("12");
 const draftMaxChunksLocal = ref("6");
@@ -96,6 +95,17 @@ const modelsByProvider = computed<ReadonlyMap<string, readonly ModelItem[]>>(() 
 
 const modelOptions = computed(() => models.value.map((m) => ({ label: m.label, value: m.id })));
 
+function settingValue(key: string): string | null {
+  return settings.value.find((s) => s.key === key)?.value ?? null;
+}
+
+/** The committed embedding model id, straight from settings. `embeddingModelId`
+ * is the Select's draft; it diverges only while a swap is being confirmed. */
+const embeddingSaved = computed<string>(() => {
+  const emb = settingValue(EMBEDDING_MODEL_KEY);
+  return emb === null ? "" : parseSettingString(emb);
+});
+
 /** Task labels (plus "Embedding") per model id — drives the in-use badges and
  * the delete-model guard. */
 const assignments = computed<ReadonlyMap<string, readonly string[]>>(() => {
@@ -131,10 +141,6 @@ const swapModelLabel = computed<string | null>(
   () => models.value.find((m) => m.id === swapModelId.value)?.label ?? null,
 );
 
-function settingValue(key: string): string | null {
-  return settings.value.find((s) => s.key === key)?.value ?? null;
-}
-
 watch(
   settings,
   () => {
@@ -150,8 +156,6 @@ watch(
       })
       .toSorted((a, b) => a.label.localeCompare(b.label));
 
-    const emb = settingValue(EMBEDDING_MODEL_KEY);
-    embeddingSaved.value = emb === null ? "" : parseSettingString(emb);
     embeddingModelId.value = embeddingSaved.value;
 
     const trim = settingValue("assistant.evidence.trimLocal");
@@ -217,13 +221,8 @@ async function confirmDeleteProvider(): Promise<void> {
     await deleteProvider(target.id);
     toast.add({ severity: "success", summary: "Deleted", detail: target.name, life: 2500 });
     deleteProviderTarget.value = null;
-  } catch {
-    toast.add({
-      severity: "error",
-      summary: "Could not delete",
-      detail: "Delete this provider's models first.",
-      life: 4000,
-    });
+  } catch (error) {
+    reportWithValidation(error, "Couldn't delete provider");
   } finally {
     deleting.value = false;
   }
@@ -239,13 +238,8 @@ async function confirmDeleteModel(): Promise<void> {
     await deleteModel(target.id);
     toast.add({ severity: "success", summary: "Deleted", detail: target.label, life: 2500 });
     deleteModelTarget.value = null;
-  } catch {
-    toast.add({
-      severity: "error",
-      summary: "Could not delete",
-      detail: "Reassign the tasks using this model first.",
-      life: 4000,
-    });
+  } catch (error) {
+    reportWithValidation(error, "Couldn't delete model");
   } finally {
     deleting.value = false;
   }

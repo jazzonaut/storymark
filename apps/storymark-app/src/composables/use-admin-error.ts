@@ -30,6 +30,25 @@ function validationMessage(error: unknown): string | null {
   return null;
 }
 
+/** The reason carried by a 409's `{ message }` body (the shape the delete
+ * endpoints answer with when a constraint blocks the operation), or null for
+ * any other error. */
+function conflictMessage(error: unknown): string | null {
+  if (!(error instanceof AdminApiError) || error.status !== 409) {
+    return null;
+  }
+  const body: unknown = error.body;
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "message" in body &&
+    typeof body.message === "string"
+  ) {
+    return body.message;
+  }
+  return null;
+}
+
 /** Shared admin request-error handling: a 401 stays silent (the global
  * auth-expired handler is already routing to the login screen — a toast would
  * just flash mid-navigation); anything else surfaces a toast. Call from a
@@ -53,10 +72,10 @@ export function useAdminError(): {
     });
   }
 
-  /** Like `report`, but a 400 carrying a validation message becomes a warn toast
-   * with the actual message under `summary`. */
+  /** Like `report`, but a 400 carrying a validation message or a 409 carrying a
+   * conflict reason becomes a warn toast with the server's actual message. */
   function reportWithValidation(error: unknown, summary: string): void {
-    const message = validationMessage(error);
+    const message = validationMessage(error) ?? conflictMessage(error);
     if (message !== null) {
       toast.add({ severity: "warn", summary, detail: message, life: 5000 });
       return;

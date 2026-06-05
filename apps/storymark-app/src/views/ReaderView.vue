@@ -429,7 +429,7 @@ async function load(): Promise<void> {
     resetRecap();
     closeEntitySummary();
     resetAssistant();
-    await loadSettings();
+    await loadSettings("reader");
     // Refresh the library in the background so this book's extraction version
     // (`updatedAt`) is current — a reprocess while we were away then invalidates the
     // Memory caches. Best-effort: offline keeps the last-seen list.

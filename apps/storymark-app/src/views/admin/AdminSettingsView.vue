@@ -14,6 +14,7 @@ import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import EmbeddingSwapDialog from "@/components/admin/EmbeddingSwapDialog.vue";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
+import { ellipsize } from "@/utils/ellipsize";
 import {
   EMBEDDING_MODEL_KEY,
   parseSettingBool,
@@ -85,8 +86,7 @@ function displayValue(row: SettingItem): string {
 const PREVIEW_MAX_CHARS = 240;
 
 function previewValue(row: SettingItem): string {
-  const value = displayValue(row);
-  return value.length > PREVIEW_MAX_CHARS ? `${value.slice(0, PREVIEW_MAX_CHARS)}…` : value;
+  return ellipsize(displayValue(row), PREVIEW_MAX_CHARS);
 }
 
 function startEdit(row: SettingItem): void {
@@ -161,6 +161,9 @@ async function save(row: SettingItem): Promise<void> {
       editingKey.value = null;
       return;
     }
+    // The draft moves into the swap dialog; close the row editor so a
+    // cancelled swap (which reloads nothing) doesn't leave it stuck open.
+    editingKey.value = null;
     swapModelId.value = next;
     return;
   }

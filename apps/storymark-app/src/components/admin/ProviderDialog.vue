@@ -58,7 +58,8 @@ watch(
 );
 
 function save(): void {
-  if (!canSave.value) {
+  // `saving` guards the Enter-key path; the footer button is already disabled.
+  if (props.saving || !canSave.value) {
     return;
   }
   emit("save", {

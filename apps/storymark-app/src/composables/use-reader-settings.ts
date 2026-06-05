@@ -96,7 +96,16 @@ function enterFullscreenOnGesture(): void {
   });
 }
 
+// Fullscreen is a reader behaviour: restoring it (and re-entering after OS
+// drops) must not happen just because the app booted with a stored
+// `fullscreen: true` — App.vue loads settings on every route for the theme.
+// Only a reader-context load() flips this, after which the mirrors below may
+// act for the rest of the session (matching pre-boot-load behaviour, where
+// fullscreen stayed on when navigating from the reader back to the library).
+let fullscreenManaged = false;
+
 function applyFullscreen(want: boolean): void {
+  if (!fullscreenManaged) return;
   if (want && !fullscreenActive()) {
     void enterFullscreen().catch(() => {
       enterFullscreenOnGesture();
@@ -183,7 +192,7 @@ useEventListener(document, "visibilitychange", () => {
 interface UseReaderSettings {
   readonly settings: DeepReadonly<ReaderSettings>;
   readonly cssVars: ComputedRef<Record<string, string>>;
-  load: () => Promise<void>;
+  load: (context: "app" | "reader") => Promise<void>;
   update: <K extends keyof ReaderSettings>(key: K, value: ReaderSettings[K]) => void;
   reset: () => void;
 }
@@ -198,7 +207,10 @@ const cssVars = computed<Record<string, string>>(() => ({
 }));
 
 export function useReaderSettings(): UseReaderSettings {
-  async function load(): Promise<void> {
+  async function load(context: "app" | "reader"): Promise<void> {
+    if (context === "reader") {
+      fullscreenManaged = true;
+    }
     if (!loaded) {
       const stored = await db.readerSettings.get("global");
       if (stored) {
