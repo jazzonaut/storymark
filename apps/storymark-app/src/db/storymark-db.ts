@@ -186,6 +186,16 @@ export interface StoredBookOpen {
   readonly lastOpenedAt: string;
 }
 
+/** Where the session ended (one row, keyed by the literal `"current"`): a book id
+ * when the reader was the last screen, null when it was anything else — library,
+ * upload, admin. Drives the cold-load redirect, which must distinguish "closed the
+ * app mid-book" (resume the book) from "closed it on the library" (stay there) —
+ * `bookOpens` can't tell those apart, it only records that a book was opened. */
+export interface StoredLastLocation {
+  readonly id: "current";
+  readonly bookId: string | null;
+}
+
 /** The last-active Memory panel tab for a book (one row per book), so reopening
  * the panel lands on the tab the reader left it on. `lastTab` is stored loosely as
  * a string and validated against the known tabs on read (the tab set can change
@@ -212,6 +222,7 @@ type StorymarkDb = Dexie & {
   entities: Table<CachedEntities, [string, number]>;
   entitySummaries: Table<CachedEntitySummary, [string, string, number]>;
   panelState: Table<StoredPanelState, string>;
+  lastLocation: Table<StoredLastLocation, string>;
 };
 
 function createDb(name: string): StorymarkDb {
@@ -259,6 +270,24 @@ function createDb(name: string): StorymarkDb {
   instance.version(4).stores({
     entitySummaries: "[bookId+entityId+upToSection]",
   });
+
+  // v5 adds the last-location row (see StoredLastLocation). Existing installs are
+  // seeded from their most recent bookOpens row: the pre-v5 redirect resumed the
+  // last-opened book unconditionally, and seeding keeps that first post-upgrade
+  // reopen behaving as before instead of dumping every reader on the library once.
+  instance
+    .version(5)
+    .stores({ lastLocation: "id" })
+    .upgrade(async (tx) => {
+      const opens = await tx.table<StoredBookOpen, string>("bookOpens").toArray();
+      if (opens.length === 0) {
+        return;
+      }
+      const latest = opens.reduce((a, b) => (b.lastOpenedAt > a.lastOpenedAt ? b : a));
+      await tx
+        .table<StoredLastLocation, string>("lastLocation")
+        .put({ id: "current", bookId: latest.bookId });
+    });
 
   // A release that adds a db.version() above upgrades the on-device database on
   // first open, and IndexedDB runs that upgrade only once every *other* connection
@@ -433,17 +462,18 @@ export async function purgeEntityDerivedCache(bookId: string): Promise<void> {
   ]);
 }
 
-/** The most recently opened book on this device, or null if none has been opened.
- * Drives the cold-load redirect that resumes the reader's last book instead of the
- * library. `lastOpenedAt` is an ISO 8601 string, so a lexicographic max is also the
- * chronological one; with a handful of books an in-memory scan beats indexing it. */
-export async function getLastOpenedBookId(): Promise<string | null> {
-  const opens = await db.bookOpens.toArray();
-  if (opens.length === 0) {
-    return null;
-  }
-  return opens.reduce((latest, row) => (row.lastOpenedAt > latest.lastOpenedAt ? row : latest))
-    .bookId;
+/** The book the previous session ended on, or null when it ended outside the
+ * reader (or nothing is recorded yet). Drives the cold-load redirect: only a
+ * session closed mid-book resumes that book. */
+export async function getLastLocationBookId(): Promise<string | null> {
+  const row = await db.lastLocation.get("current");
+  return row?.bookId ?? null;
+}
+
+/** Records where the user is right now — the open book's id in the reader, null on
+ * any other screen — so a cold start can land where the session ended. */
+export async function setLastLocation(bookId: string | null): Promise<void> {
+  await db.lastLocation.put({ id: "current", bookId });
 }
 
 /** True if any locally-queued reading-position or bookmark write hasn't reached the

@@ -3,7 +3,7 @@ import type { RouteRecordRaw } from "vue-router";
 import LibraryView from "@/views/LibraryView.vue";
 import { setAuthExpiredHandler } from "@/api/http";
 import { useAuth } from "@/composables/use-auth";
-import { getLastOpenedBookId } from "@/db/storymark-db";
+import { getLastLocationBookId, setLastLocation } from "@/db/storymark-db";
 
 const routes: readonly RouteRecordRaw[] = [
   { path: "/", name: "library", component: LibraryView },
@@ -89,17 +89,31 @@ router.beforeEach(async (to) => {
 });
 
 // On a cold app load only — the very first navigation, where `from` is still the
-// sentinel START_LOCATION — resume the book the reader last had open instead of
-// dropping them on the library. Later visits to "/" (tapping "Back to library")
-// are left alone, so the library stays reachable.
+// sentinel START_LOCATION — reopen where the previous session ended: the reader
+// when it closed mid-book, the library when it closed there (or on any other
+// screen). Later visits to "/" (tapping "Back to library") are left alone, so the
+// library stays reachable.
 router.beforeEach(async (to, from) => {
   if (from === START_LOCATION && to.name === "library") {
-    const bookId = await getLastOpenedBookId();
+    const bookId = await getLastLocationBookId();
     if (bookId !== null) {
       return { name: "reader", params: { id: bookId } };
     }
   }
   return true;
+});
+
+// Every settled navigation records where the user is — the open book in the
+// reader, null anywhere else — which is what the cold-load redirect above replays.
+// /login is excluded: it's a transient stop (an auth expiry mid-book lands there),
+// and recording it would erase the reader location the next cold start should
+// still resume.
+router.afterEach((to) => {
+  if (to.name === "login") {
+    return;
+  }
+  const bookId = to.name === "reader" && typeof to.params.id === "string" ? to.params.id : null;
+  void setLastLocation(bookId);
 });
 
 // A reader-endpoint 401 mid-session (expired/revoked cookie) drops the app to
