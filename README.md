@@ -6,15 +6,7 @@ Storymark is a self-hosted, offline-first reading app for long, character-heavy 
 
 If you've ever returned to an epic fantasy after a two-week break and thought *"wait, who is this person and why does everyone hate them?"*, Storymark is for you. Ask it. It answers using only the chapters you've actually reached.
 
-<!-- Screenshots: drop images into docs/assets/ and uncomment this section.
-
-## Screenshots
-
-| Reader | Memory panel |
-| ------ | ------------ |
-| ![Reader](docs/assets/reader.png) | ![Memory panel](docs/assets/memory-panel.png) |
-
--->
+Curious what it looks like? **[Screenshots →](docs/screenshots.md)**
 
 ---
 
@@ -51,6 +43,10 @@ The memory is what makes it different. As a book is processed, Storymark builds 
 - **The story so far**
 
   A rolling summary at your exact reading position.
+
+- **Scene at a glance**
+
+  What's happening right now, who's present, where you are, and what the immediate tension is.
 
 - **Timeline and relationship graph**
 

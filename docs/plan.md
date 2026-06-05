@@ -369,7 +369,7 @@ An operator-grade dashboard at `/admin` (PrimeVue):
 - DRM support
 - PDF, MOBI/AZW formats
 - Highlights, notes (Phase 7)
-- Multi-user accounts
+- Multi-user accounts *(correctly not in the MVP — landed later as Phase 7, ADR-0023)*
 - Cloud sync beyond LAN/Tailscale
 - Native desktop app
 - Running the LLM on Android
