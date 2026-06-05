@@ -32,6 +32,8 @@ internal sealed class BookCatalogService(StorymarkDbContext db, LlmRegistryServi
         // reader's library request never pays to scan other accounts' private books.
         var bookIds = books.Select(b => b.Id).ToList();
 
+        var latestProgressByBook = await GetLatestProgressByBookAsync(userId, bookIds, ct);
+
         // Embedding progress is chunks already vectorised under the *current* model
         // over the book's total chunks — the same "current model only" filter search
         // uses (docs/plan.md §15.5), so a mid-reindex book counts honestly. Two plain
@@ -56,16 +58,53 @@ internal sealed class BookCatalogService(StorymarkDbContext db, LlmRegistryServi
         var extractedByBook = await CountByBookAsync(
             db.SectionSummaries.Where(s => bookIds.Contains(s.BookId)), s => s.BookId, ct);
 
+        // Library order is "last activity": last read when the reader has opened the
+        // book, upload time otherwise — so a fresh upload starts on top and drifts
+        // down as other books are read.
         return books
-            .Select(b => new BookCatalogEntry
+            .Select(b =>
             {
-                Book = b,
-                TotalChunks = totalByBook.GetValueOrDefault(b.Id),
-                EmbeddedChunks = embeddedByBook.GetValueOrDefault(b.Id),
-                TotalSections = totalSectionsByBook.GetValueOrDefault(b.Id),
-                ExtractedSections = extractedByBook.GetValueOrDefault(b.Id),
+                var progress = latestProgressByBook.GetValueOrDefault(b.Id);
+                return new BookCatalogEntry
+                {
+                    Book = b,
+                    TotalChunks = totalByBook.GetValueOrDefault(b.Id),
+                    EmbeddedChunks = embeddedByBook.GetValueOrDefault(b.Id),
+                    TotalSections = totalSectionsByBook.GetValueOrDefault(b.Id),
+                    ExtractedSections = extractedByBook.GetValueOrDefault(b.Id),
+                    LastReadSection = progress?.SectionIndex,
+                    LastOpenedAt = progress?.UpdatedAt,
+                };
             })
+            .OrderByDescending(e => e.LastOpenedAt ?? e.Book.CreatedAt)
             .ToList();
+    }
+
+    /// <summary>The reader's canonical position per book — latest across their devices
+    /// by server receive time, the same rule as <see cref="ReadingProgressService.GetLatestAsync"/>.</summary>
+    private async Task<Dictionary<Guid, ProgressMarker>> GetLatestProgressByBookAsync(
+        Guid userId, IReadOnlyCollection<Guid> bookIds, CancellationToken ct)
+    {
+        var rows = await db.ReadingProgress
+            .AsNoTracking()
+            .Where(p => p.UserId == userId && bookIds.Contains(p.BookId))
+            .GroupBy(p => p.BookId)
+            .Select(g => g
+                .OrderByDescending(p => p.UpdatedAt)
+                .Select(p => new { p.BookId, p.SectionIndex, p.UpdatedAt })
+                .First())
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(
+            r => r.BookId,
+            r => new ProgressMarker { SectionIndex = r.SectionIndex, UpdatedAt = r.UpdatedAt });
+    }
+
+    private sealed record ProgressMarker
+    {
+        public required int SectionIndex { get; init; }
+
+        public required DateTimeOffset UpdatedAt { get; init; }
     }
 
     private static Task<Dictionary<Guid, int>> CountByBookAsync<T>(

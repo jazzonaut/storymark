@@ -17,4 +17,13 @@ internal sealed record BookCatalogEntry
     public required int ExtractedSections { get; init; }
 
     public required int TotalSections { get; init; }
+
+    /// <summary>Section index of the requesting reader's canonical position
+    /// (latest across their devices), or null when they never opened the book.</summary>
+    public int? LastReadSection { get; init; }
+
+    /// <summary>Server receive time of the reader's most recent position sync —
+    /// the "last read" instant that orders the library — or null when they never
+    /// opened the book.</summary>
+    public DateTimeOffset? LastOpenedAt { get; init; }
 }

@@ -46,7 +46,12 @@ export interface BookSummary {
   readonly embeddingProgress: EmbeddingProgress | null;
   /** Live extraction progress while `processingStatus` is `ExtractingPerSection`, else null. */
   readonly extractionProgress: ExtractionProgress | null;
+  /** Section index of the reader's canonical position (latest across their
+   * devices), or null when they never opened the book. */
   readonly lastReadSection: number | null;
+  /** When the reader last read the book (ISO 8601, server receive time of their
+   * most recent position sync), or null when they never opened it. The library
+   * list arrives ordered by this, falling back to upload time. */
   readonly lastOpenedAt: string | null;
   readonly isPublic: boolean;
   /** True when the signed-in reader owns the book — gates the delete and

@@ -4,8 +4,7 @@ using Storymark.Api.Services.Books;
 namespace Storymark.Api.Endpoints.Books;
 
 /// <summary>Library list/upload response. Mirrors the <c>BookSummary</c> contract
-/// in @storymark/shared-types. <c>lastReadSection</c>/<c>lastOpenedAt</c> are
-/// reading-progress fields (Phase 3) and are null until then.</summary>
+/// in @storymark/shared-types.</summary>
 internal sealed record BookSummaryResponse
 {
     public required Guid BookId { get; init; }
@@ -30,8 +29,13 @@ internal sealed record BookSummaryResponse
     /// <summary>Extraction progress while the book is on <c>ExtractingPerSection</c>, else null.</summary>
     public ExtractionProgressResponse? ExtractionProgress { get; init; }
 
+    /// <summary>Section index of the requesting reader's canonical position
+    /// (latest across their devices), or null when they never opened the book.</summary>
     public int? LastReadSection { get; init; }
 
+    /// <summary>When the reader last read the book (server receive time of their
+    /// most recent position sync), or null when they never opened it. Orders the
+    /// library list together with upload time.</summary>
     public DateTimeOffset? LastOpenedAt { get; init; }
 
     public required bool IsPublic { get; init; }
@@ -74,6 +78,8 @@ internal sealed record BookSummaryResponse
             UpdatedAt = book.UpdatedAt,
             IsPublic = book.IsPublic,
             IsOwned = book.OwnerUserId == userId,
+            LastReadSection = entry.LastReadSection,
+            LastOpenedAt = entry.LastOpenedAt,
             EmbeddingProgress =
                 book.ProcessingStatus == Domain.Books.ProcessingStatus.Embedding && entry.TotalChunks > 0
                     ? new EmbeddingProgressResponse { Embedded = entry.EmbeddedChunks, Total = entry.TotalChunks }
