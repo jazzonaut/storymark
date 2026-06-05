@@ -131,6 +131,8 @@ onMounted(refresh);
       </DataTable>
     </template>
 
-    <p v-else class="text-muted-color">{{ costLoading ? "Loading…" : "No data. Try refreshing." }}</p>
+    <p v-else class="text-muted-color">
+      {{ costLoading ? "Loading…" : "No data. Try refreshing." }}
+    </p>
   </section>
 </template>

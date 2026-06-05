@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import InputText from "primevue/inputtext";
 import Password from "primevue/password";
 import SelectButton from "primevue/selectbutton";
 import { computed, ref, watch } from "vue";
 import type { LlmProviderKind, ProviderItem, ProviderUpsertBody } from "@/api/admin-types";
+import AdminDialog from "@/components/admin/AdminDialog.vue";
 
 const props = defineProps<{
   /** The provider to edit, `"new"` to create, or null when closed. */
@@ -31,7 +31,9 @@ const hasStoredKey = ref(false);
 
 const visible = computed<boolean>(() => props.target !== null);
 const isNew = computed<boolean>(() => props.target === "new");
-const canSave = computed<boolean>(() => name.value.trim().length > 0 && baseUrl.value.trim().length > 0);
+const canSave = computed<boolean>(
+  () => name.value.trim().length > 0 && baseUrl.value.trim().length > 0,
+);
 
 watch(
   () => props.target,
@@ -69,17 +71,11 @@ function save(): void {
 </script>
 
 <template>
-  <Dialog
+  <AdminDialog
     :visible="visible"
-    modal
     :header="isNew ? 'Add provider' : 'Edit provider'"
-    :closable="!saving"
-    class="w-[28rem] max-w-[calc(100vw-2rem)]"
-    @update:visible="
-      (open) => {
-        if (!open) emit('close');
-      }
-    "
+    :busy="saving"
+    @close="emit('close')"
   >
     <div class="space-y-4">
       <div>
@@ -138,5 +134,5 @@ function save(): void {
         @click="save"
       />
     </template>
-  </Dialog>
+  </AdminDialog>
 </template>

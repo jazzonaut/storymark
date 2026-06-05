@@ -176,58 +176,58 @@ onMounted(() => {
     </div>
 
     <div class="overflow-x-auto">
-    <DataTable :value="sortedBooks" :loading="loading" data-key="bookId" size="small">
-      <template #empty>
-        <span class="text-muted-color">No books in the library.</span>
-      </template>
-
-      <Column field="title" header="Title">
-        <template #body="{ data }">
-          <div class="font-medium">{{ (data as BookSummary).title }}</div>
-          <div class="text-xs text-muted-color">{{ (data as BookSummary).bookId }}</div>
+      <DataTable :value="sortedBooks" :loading="loading" data-key="bookId" size="small">
+        <template #empty>
+          <span class="text-muted-color">No books in the library.</span>
         </template>
-      </Column>
 
-      <Column field="author" header="Author">
-        <template #body="{ data }">{{ (data as BookSummary).author ?? "Unknown" }}</template>
-      </Column>
+        <Column field="title" header="Title">
+          <template #body="{ data }">
+            <div class="font-medium">{{ (data as BookSummary).title }}</div>
+            <div class="text-xs text-muted-color">{{ (data as BookSummary).bookId }}</div>
+          </template>
+        </Column>
 
-      <Column header="Status">
-        <template #body="{ data }">
-          <Tag
-            :value="(data as BookSummary).processingStatus"
-            :severity="statusSeverity((data as BookSummary).processingStatus)"
-          />
-          <div
-            v-if="(data as BookSummary).processingError"
-            class="mt-1 max-w-md text-xs text-red-600 dark:text-red-300"
-          >
-            {{ (data as BookSummary).processingError }}
-          </div>
-        </template>
-      </Column>
+        <Column field="author" header="Author">
+          <template #body="{ data }">{{ (data as BookSummary).author ?? "Unknown" }}</template>
+        </Column>
 
-      <Column header="Updated">
-        <template #body="{ data }">
-          <span class="whitespace-nowrap">{{
-            formatDateTime((data as BookSummary).updatedAt)
-          }}</span>
-        </template>
-      </Column>
+        <Column header="Status">
+          <template #body="{ data }">
+            <Tag
+              :value="(data as BookSummary).processingStatus"
+              :severity="statusSeverity((data as BookSummary).processingStatus)"
+            />
+            <div
+              v-if="(data as BookSummary).processingError"
+              class="mt-1 max-w-md text-xs text-red-600 dark:text-red-300"
+            >
+              {{ (data as BookSummary).processingError }}
+            </div>
+          </template>
+        </Column>
 
-      <Column header="" style="width: 9rem">
-        <template #body="{ data }">
-          <Button
-            label="Reprocess"
-            size="small"
-            text
-            :disabled="!canReprocess(data as BookSummary)"
-            :loading="reprocessingId === (data as BookSummary).bookId"
-            @click="pendingReprocess = data as BookSummary"
-          />
-        </template>
-      </Column>
-    </DataTable>
+        <Column header="Updated">
+          <template #body="{ data }">
+            <span class="whitespace-nowrap">{{
+              formatDateTime((data as BookSummary).updatedAt)
+            }}</span>
+          </template>
+        </Column>
+
+        <Column header="" style="width: 9rem">
+          <template #body="{ data }">
+            <Button
+              label="Reprocess"
+              size="small"
+              text
+              :disabled="!canReprocess(data as BookSummary)"
+              :loading="reprocessingId === (data as BookSummary).bookId"
+              @click="pendingReprocess = data as BookSummary"
+            />
+          </template>
+        </Column>
+      </DataTable>
     </div>
 
     <Dialog

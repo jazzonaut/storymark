@@ -205,63 +205,63 @@ onMounted(() => {
     </div>
 
     <div class="overflow-x-auto">
-    <DataTable :value="sortedUsers" :loading="loading" data-key="id" size="small">
-      <template #empty>
-        <span class="text-muted-color">No users yet.</span>
-      </template>
-
-      <Column field="userName" header="Username">
-        <template #body="{ data }">
-          <div class="font-medium">{{ (data as UserAdminItem).userName }}</div>
-          <div class="text-xs text-muted-color">{{ (data as UserAdminItem).id }}</div>
+      <DataTable :value="sortedUsers" :loading="loading" data-key="id" size="small">
+        <template #empty>
+          <span class="text-muted-color">No users yet.</span>
         </template>
-      </Column>
 
-      <Column header="Status">
-        <template #body="{ data }">
-          <Tag
-            :value="statusOf(data as UserAdminItem).label"
-            :severity="statusOf(data as UserAdminItem).severity"
-          />
-        </template>
-      </Column>
+        <Column field="userName" header="Username">
+          <template #body="{ data }">
+            <div class="font-medium">{{ (data as UserAdminItem).userName }}</div>
+            <div class="text-xs text-muted-color">{{ (data as UserAdminItem).id }}</div>
+          </template>
+        </Column>
 
-      <Column header="Role">
-        <template #body="{ data }">
-          <Tag
-            :value="(data as UserAdminItem).isAdmin ? 'Admin' : 'Reader'"
-            :severity="(data as UserAdminItem).isAdmin ? 'info' : 'secondary'"
-          />
-        </template>
-      </Column>
+        <Column header="Status">
+          <template #body="{ data }">
+            <Tag
+              :value="statusOf(data as UserAdminItem).label"
+              :severity="statusOf(data as UserAdminItem).severity"
+            />
+          </template>
+        </Column>
 
-      <Column header="Created">
-        <template #body="{ data }">
-          <span class="whitespace-nowrap">{{
-            formatDateTime((data as UserAdminItem).createdAt)
-          }}</span>
-        </template>
-      </Column>
+        <Column header="Role">
+          <template #body="{ data }">
+            <Tag
+              :value="(data as UserAdminItem).isAdmin ? 'Admin' : 'Reader'"
+              :severity="(data as UserAdminItem).isAdmin ? 'info' : 'secondary'"
+            />
+          </template>
+        </Column>
 
-      <Column header="" style="width: 17rem">
-        <template #body="{ data }">
-          <Button
-            :label="(data as UserAdminItem).hasPassword ? 'Reset password' : 'Set password'"
-            size="small"
-            text
-            @click="openPasswordDialog(data as UserAdminItem)"
-          />
-          <Button
-            :label="(data as UserAdminItem).isAdmin ? 'Revoke admin' : 'Make admin'"
-            size="small"
-            text
-            :severity="(data as UserAdminItem).isAdmin ? 'danger' : 'secondary'"
-            :loading="togglingAdminId === (data as UserAdminItem).id"
-            @click="requestToggleAdmin(data as UserAdminItem)"
-          />
-        </template>
-      </Column>
-    </DataTable>
+        <Column header="Created">
+          <template #body="{ data }">
+            <span class="whitespace-nowrap">{{
+              formatDateTime((data as UserAdminItem).createdAt)
+            }}</span>
+          </template>
+        </Column>
+
+        <Column header="" style="width: 17rem">
+          <template #body="{ data }">
+            <Button
+              :label="(data as UserAdminItem).hasPassword ? 'Reset password' : 'Set password'"
+              size="small"
+              text
+              @click="openPasswordDialog(data as UserAdminItem)"
+            />
+            <Button
+              :label="(data as UserAdminItem).isAdmin ? 'Revoke admin' : 'Make admin'"
+              size="small"
+              text
+              :severity="(data as UserAdminItem).isAdmin ? 'danger' : 'secondary'"
+              :loading="togglingAdminId === (data as UserAdminItem).id"
+              @click="requestToggleAdmin(data as UserAdminItem)"
+            />
+          </template>
+        </Column>
+      </DataTable>
     </div>
 
     <Dialog

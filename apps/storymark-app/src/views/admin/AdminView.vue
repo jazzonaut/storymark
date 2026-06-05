@@ -56,9 +56,7 @@ watch(
     </div>
 
     <div v-else class="flex min-h-screen flex-col">
-      <header
-        class="flex h-14 shrink-0 items-center gap-2 border-b border-surface px-2 sm:px-4"
-      >
+      <header class="flex h-14 shrink-0 items-center gap-2 border-b border-surface px-2 sm:px-4">
         <Button
           class="md:hidden"
           icon="pi pi-bars"

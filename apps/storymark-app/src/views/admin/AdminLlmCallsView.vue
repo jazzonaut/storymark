@@ -110,95 +110,95 @@ onMounted(refresh);
     </div>
 
     <div class="overflow-x-auto">
-    <DataTable
-      v-model:expanded-rows="expandedRows"
-      :value="[...filtered]"
-      :loading="llmCallsLoading"
-      :row-class="rowClass"
-      data-key="id"
-      paginator
-      :rows="20"
-      :rows-per-page-options="[20, 50, 100]"
-      size="small"
-    >
-      <template #empty>
-        <span class="text-muted-color">No LLM calls recorded yet.</span>
-      </template>
-
-      <Column expander style="width: 3rem" />
-
-      <Column header="Time">
-        <template #body="{ data }">
-          <span class="whitespace-nowrap">{{
-            formatDateTime((data as LlmCallItem).createdAt)
-          }}</span>
+      <DataTable
+        v-model:expanded-rows="expandedRows"
+        :value="[...filtered]"
+        :loading="llmCallsLoading"
+        :row-class="rowClass"
+        data-key="id"
+        paginator
+        :rows="20"
+        :rows-per-page-options="[20, 50, 100]"
+        size="small"
+      >
+        <template #empty>
+          <span class="text-muted-color">No LLM calls recorded yet.</span>
         </template>
-      </Column>
 
-      <Column field="task" header="Task">
-        <template #body="{ data }">
-          <Tag :value="(data as LlmCallItem).task" severity="secondary" />
-          <Tag
-            v-if="!(data as LlmCallItem).succeeded"
-            value="failed"
-            severity="danger"
-            class="ml-1"
-          />
-          <Tag
-            v-if="(data as LlmCallItem).usedFutureContent"
-            value="future"
-            severity="danger"
-            class="ml-1"
-          />
-        </template>
-      </Column>
+        <Column expander style="width: 3rem" />
 
-      <Column header="Model">
-        <template #body="{ data }">
-          <span class="font-mono text-xs">{{ formatModel(data as LlmCallItem) }}</span>
-        </template>
-      </Column>
+        <Column header="Time">
+          <template #body="{ data }">
+            <span class="whitespace-nowrap">{{
+              formatDateTime((data as LlmCallItem).createdAt)
+            }}</span>
+          </template>
+        </Column>
 
-      <Column header="Latency">
-        <template #body="{ data }">{{ formatLatency(data as LlmCallItem) }}</template>
-      </Column>
+        <Column field="task" header="Task">
+          <template #body="{ data }">
+            <Tag :value="(data as LlmCallItem).task" severity="secondary" />
+            <Tag
+              v-if="!(data as LlmCallItem).succeeded"
+              value="failed"
+              severity="danger"
+              class="ml-1"
+            />
+            <Tag
+              v-if="(data as LlmCallItem).usedFutureContent"
+              value="future"
+              severity="danger"
+              class="ml-1"
+            />
+          </template>
+        </Column>
 
-      <Column header="Tokens (in / out)">
-        <template #body="{ data }">
-          {{ formatTokens((data as LlmCallItem).tokensIn, (data as LlmCallItem).tokensOut) }}
-        </template>
-      </Column>
+        <Column header="Model">
+          <template #body="{ data }">
+            <span class="font-mono text-xs">{{ formatModel(data as LlmCallItem) }}</span>
+          </template>
+        </Column>
 
-      <Column header="Cost">
-        <template #body="{ data }">{{ formatCost((data as LlmCallItem).costEstimate) }}</template>
-      </Column>
+        <Column header="Latency">
+          <template #body="{ data }">{{ formatLatency(data as LlmCallItem) }}</template>
+        </Column>
 
-      <template #expansion="{ data }">
-        <div class="space-y-3 p-3">
-          <div v-if="(data as LlmCallItem).error">
-            <div class="mb-1 text-xs font-medium text-red-700 dark:text-red-300">Error</div>
-            <pre
-              class="max-h-64 overflow-auto rounded bg-red-50 p-3 font-mono text-xs whitespace-pre-wrap text-red-800 dark:bg-red-950/40 dark:text-red-200"
-              >{{ (data as LlmCallItem).error }}</pre
-            >
+        <Column header="Tokens (in / out)">
+          <template #body="{ data }">
+            {{ formatTokens((data as LlmCallItem).tokensIn, (data as LlmCallItem).tokensOut) }}
+          </template>
+        </Column>
+
+        <Column header="Cost">
+          <template #body="{ data }">{{ formatCost((data as LlmCallItem).costEstimate) }}</template>
+        </Column>
+
+        <template #expansion="{ data }">
+          <div class="space-y-3 p-3">
+            <div v-if="(data as LlmCallItem).error">
+              <div class="mb-1 text-xs font-medium text-red-700 dark:text-red-300">Error</div>
+              <pre
+                class="max-h-64 overflow-auto rounded bg-red-50 p-3 font-mono text-xs whitespace-pre-wrap text-red-800 dark:bg-red-950/40 dark:text-red-200"
+                >{{ (data as LlmCallItem).error }}</pre
+              >
+            </div>
+            <div>
+              <div class="mb-1 text-xs font-medium text-muted-color">Prompt</div>
+              <pre
+                class="max-h-64 overflow-auto rounded bg-surface-100 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-surface-800"
+                >{{ (data as LlmCallItem).prompt }}</pre
+              >
+            </div>
+            <div>
+              <div class="mb-1 text-xs font-medium text-muted-color">Response</div>
+              <pre
+                class="max-h-64 overflow-auto rounded bg-surface-100 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-surface-800"
+                >{{ (data as LlmCallItem).response ?? "—" }}</pre
+              >
+            </div>
           </div>
-          <div>
-            <div class="mb-1 text-xs font-medium text-muted-color">Prompt</div>
-            <pre
-              class="max-h-64 overflow-auto rounded bg-surface-100 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-surface-800"
-              >{{ (data as LlmCallItem).prompt }}</pre
-            >
-          </div>
-          <div>
-            <div class="mb-1 text-xs font-medium text-muted-color">Response</div>
-            <pre
-              class="max-h-64 overflow-auto rounded bg-surface-100 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-surface-800"
-              >{{ (data as LlmCallItem).response ?? "—" }}</pre
-            >
-          </div>
-        </div>
-      </template>
-    </DataTable>
+        </template>
+      </DataTable>
     </div>
 
     <p v-if="atWindow" class="mt-3 text-xs text-muted-color">

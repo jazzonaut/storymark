@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import { useToast } from "primevue/usetoast";
 import { computed, ref, watch } from "vue";
 import type { EmbeddingImpactPreview } from "@/api/admin-types";
+import AdminDialog from "@/components/admin/AdminDialog.vue";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
 
@@ -78,17 +78,12 @@ async function confirm(): Promise<void> {
 </script>
 
 <template>
-  <Dialog
+  <AdminDialog
     :visible="visible"
-    modal
     header="Change embedding model"
-    :closable="!applying"
-    class="w-[32rem] max-w-[calc(100vw-2rem)]"
-    @update:visible="
-      (open) => {
-        if (!open) emit('close');
-      }
-    "
+    :busy="applying"
+    wide
+    @close="emit('close')"
   >
     <p class="mb-3">
       Switching to <strong>{{ displayName }}</strong> re-embeds every chunk under the new model.
@@ -111,5 +106,5 @@ async function confirm(): Promise<void> {
       <Button label="Cancel" text :disabled="applying" @click="emit('close')" />
       <Button label="Reindex" :loading="applying" :disabled="loading" @click="confirm" />
     </template>
-  </Dialog>
+  </AdminDialog>
 </template>

@@ -14,14 +14,16 @@ import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import EmbeddingSwapDialog from "@/components/admin/EmbeddingSwapDialog.vue";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
+import {
+  EMBEDDING_MODEL_KEY,
+  parseSettingBool,
+  parseSettingJson,
+  parseSettingString,
+} from "@/utils/setting-value";
 
 interface SettingRow extends SettingItem {
   readonly namespace: string;
 }
-
-// Editing this key triggers a full reindex, so it's intercepted with a confirm
-// dialog instead of the normal inline save.
-const EMBEDDING_MODEL_KEY = "llm.embedding.modelId";
 
 const { settings, settingsLoading, loadSettings, saveSetting, backfillSectionTitles } = useAdmin();
 const { report } = useAdminError();
@@ -67,21 +69,12 @@ const rows = computed<readonly SettingRow[]>(() =>
     .sort((a, b) => a.key.localeCompare(b.key)),
 );
 
-function parsed(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return undefined;
-  }
-}
-
 function displayValue(row: SettingItem): string {
   if (row.isSecret) {
     return "••••";
   }
   if (row.valueType === "String") {
-    const result = parsed(row.value);
-    return typeof result === "string" ? result : row.value;
+    return parseSettingString(row.value);
   }
   return row.value;
 }
@@ -105,10 +98,9 @@ function startEdit(row: SettingItem): void {
     return; // write-only: leave blank, the operator types a new value
   }
   if (row.valueType === "Bool") {
-    draftBool.value = parsed(row.value) === true;
+    draftBool.value = parseSettingBool(row.value);
   } else if (row.valueType === "String") {
-    const result = parsed(row.value);
-    draftText.value = typeof result === "string" ? result : row.value;
+    draftText.value = parseSettingString(row.value);
   } else {
     draftText.value = row.value;
   }
@@ -136,7 +128,7 @@ function resolveValue(row: SettingItem): PatchSettingBody["value"] | null {
     return numeric;
   }
   if (row.valueType === "Json") {
-    const result = parsed(draftText.value);
+    const result = parseSettingJson(draftText.value);
     if (typeof result !== "object" || result === null) {
       toast.add({
         severity: "error",

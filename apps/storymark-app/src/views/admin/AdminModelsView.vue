@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
-import Dialog from "primevue/dialog";
 import InputText from "primevue/inputtext";
 import Select from "primevue/select";
 import { useToast } from "primevue/usetoast";
@@ -12,6 +11,7 @@ import type {
   ProviderItem,
   ProviderUpsertBody,
 } from "@/api/admin-types";
+import AdminDialog from "@/components/admin/AdminDialog.vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import EmbeddingSwapDialog from "@/components/admin/EmbeddingSwapDialog.vue";
 import ModelDialog from "@/components/admin/ModelDialog.vue";
@@ -19,9 +19,9 @@ import ProviderCard from "@/components/admin/ProviderCard.vue";
 import ProviderDialog from "@/components/admin/ProviderDialog.vue";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
+import { EMBEDDING_MODEL_KEY, parseSettingBool, parseSettingString } from "@/utils/setting-value";
 
 const TASK_PREFIX = "llm.chat.taskMap.";
-const EMBEDDING_KEY = "llm.embedding.modelId";
 
 const TASK_LABELS: Record<string, string> = {
   qa: "Q&A",
@@ -124,31 +124,12 @@ const deleteProviderModelCount = computed<number>(() =>
     : (modelsByProvider.value.get(deleteProviderTarget.value.id) ?? []).length,
 );
 const deleteModelTasks = computed<readonly string[]>(() =>
-  deleteModelTarget.value === null
-    ? []
-    : (assignments.value.get(deleteModelTarget.value.id) ?? []),
+  deleteModelTarget.value === null ? [] : (assignments.value.get(deleteModelTarget.value.id) ?? []),
 );
 
 const swapModelLabel = computed<string | null>(
   () => models.value.find((m) => m.id === swapModelId.value)?.label ?? null,
 );
-
-function parsedString(value: string): string {
-  try {
-    const result: unknown = JSON.parse(value);
-    return typeof result === "string" ? result : value;
-  } catch {
-    return value;
-  }
-}
-
-function parsedBool(value: string): boolean {
-  try {
-    return JSON.parse(value) === true;
-  } catch {
-    return false;
-  }
-}
 
 function settingValue(key: string): string | null {
   return settings.value.find((s) => s.key === key)?.value ?? null;
@@ -161,20 +142,24 @@ watch(
       .filter((s) => s.key.startsWith(TASK_PREFIX))
       .map((s) => {
         const task = s.key.slice(TASK_PREFIX.length);
-        return { key: s.key, label: TASK_LABELS[task] ?? task, modelId: parsedString(s.value) };
+        return {
+          key: s.key,
+          label: TASK_LABELS[task] ?? task,
+          modelId: parseSettingString(s.value),
+        };
       })
       .toSorted((a, b) => a.label.localeCompare(b.label));
 
-    const emb = settingValue(EMBEDDING_KEY);
-    embeddingSaved.value = emb === null ? "" : parsedString(emb);
+    const emb = settingValue(EMBEDDING_MODEL_KEY);
+    embeddingSaved.value = emb === null ? "" : parseSettingString(emb);
     embeddingModelId.value = embeddingSaved.value;
 
     const trim = settingValue("assistant.evidence.trimLocal");
-    draftTrimLocal.value = trim === null ? true : parsedBool(trim);
+    draftTrimLocal.value = trim === null ? true : parseSettingBool(trim);
     const maxChunks = settingValue("assistant.evidence.maxChunks");
-    draftMaxChunks.value = maxChunks === null ? "12" : parsedString(maxChunks);
+    draftMaxChunks.value = maxChunks === null ? "12" : parseSettingString(maxChunks);
     const maxLocal = settingValue("assistant.evidence.maxChunksLocal");
-    draftMaxChunksLocal.value = maxLocal === null ? "6" : parsedString(maxLocal);
+    draftMaxChunksLocal.value = maxLocal === null ? "6" : parseSettingString(maxLocal);
   },
   { immediate: true },
 );
@@ -324,7 +309,12 @@ async function saveTrim(): Promise<void> {
       description="Define providers and models once, then assign each task to a model. Assignments take effect on the next call — no restart."
     >
       <template #actions>
-        <Button label="Add provider" icon="pi pi-plus" size="small" @click="providerTarget = 'new'" />
+        <Button
+          label="Add provider"
+          icon="pi pi-plus"
+          size="small"
+          @click="providerTarget = 'new'"
+        />
       </template>
     </AdminPageHeader>
 
@@ -332,12 +322,21 @@ async function saveTrim(): Promise<void> {
 
     <div v-else class="space-y-8">
       <!-- Providers & models -->
-      <div v-if="sortedProviders.length === 0" class="rounded-border border border-surface p-6 text-center">
+      <div
+        v-if="sortedProviders.length === 0"
+        class="rounded-border border border-surface p-6 text-center"
+      >
         <p class="mb-3 text-muted-color">
-          No providers yet. Add one (a local Ollama or any OpenAI-compatible API) to start
-          defining models.
+          No providers yet. Add one (a local Ollama or any OpenAI-compatible API) to start defining
+          models.
         </p>
-        <Button label="Add provider" icon="pi pi-plus" size="small" outlined @click="providerTarget = 'new'" />
+        <Button
+          label="Add provider"
+          icon="pi pi-plus"
+          size="small"
+          outlined
+          @click="providerTarget = 'new'"
+        />
       </div>
       <div v-else class="space-y-4">
         <ProviderCard
@@ -458,22 +457,16 @@ async function saveTrim(): Promise<void> {
       @close="onSwapClose"
     />
 
-    <Dialog
+    <AdminDialog
       :visible="deleteProviderTarget !== null"
-      modal
       header="Delete provider"
-      :closable="!deleting"
-      class="w-[28rem] max-w-[calc(100vw-2rem)]"
-      @update:visible="
-        (open) => {
-          if (!open) deleteProviderTarget = null;
-        }
-      "
+      :busy="deleting"
+      @close="deleteProviderTarget = null"
     >
       <p v-if="deleteProviderModelCount > 0" class="text-sm">
         <strong>{{ deleteProviderTarget?.name }}</strong> still has
-        {{ deleteProviderModelCount }} model(s). Delete or move them first — a provider with
-        models can't be removed.
+        {{ deleteProviderModelCount }} model(s). Delete or move them first — a provider with models
+        can't be removed.
       </p>
       <p v-else class="text-sm">
         Delete <strong>{{ deleteProviderTarget?.name }}</strong
@@ -489,19 +482,13 @@ async function saveTrim(): Promise<void> {
           @click="confirmDeleteProvider"
         />
       </template>
-    </Dialog>
+    </AdminDialog>
 
-    <Dialog
+    <AdminDialog
       :visible="deleteModelTarget !== null"
-      modal
       header="Delete model"
-      :closable="!deleting"
-      class="w-[28rem] max-w-[calc(100vw-2rem)]"
-      @update:visible="
-        (open) => {
-          if (!open) deleteModelTarget = null;
-        }
-      "
+      :busy="deleting"
+      @close="deleteModelTarget = null"
     >
       <p v-if="deleteModelTasks.length > 0" class="text-sm">
         <strong>{{ deleteModelTarget?.label }}</strong> is assigned to
@@ -522,6 +509,6 @@ async function saveTrim(): Promise<void> {
           @click="confirmDeleteModel"
         />
       </template>
-    </Dialog>
+    </AdminDialog>
   </section>
 </template>

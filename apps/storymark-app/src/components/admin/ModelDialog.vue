@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import InputText from "primevue/inputtext";
 import Select from "primevue/select";
 import { computed, ref, watch } from "vue";
 import type { ModelItem, ModelUpsertBody, ProviderItem } from "@/api/admin-types";
+import AdminDialog from "@/components/admin/AdminDialog.vue";
 
 const props = defineProps<{
   /** The model to edit, `"new"` to create, or null when closed. */
@@ -93,17 +93,11 @@ function save(): void {
 </script>
 
 <template>
-  <Dialog
+  <AdminDialog
     :visible="visible"
-    modal
     :header="isNew ? 'Add model' : 'Edit model'"
-    :closable="!saving"
-    class="w-[28rem] max-w-[calc(100vw-2rem)]"
-    @update:visible="
-      (open) => {
-        if (!open) emit('close');
-      }
-    "
+    :busy="saving"
+    @close="emit('close')"
   >
     <div class="space-y-4">
       <div>
@@ -186,5 +180,5 @@ function save(): void {
         @click="save"
       />
     </template>
-  </Dialog>
+  </AdminDialog>
 </template>
