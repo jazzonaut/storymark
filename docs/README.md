@@ -31,3 +31,4 @@ Markdown that isn't a root-level file lives here.
 - [`03-reverse-proxy-options.md`](deployment/03-reverse-proxy-options.md)
 - [`04-auth-options.md`](deployment/04-auth-options.md)
 - [`05-backup-and-restore.md`](deployment/05-backup-and-restore.md)
+- [`06-hosted-models.md`](deployment/06-hosted-models.md)

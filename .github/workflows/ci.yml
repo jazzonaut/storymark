@@ -109,8 +109,10 @@ jobs:
   image:
     # Image carries the API. Builds only on push to master after both
     # validation jobs succeed (or were skipped because nothing relevant changed).
-    # Skips cleanly when no registry is configured (REGISTRY_TOKEN unset), so a
-    # fresh clone or fork gets green CI without any secrets.
+    # On github.com the ambient GITHUB_TOKEN pushes to ghcr.io with zero setup
+    # (permissions below). Elsewhere (Forgejo), REGISTRY_TOKEN is required and
+    # the job skips cleanly when it's unset, so a fresh clone gets green CI
+    # without any secrets.
     needs: [dotnet, web, changes]
     if: |
       !cancelled() &&
@@ -119,6 +121,9 @@ jobs:
       github.event_name == 'push' && github.ref == 'refs/heads/master' &&
       (needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.web == 'true')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     outputs:
       pushed: ${{ steps.gate.outputs.pushed }}
     steps:
@@ -126,12 +131,16 @@ jobs:
         id: gate
         env:
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          SERVER_URL: ${{ github.server_url }}
         run: |
-          if [ -z "$REGISTRY_TOKEN" ]; then
+          if [ -n "$REGISTRY_TOKEN" ]; then
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          elif [ "${GITHUB_SERVER_URL:-$SERVER_URL}" = "https://github.com" ]; then
+            # ghcr.io accepts the workflow's own token; no secret needed.
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          else
             echo "REGISTRY_TOKEN secret not set — skipping image build and push."
             echo "pushed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "pushed=true" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@v4
         if: steps.gate.outputs.pushed == 'true'
@@ -176,9 +185,10 @@ jobs:
         if: steps.gate.outputs.pushed == 'true'
         env:
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          AMBIENT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          echo "$REGISTRY_TOKEN" | docker login "$REGISTRY_HOST" -u "$REGISTRY_USER" --password-stdin
+          echo "${REGISTRY_TOKEN:-$AMBIENT_TOKEN}" | docker login "$REGISTRY_HOST" -u "$REGISTRY_USER" --password-stdin
       - name: Build and push
         if: steps.gate.outputs.pushed == 'true'
         env:

@@ -80,11 +80,11 @@ Storymark ships as a single API container (which also serves the web app), plus 
 ```bash
 git clone https://github.com/jazzonaut/storymark.git && cd storymark
 
-# Build the image (or push it to your own registry via the included CI workflow)
-docker build -t storymark-api -f apps/storymark-api/Dockerfile .
+# Configure the stack — set passwords/keys, point at the prebuilt image
+cp infra/compose/.env.example infra/compose/.env   # edit before first up
+echo "STORYMARK_API_IMAGE=ghcr.io/jazzonaut/storymark-api" >> infra/compose/.env
 
-# Configure and start the stack
-cp infra/compose/.env.example infra/compose/.env   # set passwords/keys before first up
+# Start it
 docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env up -d
 
 # Pull the default local models
@@ -93,7 +93,9 @@ docker exec storymark-ollama ollama pull llama3.2:1b
 docker exec storymark-ollama ollama pull nomic-embed-text
 ```
 
-Open the published port (default `127.0.0.1:8088`), upload an EPUB, and let the background pipeline index it. Models, prompts, and per-task routing are all configurable from the admin panel at `/admin`. You can also point any task at an OpenAI-compatible hosted provider instead of (or alongside) Ollama.
+Prefer building from source? Skip the `STORYMARK_API_IMAGE` line and run `docker compose up -d --build` from `infra/compose/` instead — the local override builds the image from the repo.
+
+Open the published port (default `127.0.0.1:8088`), upload an EPUB, and let the background pipeline index it. Models, prompts, and per-task routing are all configurable from the admin panel at `/admin`. You can also point any task at an OpenAI-compatible hosted provider instead of (or alongside) Ollama — see [`docs/deployment/06-hosted-models.md`](docs/deployment/06-hosted-models.md) for suggested settings.
 
 A CPU-only homelab box is a first-class target: background extraction takes its time, and reader-time AI features use a small fast model with aggressive caching.
 

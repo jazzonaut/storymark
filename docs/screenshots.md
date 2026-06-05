@@ -38,3 +38,9 @@ Every tab filters to the exact reading position — nothing from chapters you ha
     <td></td>
   </tr>
 </table>
+
+## Admin
+
+<img src="assets/models.png" width="860" alt="AI models admin panel: an Ollama provider with local models, an OpenAI-compatible provider, per-task model routing, and local prompt trimming controls">
+
+<sub>Providers, models, and per-task routing — every chat task can run on a different model, local or hosted, switched at runtime. See <a href="deployment/06-hosted-models.md">hosted models</a> for suggested settings.</sub>
