@@ -13,6 +13,7 @@ import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
 import { useAuth } from "@/composables/use-auth";
 import { formatDateTime } from "@/utils/format-date-time";
+import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 
 const { users, loadUsers, createUser, setUserPassword, setUserAdmin } = useAdmin();
 const { report, reportWithValidation } = useAdminError();
@@ -64,7 +65,9 @@ async function refresh(): Promise<void> {
 
 async function submitCreate(): Promise<void> {
   const name = newUserName.value.trim();
-  if (name.length === 0) {
+  // The Enter-key bindings bypass the button's disabled state, so re-entrancy
+  // is guarded here too or Enter-spam creates the user twice.
+  if (name.length === 0 || creating.value) {
     return;
   }
   const password = newPassword.value.length > 0 ? newPassword.value : null;
@@ -106,6 +109,7 @@ async function confirmSetPassword(): Promise<void> {
       life: 4000,
     });
     passwordTarget.value = null;
+    passwordInput.value = "";
   } catch (error) {
     reportWithValidation(error, "Couldn't set password");
   } finally {
@@ -162,48 +166,54 @@ onMounted(() => {
 
 <template>
   <section>
-    <div class="mb-4 flex items-center justify-between gap-3">
-      <h2 class="text-lg font-semibold">Users</h2>
-      <Button label="Refresh" size="small" outlined :loading="loading" @click="refresh" />
-    </div>
+    <AdminPageHeader title="Users">
+      <template #actions>
+        <Button label="Refresh" size="small" outlined :loading="loading" @click="refresh" />
+      </template>
+    </AdminPageHeader>
 
-    <div class="mb-5 flex flex-wrap items-center gap-3">
+    <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
       <InputText
         v-model="newUserName"
         placeholder="Username"
         size="small"
         autocapitalize="none"
+        class="sm:w-48"
         @keyup.enter="submitCreate"
       />
       <Password
         v-model="newPassword"
         :feedback="false"
         toggle-mask
+        fluid
         placeholder="Password (optional)"
         size="small"
+        class="sm:w-48"
         @keyup.enter="submitCreate"
       />
       <Button
         label="Create user"
         size="small"
+        class="self-start sm:self-auto"
         :loading="creating"
         :disabled="newUserName.trim().length === 0"
         @click="submitCreate"
       />
-      <span class="text-sm opacity-70">
+      <span class="text-sm text-muted-color">
         Without a password the account stays inactive until one is set.
       </span>
     </div>
 
+    <div class="overflow-x-auto">
     <DataTable :value="sortedUsers" :loading="loading" data-key="id" size="small">
       <template #empty>
-        <span class="opacity-70">No users yet.</span>
+        <span class="text-muted-color">No users yet.</span>
       </template>
 
       <Column field="userName" header="Username">
         <template #body="{ data }">
           <div class="font-medium">{{ (data as UserAdminItem).userName }}</div>
-          <div class="text-xs opacity-60">{{ (data as UserAdminItem).id }}</div>
+          <div class="text-xs text-muted-color">{{ (data as UserAdminItem).id }}</div>
         </template>
       </Column>
 
@@ -252,6 +262,7 @@ onMounted(() => {
         </template>
       </Column>
     </DataTable>
+    </div>
 
     <Dialog
       :visible="passwordTarget !== null"
@@ -274,7 +285,7 @@ onMounted(() => {
         placeholder="New password (min 8 characters)"
         @keyup.enter="confirmSetPassword"
       />
-      <p class="mt-3 text-sm opacity-70">
+      <p class="mt-3 text-sm text-muted-color">
         Replaces any existing password and clears a lockout — this is also the account recovery
         path. Existing signed-in sessions stay valid.
       </p>

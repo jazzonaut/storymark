@@ -3,15 +3,17 @@ import Button from "primevue/button";
 import Textarea from "primevue/textarea";
 import { useToast } from "primevue/usetoast";
 import { computed, onMounted, ref } from "vue";
+import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
 
-const { prompts, isLoading, loadPrompts, savePrompt } = useAdmin();
-const { report } = useAdminError();
+const { prompts, promptsLoading, loadPrompts, savePrompt } = useAdmin();
+const { report, reportWithValidation } = useAdminError();
 const toast = useToast();
 
 const selectedKey = ref<string | null>(null);
 const draft = ref("");
+const saving = ref(false);
 
 const promptList = computed(() =>
   prompts.value.map((prompt) => ({ key: prompt.key, label: prompt.key.replace(/^prompts\./, "") })),
@@ -33,17 +35,22 @@ function revert(): void {
 }
 
 async function save(): Promise<void> {
-  if (selectedKey.value === null) {
+  if (selectedKey.value === null || saving.value) {
     return;
   }
 
   const key = selectedKey.value;
+  saving.value = true;
   try {
     await savePrompt(key, draft.value);
     draft.value = prompts.value.find((prompt) => prompt.key === key)?.text ?? draft.value;
     toast.add({ severity: "success", summary: "Saved", detail: key, life: 2500 });
   } catch (error) {
-    report(error);
+    // The backend rejects templates missing required placeholders with a field
+    // error; surface that text rather than a generic failure.
+    reportWithValidation(error, "Couldn't save prompt");
+  } finally {
+    saving.value = false;
   }
 }
 
@@ -64,15 +71,20 @@ onMounted(() => {
 
 <template>
   <section>
-    <h2 class="mb-4 text-lg font-semibold">Prompts</h2>
+    <AdminPageHeader
+      title="Prompts"
+      description="Templates for every LLM task. Placeholders in braces are filled at call time; required ones can't be removed."
+    />
 
-    <div class="flex gap-6">
-      <ul class="flex w-56 shrink-0 flex-col gap-1">
+    <p v-if="promptsLoading && prompts.length === 0" class="text-muted-color">Loading…</p>
+
+    <div v-else class="flex flex-col gap-4 md:flex-row md:gap-6">
+      <ul class="flex shrink-0 flex-col gap-1 md:w-56">
         <li v-for="item in promptList" :key="item.key">
           <button
             type="button"
-            class="w-full rounded px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            :class="{ 'bg-zinc-100 font-medium dark:bg-zinc-800': item.key === selectedKey }"
+            class="w-full rounded-border px-3 py-2 text-left text-sm hover:bg-emphasis"
+            :class="{ 'bg-emphasis font-medium': item.key === selectedKey }"
             @click="select(item.key)"
           >
             {{ item.label }}
@@ -80,15 +92,15 @@ onMounted(() => {
         </li>
       </ul>
 
-      <div class="flex-1">
+      <div class="min-w-0 flex-1">
         <template v-if="selected !== null">
-          <Textarea v-model="draft" class="w-full font-mono" rows="20" />
+          <Textarea v-model="draft" class="w-full font-mono text-sm" rows="20" />
           <div class="mt-3 flex gap-2">
-            <Button label="Save" :disabled="!isDirty" :loading="isLoading" @click="save" />
-            <Button label="Revert" text :disabled="!isDirty" @click="revert" />
+            <Button label="Save" :disabled="!isDirty" :loading="saving" @click="save" />
+            <Button label="Revert" text :disabled="!isDirty || saving" @click="revert" />
           </div>
         </template>
-        <p v-else class="opacity-70">Select a prompt to edit.</p>
+        <p v-else class="text-muted-color">Select a prompt to edit.</p>
       </div>
     </div>
   </section>

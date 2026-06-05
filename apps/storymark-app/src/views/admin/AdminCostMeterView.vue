@@ -5,6 +5,7 @@ import DataTable from "primevue/datatable";
 import SelectButton from "primevue/selectbutton";
 import { computed, defineAsyncComponent, onMounted, ref } from "vue";
 import type { TaskCostItem } from "@/api/admin-types";
+import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
 import { formatCost, formatTokens } from "@/utils/llm-format";
@@ -14,7 +15,7 @@ const CostBarChart = defineAsyncComponent(() => import("@/components/admin/CostB
 
 type Metric = "cost" | "calls";
 
-const { costSummary, isLoading, loadCostSummary } = useAdmin();
+const { costSummary, costLoading, loadCostSummary } = useAdmin();
 const { report } = useAdminError();
 
 const metric = ref<Metric>("cost");
@@ -53,32 +54,35 @@ onMounted(refresh);
 
 <template>
   <section>
-    <div class="mb-4 flex items-center justify-between">
-      <h2 class="text-lg font-semibold">Cost Meter</h2>
-      <Button label="Refresh" size="small" outlined :loading="isLoading" @click="refresh" />
-    </div>
+    <AdminPageHeader title="Cost Meter">
+      <template #actions>
+        <Button label="Refresh" size="small" outlined :loading="costLoading" @click="refresh" />
+      </template>
+    </AdminPageHeader>
 
     <template v-if="costSummary !== null">
       <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div class="rounded border border-zinc-200 p-4 dark:border-zinc-800">
-          <div class="text-xs opacity-60">Window</div>
+        <div class="rounded-border border border-surface p-4">
+          <div class="text-xs text-muted-color">Window</div>
           <div class="text-lg font-semibold">Last {{ costSummary.windowDays }} days</div>
         </div>
-        <div class="rounded border border-zinc-200 p-4 dark:border-zinc-800">
-          <div class="text-xs opacity-60">Calls</div>
+        <div class="rounded-border border border-surface p-4">
+          <div class="text-xs text-muted-color">Calls</div>
           <div class="text-lg font-semibold">{{ costSummary.callCount }}</div>
         </div>
-        <div class="rounded border border-zinc-200 p-4 dark:border-zinc-800">
-          <div class="text-xs opacity-60">Tokens (in + out)</div>
+        <div class="rounded-border border border-surface p-4">
+          <div class="text-xs text-muted-color">Tokens (in + out)</div>
           <div class="text-lg font-semibold">{{ totalTokens }}</div>
         </div>
-        <div class="rounded border border-zinc-200 p-4 dark:border-zinc-800">
-          <div class="text-xs opacity-60">Total cost</div>
+        <div class="rounded-border border border-surface p-4">
+          <div class="text-xs text-muted-color">Total cost</div>
           <div class="text-lg font-semibold">
             <template v-if="costSummary.costEstimate !== null">
               {{ formatCost(costSummary.costEstimate) }}
             </template>
-            <span v-else class="text-sm font-normal opacity-70">No cost rates configured</span>
+            <span v-else class="text-sm font-normal text-muted-color">
+              No cost rates configured
+            </span>
           </div>
         </div>
       </div>
@@ -100,12 +104,14 @@ onMounted(refresh);
         :values="values"
         :series-name="seriesName"
       />
-      <p v-else class="opacity-70">No LLM calls in the last {{ costSummary.windowDays }} days.</p>
+      <p v-else class="text-muted-color">
+        No LLM calls in the last {{ costSummary.windowDays }} days.
+      </p>
 
       <DataTable
         v-if="tasks.length > 0"
         :value="[...tasks]"
-        :loading="isLoading"
+        :loading="costLoading"
         data-key="task"
         size="small"
         class="mt-6"
@@ -125,6 +131,6 @@ onMounted(refresh);
       </DataTable>
     </template>
 
-    <p v-else class="opacity-70">{{ isLoading ? "Loading…" : "No data. Try refreshing." }}</p>
+    <p v-else class="text-muted-color">{{ costLoading ? "Loading…" : "No data. Try refreshing." }}</p>
   </section>
 </template>

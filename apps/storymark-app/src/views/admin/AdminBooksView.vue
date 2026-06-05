@@ -11,6 +11,7 @@ import { TERMINAL_PROCESSING_STATUSES } from "@storymark/shared-types";
 import type { BookSummary, ProcessingStatus } from "@storymark/shared-types";
 import { AdminApiError } from "@/api/admin-api";
 import { booksApi } from "@/api/books-api";
+import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
 import { formatDateTime } from "@/utils/format-date-time";
@@ -145,12 +146,13 @@ onMounted(() => {
 
 <template>
   <section>
-    <div class="mb-4 flex items-center justify-between gap-3">
-      <h2 class="text-lg font-semibold">Books</h2>
-      <Button label="Refresh" size="small" outlined :loading="loading" @click="loadBooks" />
-    </div>
+    <AdminPageHeader title="Books">
+      <template #actions>
+        <Button label="Refresh" size="small" outlined :loading="loading" @click="loadBooks" />
+      </template>
+    </AdminPageHeader>
 
-    <div class="mb-5 flex flex-wrap items-center gap-3">
+    <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
       <InputNumber
         v-model="staleMinutes"
         input-id="stale-minutes"
@@ -159,25 +161,30 @@ onMounted(() => {
         suffix=" min"
         size="small"
         show-buttons
+        class="w-32"
       />
       <Button
         label="Recover stale uploads"
         size="small"
+        class="self-start sm:self-auto"
         :loading="recovering"
         @click="runRecoverStuck"
       />
-      <span class="text-sm opacity-70"> Queues Uploaded books older than the selected age. </span>
+      <span class="text-sm text-muted-color">
+        Queues Uploaded books older than the selected age.
+      </span>
     </div>
 
+    <div class="overflow-x-auto">
     <DataTable :value="sortedBooks" :loading="loading" data-key="bookId" size="small">
       <template #empty>
-        <span class="opacity-70">No books in the library.</span>
+        <span class="text-muted-color">No books in the library.</span>
       </template>
 
       <Column field="title" header="Title">
         <template #body="{ data }">
           <div class="font-medium">{{ (data as BookSummary).title }}</div>
-          <div class="text-xs opacity-60">{{ (data as BookSummary).bookId }}</div>
+          <div class="text-xs text-muted-color">{{ (data as BookSummary).bookId }}</div>
         </template>
       </Column>
 
@@ -221,6 +228,7 @@ onMounted(() => {
         </template>
       </Column>
     </DataTable>
+    </div>
 
     <Dialog
       :visible="pendingReprocess !== null"
@@ -239,7 +247,7 @@ onMounted(() => {
         <strong>{{ pendingReprocess.title }}</strong
         >. Cached reader surfaces refresh after the book version changes.
       </p>
-      <p class="text-sm opacity-70">
+      <p class="text-sm text-muted-color">
         Reading progress and bookmarks are kept — exact positions can shift if the parser itself
         changed since the book was processed. Track the pipeline in
         <a href="/hangfire" target="_blank" rel="noopener" class="underline">Hangfire</a>.

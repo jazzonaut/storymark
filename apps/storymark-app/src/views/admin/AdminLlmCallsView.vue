@@ -2,11 +2,12 @@
 import Button from "primevue/button";
 import Column from "primevue/column";
 import DataTable from "primevue/datatable";
-import SelectButton from "primevue/selectbutton";
+import Select from "primevue/select";
 import Tag from "primevue/tag";
 import ToggleButton from "primevue/togglebutton";
 import { computed, onMounted, ref, watch } from "vue";
 import type { LlmCallItem } from "@/api/admin-types";
+import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
 import { formatDateTime } from "@/utils/format-date-time";
@@ -14,7 +15,7 @@ import { formatCost, formatTokens } from "@/utils/llm-format";
 
 const ALL_TASKS = "all";
 
-const { llmCalls, llmCallsWindow, isLoading, loadLlmCalls } = useAdmin();
+const { llmCalls, llmCallsWindow, llmCallsLoading, loadLlmCalls } = useAdmin();
 const { report } = useAdminError();
 
 const taskFilter = ref<string>(ALL_TASKS);
@@ -78,19 +79,21 @@ onMounted(refresh);
 
 <template>
   <section>
-    <div class="mb-4 flex items-center justify-between">
-      <h2 class="text-lg font-semibold">LLM Calls</h2>
-      <Button label="Refresh" size="small" outlined :loading="isLoading" @click="refresh" />
-    </div>
+    <AdminPageHeader title="LLM Calls">
+      <template #actions>
+        <Button label="Refresh" size="small" outlined :loading="llmCallsLoading" @click="refresh" />
+      </template>
+    </AdminPageHeader>
 
     <div class="mb-4 flex flex-wrap items-center gap-3">
-      <SelectButton
+      <Select
         v-model="taskFilter"
         :options="[...taskOptions]"
         option-label="label"
         option-value="value"
-        :allow-empty="false"
         size="small"
+        aria-label="Filter by task"
+        class="w-full sm:w-52"
       />
       <ToggleButton
         v-model="futureOnly"
@@ -106,10 +109,11 @@ onMounted(refresh);
       />
     </div>
 
+    <div class="overflow-x-auto">
     <DataTable
       v-model:expanded-rows="expandedRows"
       :value="[...filtered]"
-      :loading="isLoading"
+      :loading="llmCallsLoading"
       :row-class="rowClass"
       data-key="id"
       paginator
@@ -118,7 +122,7 @@ onMounted(refresh);
       size="small"
     >
       <template #empty>
-        <span class="opacity-70">No LLM calls recorded yet.</span>
+        <span class="text-muted-color">No LLM calls recorded yet.</span>
       </template>
 
       <Column expander style="width: 3rem" />
@@ -179,24 +183,25 @@ onMounted(refresh);
             >
           </div>
           <div>
-            <div class="mb-1 text-xs font-medium opacity-70">Prompt</div>
+            <div class="mb-1 text-xs font-medium text-muted-color">Prompt</div>
             <pre
-              class="max-h-64 overflow-auto rounded bg-zinc-100 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-zinc-800"
+              class="max-h-64 overflow-auto rounded bg-surface-100 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-surface-800"
               >{{ (data as LlmCallItem).prompt }}</pre
             >
           </div>
           <div>
-            <div class="mb-1 text-xs font-medium opacity-70">Response</div>
+            <div class="mb-1 text-xs font-medium text-muted-color">Response</div>
             <pre
-              class="max-h-64 overflow-auto rounded bg-zinc-100 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-zinc-800"
+              class="max-h-64 overflow-auto rounded bg-surface-100 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-surface-800"
               >{{ (data as LlmCallItem).response ?? "—" }}</pre
             >
           </div>
         </div>
       </template>
     </DataTable>
+    </div>
 
-    <p v-if="atWindow" class="mt-3 text-xs opacity-60">
+    <p v-if="atWindow" class="mt-3 text-xs text-muted-color">
       Showing the latest {{ llmCallsWindow }} calls. Older calls are not loaded.
     </p>
   </section>

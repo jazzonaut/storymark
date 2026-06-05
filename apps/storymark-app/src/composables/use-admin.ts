@@ -31,7 +31,14 @@ const costSummary = shallowRef<CostSummary | null>(null);
 const providers = shallowRef<readonly ProviderItem[]>([]);
 const models = shallowRef<readonly ModelItem[]>([]);
 const users = shallowRef<readonly UserAdminItem[]>([]);
-const isLoading = ref(false);
+
+// One flag per resource, not one shared flag: a save that reloads settings must
+// not flash loading state onto unrelated views (or fade a whole page that only
+// cares about models).
+const settingsLoading = ref(false);
+const promptsLoading = ref(false);
+const llmCallsLoading = ref(false);
+const costLoading = ref(false);
 
 interface UseAdmin {
   readonly settings: ShallowRef<readonly SettingItem[]>;
@@ -42,7 +49,10 @@ interface UseAdmin {
   readonly models: ShallowRef<readonly ModelItem[]>;
   readonly users: ShallowRef<readonly UserAdminItem[]>;
   readonly llmCallsWindow: number;
-  readonly isLoading: ShallowRef<boolean>;
+  readonly settingsLoading: ShallowRef<boolean>;
+  readonly promptsLoading: ShallowRef<boolean>;
+  readonly llmCallsLoading: ShallowRef<boolean>;
+  readonly costLoading: ShallowRef<boolean>;
   loadSettings: () => Promise<void>;
   saveSetting: (
     key: string,
@@ -72,11 +82,11 @@ interface UseAdmin {
 
 export function useAdmin(): UseAdmin {
   async function loadSettings(): Promise<void> {
-    isLoading.value = true;
+    settingsLoading.value = true;
     try {
       settings.value = await adminApi.listSettings();
     } finally {
-      isLoading.value = false;
+      settingsLoading.value = false;
     }
   }
 
@@ -90,11 +100,11 @@ export function useAdmin(): UseAdmin {
   }
 
   async function loadPrompts(): Promise<void> {
-    isLoading.value = true;
+    promptsLoading.value = true;
     try {
       prompts.value = await adminApi.listPrompts();
     } finally {
-      isLoading.value = false;
+      promptsLoading.value = false;
     }
   }
 
@@ -106,20 +116,20 @@ export function useAdmin(): UseAdmin {
   }
 
   async function loadLlmCalls(): Promise<void> {
-    isLoading.value = true;
+    llmCallsLoading.value = true;
     try {
       llmCalls.value = await adminApi.listLlmCalls(LLM_CALLS_WINDOW);
     } finally {
-      isLoading.value = false;
+      llmCallsLoading.value = false;
     }
   }
 
   async function loadCostSummary(): Promise<void> {
-    isLoading.value = true;
+    costLoading.value = true;
     try {
       costSummary.value = await adminApi.getCostSummary();
     } finally {
-      isLoading.value = false;
+      costLoading.value = false;
     }
   }
 
@@ -192,7 +202,10 @@ export function useAdmin(): UseAdmin {
     providers,
     models,
     llmCallsWindow: LLM_CALLS_WINDOW,
-    isLoading,
+    settingsLoading,
+    promptsLoading,
+    llmCallsLoading,
+    costLoading,
     loadSettings,
     saveSetting,
     loadPrompts,
