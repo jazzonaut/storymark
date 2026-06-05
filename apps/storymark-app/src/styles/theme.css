@@ -1,4 +1,16 @@
 @import "tailwindcss";
+/* Tailwind utilities bound to the active PrimeVue theme palette (bg-surface-*,
+   text-muted-color, border-surface, …) so Tailwind chrome and PrimeVue
+   components can't drift apart across light/dark (ADR-0027). */
+@import "tailwindcss-primeui";
+
+/* The app theme — the `data-theme` attribute on <html> — is the single dark-mode
+   source of truth. Tailwind's `dark:` variant must key off it, not the OS
+   preference, or the two disagree whenever the user's choice differs from the
+   OS (ADR-0027). PrimeVue's darkModeSelector in main.ts points at the same
+   attribute. Sepia intentionally matches nothing here: it themes reader
+   content, while UI chrome renders as light. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* OpenDyslexic (SIL OFL 1.1, see assets/fonts/OFL.txt) is bundled rather than
    loaded from a CDN so the dyslexia-friendly reader font works offline. The real

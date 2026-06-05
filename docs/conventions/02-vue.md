@@ -44,9 +44,9 @@ Don't intermix. A long `<script setup>` is a signal to split a component.
 ## Styles
 
 - Reader UI: **Tailwind utility classes** in template. No `<style scoped>` for layout/spacing/colour — only for cases Tailwind can't express cleanly (e.g. CSS column rules in `PaginatedSection.vue`).
-- Admin UI: **PrimeVue components + their pass-through props** for theming. Avoid mixing Tailwind and PrimeVue's own design tokens in the same component.
+- Admin UI: **PrimeVue components** for widgets; chrome around them uses the **`tailwindcss-primeui` semantic utilities** (`bg-surface-*`, `text-muted-color`, `border-surface`, …) so Tailwind styling stays bound to the active PrimeVue palette (ADR-0027). Don't use raw palette classes (`zinc-*`, `gray-*`) in admin chrome.
 - No global CSS resets beyond what Tailwind provides.
-- Theme tokens live in `src/styles/theme.css` and are referenced from `tailwind.config.ts`. Reader themes (light/sepia/dark) swap a CSS data-attribute on `<html>`, not Tailwind variants.
+- Theme tokens live in `src/styles/theme.css` (Tailwind v4, no `tailwind.config.ts`). Reader content themes (light/sepia/dark) swap the `data-theme` attribute on `<html>`; that same attribute drives Tailwind's `dark:` variant and PrimeVue's dark mode (ADR-0027). Sepia is reader-content-only — chrome renders light under it.
 
 ## Routing
 

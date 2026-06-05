@@ -24,6 +24,8 @@ catalog:
   '@types/node': 24.12.4
   primevue: 4.5.5
   '@primeuix/themes': 2.0.3
+  primeicons: 7.0.0
+  tailwindcss-primeui: 0.6.1
   tailwindcss: 4.3.0
   '@tailwindcss/vite': 4.3.0
   oxlint: 1.67.0

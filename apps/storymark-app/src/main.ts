@@ -15,7 +15,10 @@ import "@/styles/theme.css";
 void migrateLegacyCache().finally(() => {
   createApp(App)
     .use(router)
-    .use(PrimeVue, { theme: { preset: Aura } })
+    // darkModeSelector matches the `data-theme` attribute (the app theme) so
+    // PrimeVue flips together with Tailwind's `dark:` variant — see theme.css
+    // and ADR-0027.
+    .use(PrimeVue, { theme: { preset: Aura, options: { darkModeSelector: '[data-theme="dark"]' } } })
     .use(ToastService)
     .mount("#app");
 });

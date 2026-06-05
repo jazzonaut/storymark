@@ -42,12 +42,18 @@ catalogs:
     oxlint:
       specifier: 1.67.0
       version: 1.67.0
+    primeicons:
+      specifier: 7.0.0
+      version: 7.0.0
     primevue:
       specifier: 4.5.5
       version: 4.5.5
     tailwindcss:
       specifier: 4.3.0
       version: 4.3.0
+    tailwindcss-primeui:
+      specifier: 0.6.1
+      version: 0.6.1
     typescript:
       specifier: 6.0.3
       version: 6.0.3
@@ -107,6 +113,9 @@ importers:
       focus-trap:
         specifier: 'catalog:'
         version: 8.2.1
+      primeicons:
+        specifier: 'catalog:'
+        version: 7.0.0
       primevue:
         specifier: 'catalog:'
         version: 4.5.5(vue@3.5.35(typescript@6.0.3))
@@ -135,6 +144,9 @@ importers:
       tailwindcss:
         specifier: 'catalog:'
         version: 4.3.0
+      tailwindcss-primeui:
+        specifier: 'catalog:'
+        version: 0.6.1(tailwindcss@4.3.0)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -2229,6 +2241,9 @@ packages:
     resolution: {integrity: sha512-mQUvGU6aUFQ+rNvTIAcZuWGRT9a6f6Yrg9bHs4ImKF+HZCEK+plBvnAZYSIQztknZF2qnzNtr6F8s0+IuptdlQ==}
     engines: {node: ^14.13.1 || >=16.0.0}
 
+  primeicons@7.0.0:
+    resolution: {integrity: sha512-jK3Et9UzwzTsd6tzl2RmwrVY/b8raJ3QZLzoDACj+oTJ0oX7L9Hy+XnVwgo4QVKlKpnP/Ur13SXV/pVh4LzaDw==}
+
   primevue@4.5.5:
     resolution: {integrity: sha512-Kv5REIewCdP806QaoU+4nBXfmpzOGFKkZ9qH4KsL6MjiAQVc4PUzypt8erl4r3Vzh3nr3aWZIxkxYRRsLGiX2A==}
     engines: {node: '>=12.11.0'}
@@ -2406,6 +2421,11 @@ packages:
 
   tabbable@6.4.0:
     resolution: {integrity: sha512-05PUHKSNE8ou2dwIxTngl4EzcnsCDZGJ/iCLtDflR/SHB/ny14rXc+qU5P4mG9JkusiV7EivzY9Mhm55AzAvCg==}
+
+  tailwindcss-primeui@0.6.1:
+    resolution: {integrity: sha512-T69Rylcrmnt8zy9ik+qZvsLuRIrS9/k6rYJSIgZ1trnbEzGDDQSCIdmfyZknevqiHwpSJHSmQ9XT2C+S/hJY4A==}
+    peerDependencies:
+      tailwindcss: '>=3.1.0'
 
   tailwindcss@4.3.0:
     resolution: {integrity: sha512-y6nxMGB1nMW9R6k96e5gdIFzcfL/gTJRNaqGes1YvkLnPVXzWgbqFF2yLC0T8G774n24cx3Pe8XrKoniCOAH+Q==}
@@ -4764,6 +4784,8 @@ snapshots:
 
   pretty-bytes@6.1.1: {}
 
+  primeicons@7.0.0: {}
+
   primevue@4.5.5(vue@3.5.35(typescript@6.0.3)):
     dependencies:
       '@primeuix/styled': 0.7.4
@@ -5035,6 +5057,10 @@ snapshots:
   supports-preserve-symlinks-flag@1.0.0: {}
 
   tabbable@6.4.0: {}
+
+  tailwindcss-primeui@0.6.1(tailwindcss@4.3.0):
+    dependencies:
+      tailwindcss: 4.3.0
 
   tailwindcss@4.3.0: {}
 
