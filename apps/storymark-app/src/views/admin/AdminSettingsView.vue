@@ -86,6 +86,16 @@ function displayValue(row: SettingItem): string {
   return row.value;
 }
 
+// Some settings hold whole prompt templates; rendering thousands of characters
+// per row makes the table unusably tall (worst on phones). Read view clamps;
+// the editor always works on the full value.
+const PREVIEW_MAX_CHARS = 240;
+
+function previewValue(row: SettingItem): string {
+  const value = displayValue(row);
+  return value.length > PREVIEW_MAX_CHARS ? `${value.slice(0, PREVIEW_MAX_CHARS)}…` : value;
+}
+
 function startEdit(row: SettingItem): void {
   editingKey.value = row.key;
   draftText.value = "";
@@ -231,7 +241,9 @@ onMounted(() => {
               />
               <InputText v-else v-model="draftText" fluid />
             </template>
-            <span v-else class="break-all">{{ displayValue(data as SettingRow) }}</span>
+            <span v-else class="line-clamp-3 break-all">{{
+              previewValue(data as SettingRow)
+            }}</span>
           </template>
         </Column>
 

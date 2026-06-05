@@ -37,9 +37,12 @@ export class AdminApiError extends Error {
 // Authentication is the session cookie (ADR-0024), sent by the browser on its
 // own — admin requests carry no credential header.
 async function send(path: string, init?: RequestInit): Promise<Response> {
+  // Content-Type is claimed only when a body is actually sent: FastEndpoints
+  // answers a body-less request that claims JSON with a 400 serializer error,
+  // which silently broke every provider/model delete.
   const response = await apiFetch(`/api/admin/${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json" },
+    ...(init?.body === undefined ? {} : { headers: { "Content-Type": "application/json" } }),
   });
 
   if (!response.ok) {
