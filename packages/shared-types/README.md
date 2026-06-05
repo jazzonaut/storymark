@@ -2,7 +2,7 @@
 
 TypeScript contracts shared between `apps/storymark-app` and any tooling that needs to talk to the API in TS.
 
-**Status:** scaffolded (issue [`S0.1`](../../docs/issues.md)). Consumed as source
+Consumed as source
 via `"@storymark/shared-types": "workspace:*"`; `src/index.ts` is the package's
 public API (the one place a barrel file is allowed — see
 [`docs/conventions/01-typescript.md`](../../docs/conventions/01-typescript.md)).

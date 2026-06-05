@@ -26,7 +26,7 @@ Note what is **not** a substitute for `task ci`:
 ## Branches
 
 - `master` is the default branch and is always deployable.
-- Feature branches are short, kebab-case, prefixed by the issue id from [`../issues.md`](../issues.md):
+- Feature branches are short, kebab-case, prefixed by the issue id:
 
 ```text
 s3-2-embeddings-pgvector
@@ -65,7 +65,7 @@ Body (optional but encouraged for non-trivial changes):
 
 - Wrapped at ~72 chars.
 - Explains **why**, not **what** (the diff shows what).
-- References the issue id from `docs/issues.md` (`S3.2`, `S5.1`) — these are stable.
+- References the issue id (`S3.2`, `S5.1`) when there is one.
 
 Example:
 
@@ -87,7 +87,7 @@ One PR per issue. Title is the commit subject. Body:
 <1-3 bullets on what landed and why>
 
 ## Issue
-Closes the work in `docs/issues.md#S3.3`.
+Closes #123.
 
 ## Manual verification
 <Reproduction of the Acceptance Criteria from the issue.>

@@ -6,8 +6,6 @@ Markdown that isn't a root-level file lives here.
 
 - [`vision-and-architecture.md`](vision-and-architecture.md) — what Storymark is and how the pieces fit.
 - [`plan.md`](plan.md) — full implementation plan. Long. Skim headings, read the section you need.
-- [`issues.md`](issues.md) — Phase 0–6 backlog as vertical-slice issues.
-- [`delivery-plan.md`](delivery-plan.md) — phase-by-phase milestones at a glance.
 
 ## ADRs
 

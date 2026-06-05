@@ -63,7 +63,7 @@ instead.
 - The Hangfire dashboard no longer triggers a browser Basic-auth dialog — an
   unauthenticated visit answers a bare 401 page; the operator signs into the
   app first. Acceptable for an operator-only surface.
-- The "dedicated token-rotation flow" open question from CONTEXT.md dissolves:
+- The previously open "dedicated token-rotation flow" question dissolves:
   the credential is now a per-user password with the existing set/reset flow.
 
 ## Alternatives considered

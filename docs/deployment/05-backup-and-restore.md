@@ -44,8 +44,6 @@ find "$BACKUP_TARGET_DIR" -name 'storymark-db-*.dump' -mtime +14 -delete
 find "$BACKUP_TARGET_DIR" -name 'storymark-files-*.tar.gz' -mtime +14 -delete
 ```
 
-This is also CC.2 in [`../issues.md`](../issues.md).
-
 ## Restore
 
 On a fresh host:

@@ -5,8 +5,7 @@ import { memoryApi } from "@/api/memory-api";
 import { useReaderSettings } from "@/composables/use-reader-settings";
 import { db } from "@/db/storymark-db";
 
-// A book reopened after this gap gets a "Previously…" recap (docs/issues.md S5.4
-// names 24h; set to 12h per the user's preference).
+// A book reopened after this gap gets a "Previously…" recap.
 const REOPEN_GAP_HOURS = 12;
 const REOPEN_GAP_MS = REOPEN_GAP_HOURS * 60 * 60 * 1000;
 

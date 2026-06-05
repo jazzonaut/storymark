@@ -44,7 +44,7 @@ services:
       # proxy override file, not an env-substituted list item here: Compose v2
       # can't express "internal + optional external" that way, and rejects the
       # duplicate when the proxy var falls back to storymark-internal. See the
-      # proxy redesign noted in CONTEXT.md / docs/deployment/03-reverse-proxy-options.md.
+      # proxy redesign noted in docs/deployment/03-reverse-proxy-options.md.
     ports:
       # Empty STORYMARK_API_PUBLISHED_PORT disables the host-side publish
       # (typical when a reverse proxy on a shared network handles ingress).

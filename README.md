@@ -1,10 +1,12 @@
-# Storymark
+# <img src="apps/storymark-app/public/pwa-192x192.png" width="32" alt="Storymark icon"> Storymark
 
-> Never lose the thread.
+> A book reader that remembers with you.
 
-Storymark is a self-hosted, offline-first reading app for long, character-heavy books. It pairs a clean paginated reader with a **spoiler-safe memory** of everything you've read so far, powered by a local (or bring-your-own) LLM.
+Storymark is a self-hosted reading app with a memory. You read the way you would on any good e-reader: real pages, your own typography, fully offline once a book is on your device. While you read, Storymark keeps track of the story — who everyone is, what's happened, who's plotting against whom — and answers from that memory whenever you need a reminder.
 
-If you've ever returned to an epic fantasy after a two-week break and thought *"wait, who is this person and why does everyone hate them?"*, Storymark is for you. Ask it. It answers using only the chapters you've actually reached.
+The catch with every "chat with your book" idea is spoilers. Storymark's memory is **spoiler-safe by construction**: every answer, recap, timeline, and character card is built only from the chapters you've actually reached. Anything past your bookmark doesn't exist yet, on screen or in the model's context.
+
+It runs on your own hardware, against a local LLM through Ollama or any OpenAI-compatible provider you point it at. So when you pick an epic fantasy back up after two weeks and can't remember why everyone hates the captain: just ask.
 
 Curious what it looks like? **[Screenshots →](docs/screenshots.md)**
 
@@ -123,7 +125,7 @@ The "why" behind every load-bearing decision is written down in [`docs/adr/`](do
 
 ## Development
 
-Prereqs: Node 22 LTS + pnpm 10, the .NET SDK (latest LTS), Docker, and optionally [go-task](https://taskfile.dev).
+Prereqs: Node 22 or newer + pnpm 10, the .NET 10 SDK (pinned in `global.json`), Docker, and optionally [go-task](https://taskfile.dev).
 
 ```bash
 pnpm install

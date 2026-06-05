@@ -49,7 +49,7 @@ jobs:
           while IFS= read -r path; do
             [ -z "$path" ] && continue
             case "$path" in
-              docs/*|*.md|CLAUDE.md|CONTEXT.md|LICENSE) ;;
+              docs/*|*.md|LICENSE) ;;
               apps/storymark-api/*|infra/compose/*) dotnet=true ;;
               apps/storymark-app/*|pnpm-workspace.yaml|pnpm-lock.yaml|package.json|.oxlintrc.json) web=true ;;
               packages/*) dotnet=true; web=true ;;

@@ -8,10 +8,8 @@ Before doing anything non-trivial:
 
 1. `docs/vision-and-architecture.md` — what we're building and why.
 2. `docs/plan.md` — the full implementation plan (long; skim the headings, then read the section you need).
-3. `docs/issues.md` — the active backlog as vertical-slice issues.
-4. `docs/adr/` — every "why this and not that" decision lives here. If a decision feels arbitrary, you're missing an ADR.
-5. `docs/conventions/` — naming, code style, commit/PR shape. Non-negotiable.
-6. `CONTEXT.md` — current state and what's in flight.
+3. `docs/adr/` — every "why this and not that" decision lives here. If a decision feels arbitrary, you're missing an ADR.
+4. `docs/conventions/` — naming, code style, commit/PR shape. Non-negotiable.
 
 If the user asks for something that contradicts an ADR or convention, flag it before doing it.
 
@@ -31,7 +29,7 @@ These are not preferences. Violations are bugs.
 ## Workflow conventions
 
 - **Vertical slices, always.** Every change ships an end-to-end demonstrable behaviour. No "schema-only PR followed by a UI PR" splits unless each half is independently demoable.
-- **Issues drive work.** When the user says "do S3.2", read `docs/issues.md` for that issue, then start. If an issue's scope feels wrong, raise it before coding.
+- **Issues drive work.** Work items live in the GitHub issue tracker. When the user points at an issue, read it, then start. If an issue's scope feels wrong, raise it before coding.
 - **Plan before broad changes.** For anything that touches more than ~3 files in non-obvious ways, sketch the approach to the user first. Small refactors don't need this.
 - **Commit shape**: Conventional Commits (`feat: ...`, `fix: ...`, `chore: ...`, `docs: ...`, `refactor: ...`). See `docs/conventions/05-commit-and-pr.md`.
 - **Branches**: short, kebab, prefixed by issue ID. `s3-2-embeddings-pgvector`, `s5-1-section-extraction`.
@@ -50,8 +48,7 @@ If a tool you'd reach for isn't in `Taskfile.yml` and is going to be useful repe
 - An "I made a decision" document → `docs/adr/NNNN-slug.md`. Pick the next number, link from `docs/adr/README.md`.
 - A "how does this thing work?" or "what's the API of X" doc → `docs/` (top level) or a topic-specific subfolder.
 - A "you must do X this way" rule → `docs/conventions/`.
-- Anything that explains *current state* of an in-flight thing → `CONTEXT.md` (and remove from there when it ships).
-- Nothing else at the repo root. Only `README.md`, `CLAUDE.md`, `CONTEXT.md`, and `LICENSE` live at root.
+- Nothing else at the repo root. Only `README.md`, `CLAUDE.md`, and `LICENSE` live at root.
 
 ## Asking for help
 

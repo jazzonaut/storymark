@@ -16,7 +16,7 @@ The author has explicitly chosen to defer tests until after Phase 6.
 
 Every PR is verified manually via the **Acceptance Criteria** in its issue. PR descriptions must include the reproduction steps that prove the slice works. CI runs lint + typecheck + build; it does not run tests because none exist.
 
-A **spoiler-safety regression harness** ([`../issues.md#CC.3`](../issues.md)) is sketched but explicitly deferred. The interim safeguard is the LLM call log (ADR-0011) plus an admin filter for `used_future_content = true`.
+A **spoiler-safety regression harness** (backlog item CC.3) is sketched but explicitly deferred. The interim safeguard is the LLM call log (ADR-0011) plus an admin filter for `used_future_content = true`.
 
 ## Consequences
 

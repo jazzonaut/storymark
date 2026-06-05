@@ -49,7 +49,7 @@ Skip an ADR when:
 
 - the choice is the obvious default and the code already documents it,
 - it's a style preference (those live under [`../conventions/`](../conventions/)),
-- it's about *current state* rather than a decision (those live in [`../../CONTEXT.md`](../../CONTEXT.md)).
+- it's about *current state* rather than a decision (that belongs in the issue tracker or a topic doc).
 
 ## Template
 
