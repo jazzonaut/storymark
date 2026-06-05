@@ -16,9 +16,18 @@ void migrateLegacyCache().finally(() => {
   createApp(App)
     .use(router)
     // darkModeSelector matches the `data-theme` attribute (the app theme) so
-    // PrimeVue flips together with Tailwind's `dark:` variant — see theme.css
-    // and ADR-0027.
-    .use(PrimeVue, { theme: { preset: Aura, options: { darkModeSelector: '[data-theme="dark"]' } } })
+    // PrimeVue flips together with Tailwind's `dark:` variant; cssLayer slots
+    // PrimeVue's styles under Tailwind's utilities in the layer order pinned
+    // in theme.css — see ADR-0027.
+    .use(PrimeVue, {
+      theme: {
+        preset: Aura,
+        options: {
+          darkModeSelector: '[data-theme="dark"]',
+          cssLayer: { name: "primevue", order: "theme, base, primevue" },
+        },
+      },
+    })
     .use(ToastService)
     .mount("#app");
 });

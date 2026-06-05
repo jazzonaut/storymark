@@ -24,9 +24,10 @@ const { settings } = useReaderSettings();
 
 // ECharts has no notion of the app theme; mirror `data-theme` (loaded app-wide
 // in App.vue) onto its built-in dark theme so axis labels stay readable.
-const chartTheme = computed<string | undefined>(() =>
-  settings.theme === "dark" ? "dark" : undefined,
-);
+// "default" is not a registered theme — an unknown name is exactly how ECharts
+// selects its default styling, and it keeps the prop a plain string under
+// exactOptionalPropertyTypes.
+const chartTheme = computed<string>(() => (settings.theme === "dark" ? "dark" : "default"));
 
 const option = computed<ChartOption>(() => ({
   // The built-in dark theme paints its own near-black canvas; the page
