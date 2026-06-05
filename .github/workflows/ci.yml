@@ -109,6 +109,8 @@ jobs:
   image:
     # Image carries the API. Builds only on push to master after both
     # validation jobs succeed (or were skipped because nothing relevant changed).
+    # Skips cleanly when no registry is configured (REGISTRY_TOKEN unset), so a
+    # fresh clone or fork gets green CI without any secrets.
     needs: [dotnet, web, changes]
     if: |
       !cancelled() &&
@@ -117,9 +119,24 @@ jobs:
       github.event_name == 'push' && github.ref == 'refs/heads/master' &&
       (needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.web == 'true')
     runs-on: ubuntu-latest
+    outputs:
+      pushed: ${{ steps.gate.outputs.pushed }}
     steps:
+      - name: Skip if no registry is configured
+        id: gate
+        env:
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$REGISTRY_TOKEN" ]; then
+            echo "REGISTRY_TOKEN secret not set — skipping image build and push."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.pushed == 'true'
       - name: Resolve registry settings
+        if: steps.gate.outputs.pushed == 'true'
         env:
           SERVER_URL: ${{ github.server_url }}
           REGISTRY_HOST_OVERRIDE: ${{ secrets.REGISTRY_HOST }}
@@ -133,6 +150,11 @@ jobs:
             registry_host="${registry_host#https://}"
             registry_host="${registry_host#http://}"
             registry_host="${registry_host%%/*}"
+            # GitHub's container registry lives on ghcr.io, not github.com.
+            # Forgejo serves its registry from the forge host itself.
+            if [ "$registry_host" = "github.com" ]; then
+              registry_host="ghcr.io"
+            fi
           fi
 
           registry_user="${REGISTRY_USER_OVERRIDE:-${GITHUB_REPOSITORY_OWNER:-}}"
@@ -151,16 +173,14 @@ jobs:
             echo "REGISTRY_IMAGE=$registry_image"
           } >> "$GITHUB_ENV"
       - name: Log in to container registry
+        if: steps.gate.outputs.pushed == 'true'
         env:
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "$REGISTRY_TOKEN" ]; then
-            echo "REGISTRY_TOKEN secret is not set." >&2
-            exit 1
-          fi
           echo "$REGISTRY_TOKEN" | docker login "$REGISTRY_HOST" -u "$REGISTRY_USER" --password-stdin
       - name: Build and push
+        if: steps.gate.outputs.pushed == 'true'
         env:
           DOCKER_BUILDKIT: "1"
         run: |
@@ -176,11 +196,13 @@ jobs:
           docker push "$IMAGE:${{ github.sha }}"
 
   deploy:
-    # Optional. Skip if Portainer secrets aren't configured.
+    # Optional. Skip if Portainer secrets aren't configured, or if no image
+    # was pushed (registry not configured).
     needs: [image, changes]
     if: |
       !cancelled() &&
       needs.image.result == 'success' &&
+      needs.image.outputs.pushed == 'true' &&
       github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:

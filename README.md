@@ -6,27 +6,61 @@ Storymark is a self-hosted, offline-first reading app for long, character-heavy 
 
 If you've ever returned to an epic fantasy after a two-week break and thought *"wait, who is this person and why does everyone hate them?"*, Storymark is for you. Ask it. It answers using only the chapters you've actually reached.
 
+<!-- Screenshots: drop images into docs/assets/ and uncomment this section.
+
+## Screenshots
+
+| Reader | Memory panel |
+| ------ | ------------ |
+| ![Reader](docs/assets/reader.png) | ![Memory panel](docs/assets/memory-panel.png) |
+
+-->
+
 ---
 
-## What it does
+## Features
 
-**The reader comes first.** Storymark is meant to replace Kindle or Readera as your daily reading app, not to be a chatbot wrapped around books:
+The reader comes first. Storymark is meant to replace Kindle or Readera as your daily reading app, not to be a chatbot wrapped around books.
 
-- Paginated, Readera-style reading with typography and theme controls
-- Bookmarks and reading progress, synced to your server
-- Whole-book offline download: once a book is on your device, reading needs no connection
-- Installable PWA, works on phone, tablet, and desktop
+- **Paginated reader**
 
-**The memory makes it different.** As a book is processed, Storymark builds a structured memory of its events, characters, places, and relationships. While you read, that memory is always one tap away:
+  Readera-style pages (no endless scrolling), with typography controls and light, sepia, and dark themes.
 
-- **Ask** free-text questions ("why is everyone angry at Y?") and get answers with sources you can jump to
-- **Select any passage** for an instant "Who/What is this?" card or a fast model hint
-- **Tap any character name** in the text for a summary of what you know about them, so far
-- **Summary** tab: a rolling "story so far" at your exact reading position
-- **Timeline** of events and a force-directed **relationship graph**, both filtered to where you are in the book
-- **Recap cards** at chapter boundaries, and a "Previously…" card when you come back after a break
+- **Bookmarks and progress sync**
 
-Every one of these surfaces respects the same rule: **content from chapters you haven't reached is never shown to you, never fed to the model, and never counted.**
+  Your reading position and bookmarks live on your server, so you can pick up on another device exactly where you stopped.
+
+- **Whole-book offline**
+
+  Download a book once and read it with no connection at all. Anything the memory has already shown you (recaps, cards, charts) is cached on the device too.
+
+- **Installable PWA**
+
+  One app for phone, tablet, and desktop.
+
+The memory is what makes it different. As a book is processed, Storymark builds a structured memory of its events, characters, places, and relationships. While you read, that memory is always one tap away:
+
+- **Ask questions in plain language**
+
+  "Why is everyone angry at Y?" gets an answer with sources you can jump straight to.
+
+- **"Who/What is this?" on any selection**
+
+  Select a passage for an instant card or a fast model hint, or tap any character name in the text for a summary of what you know about them, so far.
+
+- **The story so far**
+
+  A rolling summary at your exact reading position.
+
+- **Timeline and relationship graph**
+
+  A chronological event timeline and a force-directed character graph, both cut off at where you are in the book.
+
+- **Recaps that respect your pace**
+
+  A dismissible recap card at chapter boundaries, and a "Previously…" card when you come back after a break.
+
+Every one of these surfaces obeys the same rule: **content from chapters you haven't reached is never shown to you, never fed to the model, and never counted.**
 
 ---
 
@@ -46,7 +80,7 @@ Spoiler safety is the core product invariant, not a filter bolted on top:
 Storymark ships as a single API container (which also serves the web app), plus PostgreSQL with pgvector and Ollama. A reference Docker Compose stack lives in [`infra/compose/`](infra/compose/).
 
 ```bash
-git clone <this repo> && cd storymark
+git clone https://github.com/jazzonaut/storymark.git && cd storymark
 
 # Build the image (or push it to your own registry via the included CI workflow)
 docker build -t storymark-api -f apps/storymark-api/Dockerfile .
@@ -103,7 +137,7 @@ task api                                           # backend with hot reload
 task dev                                           # frontend dev server (separate terminal)
 ```
 
-Open [http://localhost:5173](http://localhost:5173). Before pushing, run **`task ci`**: it runs the same lint, format, typecheck, and build gates as CI across both apps. Conventions (strict TypeScript, exact-pinned dependencies, commit shape) are documented in [`docs/conventions/`](docs/conventions/).
+Open [http://localhost:5173](http://localhost:5173). Before pushing, run **`task ci`**: it runs the same lint, format, typecheck, and build gates as CI across both apps.
 
 ### Repo layout
 
@@ -131,7 +165,16 @@ Storymark is young and honest about it:
 - **Automated tests are still thin**: the core was built against manually verified acceptance criteria ([ADR-0012](docs/adr/0012-tests-deferred.md)); a spoiler-safety harness exists (`pnpm test:spoiler`) and broader coverage is in progress.
 - **PWA today, native later**: a Capacitor wrap of the same codebase is planned for iOS/Android niceties.
 
-Found a bug, or want a feature? Issues and PRs are welcome.
+---
+
+## Contributing
+
+Bug reports, feature ideas, and PRs are all welcome. A few things to know before opening a PR:
+
+- `task ci` runs the same gates CI does: lint, format check, typecheck, and build for both the frontend and the backend.
+- Conventions live in [`docs/conventions/`](docs/conventions/): strict TypeScript, exact-pinned dependencies, Conventional Commits.
+- Every load-bearing decision has an ADR in [`docs/adr/`](docs/adr/). If a change goes against one, open an issue first so we can talk it over.
+- There's no full test suite yet ([ADR-0012](docs/adr/0012-tests-deferred.md)), so include a short note in your PR describing what you verified manually.
 
 ---
 

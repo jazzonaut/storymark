@@ -9,8 +9,8 @@ The workflow at [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) is 
 | `changes`  | every push / PR                      | Detects which subtree changed; downstream jobs gate on it.    |
 | `web`      | when frontend or shared paths change | `pnpm install` → `pnpm lint` → `pnpm typecheck` → `pnpm build`. |
 | `dotnet`   | when backend or shared paths change  | `dotnet restore` → `dotnet format --verify-no-changes` → `dotnet build -warnaserror`. |
-| `image`    | push to default branch only          | Builds a multi-stage Docker image, pushes to the configured registry under two tags: `latest` and `${commit_sha}`. |
-| `deploy`   | push to default branch only          | Calls Portainer's `/api/stacks/{id}/git/redeploy` to repull + restart the live stack. |
+| `image`    | push to default branch only          | Builds a multi-stage Docker image, pushes to the configured registry under two tags: `latest` and `${commit_sha}`. Skips cleanly when `REGISTRY_TOKEN` isn't set. |
+| `deploy`   | push to default branch only          | Calls Portainer's `/api/stacks/{id}/git/redeploy` to repull + restart the live stack. Skips when Portainer secrets aren't set or no image was pushed. |
 
 Tests are intentionally absent ([ADR-0012](../adr/0012-tests-deferred.md)). When tests return, `web` and `dotnet` gain test steps.
 
@@ -22,12 +22,14 @@ The workflow reads everything via secrets so the same code can target different 
 
 | Secret             | Default                                  | Purpose                                  |
 | ------------------ | ---------------------------------------- | ---------------------------------------- |
-| `REGISTRY_HOST`    | derived from `github.server_url`         | Container registry host (`forge.example.com`). |
+| `REGISTRY_HOST`    | derived from `github.server_url` (`ghcr.io` when that is `github.com`) | Container registry host (`forge.example.com`). |
 | `REGISTRY_USER`    | derived from `GITHUB_REPOSITORY_OWNER`   | Registry username.                       |
 | `REGISTRY_TOKEN`   | —                                        | Registry password or PAT with `write:packages`. |
 | `REGISTRY_IMAGE`   | `${REGISTRY_HOST}/${REGISTRY_USER}/storymark-api` | Override the full image reference. |
 
-If your Git host's built-in container registry has the credentials baked in (typical for Forgejo), `REGISTRY_USER` and `REGISTRY_TOKEN` are the only required ones.
+If `REGISTRY_TOKEN` is not set at all, the `image` job (and therefore `deploy`) skips with a notice instead of failing — the validation jobs alone keep CI green, which is the out-of-the-box state for a fresh clone or fork.
+
+If your Git host's built-in container registry has the credentials baked in (typical for Forgejo), `REGISTRY_USER` and `REGISTRY_TOKEN` are the only required ones. On GitHub, `REGISTRY_TOKEN` must be a classic PAT with `write:packages` — the workflow deliberately doesn't use the ambient `GITHUB_TOKEN`, so the same file works unchanged on Forgejo.
 
 ### Portainer redeploy
 
