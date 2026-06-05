@@ -5,6 +5,7 @@ import QuestionInput from "@/components/reader/QuestionInput.vue";
 import CloseButton from "@/components/reader/CloseButton.vue";
 import AnswerCard from "@/components/reader/AnswerCard.vue";
 import CurrentScenePanel from "@/components/reader/CurrentScenePanel.vue";
+import MemoryTabIcon from "@/components/reader/MemoryTabIcon.vue";
 import SummaryPanel from "@/components/reader/SummaryPanel.vue";
 import StoryGuidePanel from "@/components/reader/StoryGuidePanel.vue";
 import TimelinePanel from "@/components/reader/TimelinePanel.vue";
@@ -157,7 +158,7 @@ function scrollThreadToEnd(): void {
             v-for="tab in tabs"
             :key="tab.id"
             type="button"
-            class="rounded-md px-3 py-1 text-sm font-semibold"
+            class="inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-semibold"
             :class="
               activeTab === tab.id
                 ? 'bg-[var(--sm-surface)] text-[var(--sm-fg)]'
@@ -165,6 +166,7 @@ function scrollThreadToEnd(): void {
             "
             @click="setTab(tab.id)"
           >
+            <MemoryTabIcon :tab="tab.id" />
             {{ tab.label }}
           </button>
         </nav>
