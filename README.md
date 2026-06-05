@@ -180,4 +180,4 @@ Bug reports, feature ideas, and PRs are all welcome. A few things to know before
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+GNU AGPLv3 — see [`LICENSE`](LICENSE). Run it, fork it, self-host it freely; if you offer a modified Storymark to others over a network, share your changes under the same terms.
