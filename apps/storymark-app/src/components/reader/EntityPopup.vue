@@ -68,6 +68,20 @@ function startMerge(): void {
         </div>
         <div class="flex shrink-0 items-center gap-1">
           <button
+            v-if="character"
+            type="button"
+            class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
+            title="Generate a new character colour"
+            @click="palette.regenerate(openEntity.entityId)"
+          >
+            <span
+              aria-hidden="true"
+              class="h-1 w-3 rounded"
+              :style="{ background: characterColor(openEntity.entityId) }"
+            ></span>
+            Colour…
+          </button>
+          <button
             type="button"
             class="rounded-md px-2 py-1 text-xs font-medium text-[var(--sm-muted)] hover:text-[var(--sm-fg)]"
             title="Merge another entry into this one"
@@ -80,19 +94,6 @@ function startMerge(): void {
       </header>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <button
-          v-if="character"
-          type="button"
-          class="mb-4 inline-flex items-center gap-2 rounded-md border border-[var(--sm-muted)]/30 px-3 py-1.5 text-sm"
-          @click="palette.regenerate(openEntity.entityId)"
-        >
-          <span
-            aria-hidden="true"
-            class="h-1 w-5 rounded"
-            :style="{ background: characterColor(openEntity.entityId) }"
-          ></span
-          >Regenerate colour
-        </button>
         <RefreshStatusIndicator
           v-if="summary"
           :refreshing="isRefreshing"

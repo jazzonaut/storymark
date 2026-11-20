@@ -1271,13 +1271,14 @@ onBeforeUnmount(() => {
 }
 .reader-content--hl-default :deep(.sm-character),
 .reader-content--hl-subtle :deep(.sm-character) {
-  text-decoration-color: var(--sm-underline);
+  text-decoration-style: solid;
 }
 .reader-content--hl-default :deep(.sm-character) {
-  text-decoration-style: solid;
+  text-decoration-color: var(--sm-underline);
   text-decoration-thickness: 0.1em;
 }
 .reader-content--hl-subtle :deep(.sm-character) {
+  text-decoration-color: color-mix(in srgb, var(--sm-underline) 50%, transparent);
   text-decoration-thickness: 1px;
 }
 </style>
