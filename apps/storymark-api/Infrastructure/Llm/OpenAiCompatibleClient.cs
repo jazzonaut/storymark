@@ -13,11 +13,18 @@ internal sealed class OpenAiCompatibleClient(HttpClient http) : IChatModelClient
 
     public async Task<ChatResponse> CompleteAsync(ChatRequest request, LlmEndpoint endpoint, CancellationToken ct)
     {
+        var host = endpoint.ResolveUri("chat/completions").Host;
+        var isOpenRouter = string.Equals(host, "openrouter.ai", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".openrouter.ai", StringComparison.OrdinalIgnoreCase);
         var payload = new ChatPayload
         {
             Model = request.Model,
-            Temperature = request.Temperature,
+            Temperature = request.ReasoningEffort is null or "none" ? request.Temperature : null,
             Messages = WireChatMessage.From(request.Messages),
+            Reasoning = isOpenRouter && request.ReasoningEffort is { } effort
+                ? new ReasoningPayload { Effort = effort }
+                : null,
+            ReasoningEffort = isOpenRouter ? null : request.ReasoningEffort,
         };
 
         using var response = await HttpResilience.SendWithRetryAsync(
@@ -104,6 +111,20 @@ internal sealed class OpenAiCompatibleClient(HttpClient http) : IChatModelClient
         [JsonPropertyName("temperature")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public double? Temperature { get; init; }
+
+        [JsonPropertyName("reasoning")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public ReasoningPayload? Reasoning { get; init; }
+
+        [JsonPropertyName("reasoning_effort")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ReasoningEffort { get; init; }
+    }
+
+    private sealed record ReasoningPayload
+    {
+        [JsonPropertyName("effort")]
+        public required string Effort { get; init; }
     }
 
     private sealed record ChatBody

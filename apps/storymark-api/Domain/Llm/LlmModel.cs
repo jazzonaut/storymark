@@ -12,8 +12,11 @@ internal sealed class LlmModel
     public Guid ProviderId { get; set; }
 
     /// <summary>The provider's wire name for the model (e.g. <c>llama3.2:3b</c>,
-    /// <c>openai/gpt-4o-mini</c>).</summary>
+    /// <c>openai/gpt-6-luna</c>).</summary>
     public required string ModelName { get; set; }
+
+    /// <summary>Null uses the provider default; "none" disables reasoning.</summary>
+    public string? ReasoningEffort { get; set; }
 
     public decimal? InputPerMillion { get; set; }
 

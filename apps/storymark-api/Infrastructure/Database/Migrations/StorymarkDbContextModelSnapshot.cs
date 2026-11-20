@@ -839,6 +839,10 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("provider_id");
 
+                    b.Property<string>("ReasoningEffort")
+                        .HasColumnType("text")
+                        .HasColumnName("reasoning_effort");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");

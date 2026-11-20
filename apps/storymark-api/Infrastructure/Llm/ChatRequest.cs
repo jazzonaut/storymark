@@ -9,4 +9,6 @@ internal sealed record ChatRequest
     public required IReadOnlyList<ChatMessage> Messages { get; init; }
 
     public double? Temperature { get; init; }
+
+    public string? ReasoningEffort { get; init; }
 }

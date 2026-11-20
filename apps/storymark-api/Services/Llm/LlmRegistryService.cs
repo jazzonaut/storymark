@@ -14,6 +14,8 @@ internal sealed record ResolvedModel
 
     public required string ModelName { get; init; }
 
+    public string? ReasoningEffort { get; init; }
+
     public required string ProviderName { get; init; }
 
     public required LlmProviderKind Kind { get; init; }
@@ -74,6 +76,7 @@ internal sealed class LlmRegistryService(
         {
             ModelId = row.m.Id,
             ModelName = row.m.ModelName,
+            ReasoningEffort = row.m.ReasoningEffort,
             ProviderName = row.p.Name,
             Kind = row.p.Kind,
             BaseUrl = row.p.BaseUrl,
@@ -139,12 +142,10 @@ internal sealed class LlmRegistryService(
         await db.LlmModels.AsNoTracking().OrderBy(m => m.Label).ToListAsync(ct);
 
     public async Task<LlmModel> CreateModelAsync(
-        string label, Guid providerId, string modelName, decimal? input, decimal? output, CancellationToken ct)
+        string label, Guid providerId, string modelName, decimal? input, decimal? output,
+        string? reasoningEffort, CancellationToken ct)
     {
-        if (!await db.LlmProviders.AnyAsync(p => p.Id == providerId, ct))
-        {
-            throw new InvalidOperationException($"No provider with id '{providerId}'.");
-        }
+        await ValidateModelProviderAsync(providerId, reasoningEffort, ct);
 
         var now = DateTimeOffset.UtcNow;
         var model = new LlmModel
@@ -153,6 +154,7 @@ internal sealed class LlmRegistryService(
             Label = label.Trim(),
             ProviderId = providerId,
             ModelName = modelName.Trim(),
+            ReasoningEffort = reasoningEffort,
             InputPerMillion = input,
             OutputPerMillion = output,
             CreatedAt = now,
@@ -164,19 +166,18 @@ internal sealed class LlmRegistryService(
     }
 
     public async Task<LlmModel> UpdateModelAsync(
-        Guid id, string label, Guid providerId, string modelName, decimal? input, decimal? output, CancellationToken ct)
+        Guid id, string label, Guid providerId, string modelName, decimal? input, decimal? output,
+        string? reasoningEffort, CancellationToken ct)
     {
         var model = await db.LlmModels.FirstOrDefaultAsync(m => m.Id == id, ct)
             ?? throw new KeyNotFoundException($"No model with id '{id}'.");
 
-        if (!await db.LlmProviders.AnyAsync(p => p.Id == providerId, ct))
-        {
-            throw new InvalidOperationException($"No provider with id '{providerId}'.");
-        }
+        await ValidateModelProviderAsync(providerId, reasoningEffort, ct);
 
         model.Label = label.Trim();
         model.ProviderId = providerId;
         model.ModelName = modelName.Trim();
+        model.ReasoningEffort = reasoningEffort;
         model.InputPerMillion = input;
         model.OutputPerMillion = output;
         model.UpdatedAt = DateTimeOffset.UtcNow;
@@ -192,6 +193,22 @@ internal sealed class LlmRegistryService(
         }
 
         await db.LlmModels.Where(m => m.Id == id).ExecuteDeleteAsync(ct);
+    }
+
+    private async Task ValidateModelProviderAsync(Guid providerId, string? reasoningEffort, CancellationToken ct)
+    {
+        var provider = await db.LlmProviders.AsNoTracking().FirstOrDefaultAsync(p => p.Id == providerId, ct)
+            ?? throw new InvalidOperationException($"No provider with id '{providerId}'.");
+
+        if (reasoningEffort is not (null or "none" or "minimal" or "low" or "medium" or "high" or "xhigh" or "max"))
+        {
+            throw new ArgumentException("Unsupported reasoning effort.", nameof(reasoningEffort));
+        }
+
+        if (reasoningEffort is not null && provider.Kind != LlmProviderKind.OpenAiCompatible)
+        {
+            throw new ArgumentException("Reasoning effort requires an OpenAI-compatible provider.", nameof(reasoningEffort));
+        }
     }
 
     private Task<ResolvedModel> ResolveSettingAsync(string key, CancellationToken ct) =>

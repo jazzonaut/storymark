@@ -33,7 +33,12 @@ internal sealed class ChatModelRouter
     {
         var model = await _registry.ResolveTaskAsync(task, ct);
         var client = ClientFor(model.Kind);
-        var request = new ChatRequest { Model = model.ModelName, Messages = messages };
+        var request = new ChatRequest
+        {
+            Model = model.ModelName,
+            Messages = messages,
+            ReasoningEffort = model.ReasoningEffort,
+        };
         var endpoint = EndpointFor(model);
 
         var descriptor = Describe(task, model, SerializePrompt(messages), metadata);

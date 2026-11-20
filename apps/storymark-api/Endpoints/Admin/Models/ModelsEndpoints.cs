@@ -16,6 +16,8 @@ internal sealed record ModelItem
 
     public required string ModelName { get; init; }
 
+    public string? ReasoningEffort { get; init; }
+
     public decimal? InputPerMillion { get; init; }
 
     public decimal? OutputPerMillion { get; init; }
@@ -26,6 +28,7 @@ internal sealed record ModelItem
         Label = m.Label,
         ProviderId = m.ProviderId,
         ModelName = m.ModelName,
+        ReasoningEffort = m.ReasoningEffort,
         InputPerMillion = m.InputPerMillion,
         OutputPerMillion = m.OutputPerMillion,
     };
@@ -38,6 +41,8 @@ internal sealed record CreateModelRequest
     public Guid ProviderId { get; init; }
 
     public required string ModelName { get; init; }
+
+    public string? ReasoningEffort { get; init; }
 
     public decimal? InputPerMillion { get; init; }
 
@@ -53,6 +58,8 @@ internal sealed record UpdateModelRequest
     public Guid ProviderId { get; init; }
 
     public required string ModelName { get; init; }
+
+    public string? ReasoningEffort { get; init; }
 
     public decimal? InputPerMillion { get; init; }
 
@@ -89,8 +96,13 @@ internal sealed class CreateModelEndpoint(LlmRegistryService registry)
         try
         {
             var model = await registry.CreateModelAsync(
-                req.Label, req.ProviderId, req.ModelName, req.InputPerMillion, req.OutputPerMillion, ct);
+                req.Label, req.ProviderId, req.ModelName, req.InputPerMillion, req.OutputPerMillion,
+                req.ReasoningEffort, ct);
             await Send.OkAsync(ModelItem.From(model), ct);
+        }
+        catch (ArgumentException ex) when (string.Equals(ex.ParamName, "reasoningEffort", StringComparison.Ordinal))
+        {
+            ThrowError(r => r.ReasoningEffort, ex.Message);
         }
         catch (InvalidOperationException ex)
         {
@@ -113,12 +125,17 @@ internal sealed class UpdateModelEndpoint(LlmRegistryService registry)
         try
         {
             var model = await registry.UpdateModelAsync(
-                req.Id, req.Label, req.ProviderId, req.ModelName, req.InputPerMillion, req.OutputPerMillion, ct);
+                req.Id, req.Label, req.ProviderId, req.ModelName, req.InputPerMillion, req.OutputPerMillion,
+                req.ReasoningEffort, ct);
             await Send.OkAsync(ModelItem.From(model), ct);
         }
         catch (KeyNotFoundException)
         {
             await Send.NotFoundAsync(ct);
+        }
+        catch (ArgumentException ex) when (string.Equals(ex.ParamName, "reasoningEffort", StringComparison.Ordinal))
+        {
+            ThrowError(r => r.ReasoningEffort, ex.Message);
         }
         catch (InvalidOperationException ex)
         {

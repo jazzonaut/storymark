@@ -20,8 +20,14 @@ If "book text goes to a third party" is unacceptable, stop here: the all-local d
 Everything happens in the admin panel under **AI models**. Changes take effect on the next call; nothing restarts.
 
 1. **Add provider** — pick *OpenAI-compatible*, set the base URL (e.g. `https://openrouter.ai/api/v1`) and the API key. The key is encrypted at rest and write-only: the UI shows only that a key is stored, never the key itself.
-2. **Add model** — the model id is whatever the provider expects (`openai/gpt-4o-mini` on OpenRouter, `gpt-4o-mini` on OpenAI directly). Set the input/output cost rates (per 1M tokens) from the provider's pricing page; the cost meter and call log use them.
+2. **Add model** — for OpenRouter, the form starts with **GPT-6 Luna** (`openai/gpt-6-luna`), **Reasoning: Off**, and input/output rates of **$0.10 / $0.50 per 1M tokens**. The **Use GPT-6 Luna defaults** button restores this preset. On OpenAI directly the model id is `gpt-6-luna`. Check the provider's current pricing; the cost meter and call log use the rates you enter.
 3. **Task routing** — assign tasks to the new model. Each dropdown saves on change.
+
+**Reasoning** is saved per model for OpenAI-compatible providers. **Provider default** omits the setting; **Off** explicitly disables reasoning. Luna defaults to medium reasoning at the provider, so use Off for the initial low-latency setup. Higher effort can increase response time and billed tokens. Supported levels vary by model; consult the provider before choosing a non-default value. To use different effort levels for different tasks, add separate model entries and route each task to the appropriate entry.
+
+On the first startup after this upgrade, the database migration replaces existing OpenRouter `openai/gpt-4o-mini` entries with Luna, updates their prices, and sets reasoning to Off. It also sets existing OpenRouter Luna entries to this configuration. Model IDs and task assignments are preserved; other providers and the local first-run setup are unchanged. Later edits are not reset on startup. Reverting the schema migration does not revert model selections.
+
+Preset prices and reasoning support were checked on 20 November 2026: [OpenRouter Luna](https://openrouter.ai/openai/gpt-6-luna), [OpenAI Luna documentation](https://developers.openai.com/api/docs/models/gpt-6-luna).
 
 ## Suggested routing
 

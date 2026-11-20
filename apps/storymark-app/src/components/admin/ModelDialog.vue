@@ -3,7 +3,7 @@ import Button from "primevue/button";
 import InputText from "primevue/inputtext";
 import Select from "primevue/select";
 import { computed, ref, watch } from "vue";
-import type { ModelItem, ModelUpsertBody, ProviderItem } from "@/api/admin-types";
+import type { ModelItem, ModelUpsertBody, ProviderItem, ReasoningEffort } from "@/api/admin-types";
 import AdminDialog from "@/components/admin/AdminDialog.vue";
 
 const props = defineProps<{
@@ -25,9 +25,37 @@ const providerId = ref("");
 const modelName = ref("");
 const inputCost = ref("");
 const outputCost = ref("");
+const reasoningEffort = ref<ReasoningEffort | "">("");
 
 const visible = computed<boolean>(() => props.target !== null);
 const isNew = computed<boolean>(() => props.target === "new");
+const selectedProvider = computed(() =>
+  props.providers.find((provider) => provider.id === providerId.value),
+);
+const supportsReasoning = computed<boolean>(
+  () => selectedProvider.value?.kind === "openai_compatible",
+);
+const isOpenRouter = computed<boolean>(() => {
+  if (!supportsReasoning.value || selectedProvider.value === undefined) {
+    return false;
+  }
+  try {
+    const host = new URL(selectedProvider.value.baseUrl).hostname;
+    return host === "openrouter.ai" || host.endsWith(".openrouter.ai");
+  } catch {
+    return false;
+  }
+});
+const reasoningOptions = [
+  { label: "Provider default", value: "" },
+  { label: "Off", value: "none" },
+  { label: "Minimal", value: "minimal" },
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High", value: "high" },
+  { label: "Extra high", value: "xhigh" },
+  { label: "Maximum", value: "max" },
+];
 
 const providerOptions = computed(() =>
   props.providers.map((provider) => ({ label: provider.name, value: provider.id })),
@@ -66,6 +94,10 @@ watch(
       modelName.value = "";
       inputCost.value = "";
       outputCost.value = "";
+      reasoningEffort.value = "";
+      if (isOpenRouter.value) {
+        useLunaPreset();
+      }
       return;
     }
     label.value = target.label;
@@ -73,8 +105,17 @@ watch(
     modelName.value = target.modelName;
     inputCost.value = target.inputPerMillion === null ? "" : String(target.inputPerMillion);
     outputCost.value = target.outputPerMillion === null ? "" : String(target.outputPerMillion);
+    reasoningEffort.value = target.reasoningEffort ?? "";
   },
 );
+
+function useLunaPreset(): void {
+  label.value = "GPT-6 Luna";
+  modelName.value = "openai/gpt-6-luna";
+  inputCost.value = "0.10";
+  outputCost.value = "0.50";
+  reasoningEffort.value = "none";
+}
 
 function save(): void {
   const input = parseCost(inputCost.value);
@@ -87,6 +128,8 @@ function save(): void {
     label: label.value.trim(),
     providerId: providerId.value,
     modelName: modelName.value.trim(),
+    reasoningEffort:
+      supportsReasoning.value && reasoningEffort.value !== "" ? reasoningEffort.value : null,
     inputPerMillion: input,
     outputPerMillion: output,
   });
@@ -106,7 +149,7 @@ function save(): void {
         <InputText
           id="model-label"
           v-model="label"
-          placeholder="GPT-4o mini"
+          placeholder="GPT-6 Luna"
           fluid
           autofocus
           @keyup.enter="save"
@@ -124,16 +167,39 @@ function save(): void {
           fluid
         />
       </div>
+      <Button
+        v-if="isOpenRouter"
+        label="Use GPT-6 Luna defaults"
+        size="small"
+        text
+        :disabled="saving"
+        @click="useLunaPreset"
+      />
       <div>
         <label for="model-name" class="mb-1 block text-sm text-muted-color">Model name</label>
         <InputText
           id="model-name"
           v-model="modelName"
-          placeholder="openai/gpt-4o-mini"
+          placeholder="openai/gpt-6-luna"
           class="font-mono"
           fluid
           @keyup.enter="save"
         />
+      </div>
+      <div v-if="supportsReasoning">
+        <label for="model-reasoning" class="mb-1 block text-sm text-muted-color">Reasoning</label>
+        <Select
+          input-id="model-reasoning"
+          v-model="reasoningEffort"
+          :options="reasoningOptions"
+          option-label="label"
+          option-value="value"
+          fluid
+        />
+        <p class="mt-1 text-sm text-muted-color">
+          Off is recommended for Luna's fastest replies. Higher effort can increase time and cost.
+          Other models may support fewer levels; use Provider default if unsure.
+        </p>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
@@ -144,7 +210,7 @@ function save(): void {
             id="model-cost-in"
             v-model="inputCost"
             inputmode="decimal"
-            placeholder="0.15"
+            placeholder="0.10"
             fluid
             @keyup.enter="save"
           />
@@ -157,7 +223,7 @@ function save(): void {
             id="model-cost-out"
             v-model="outputCost"
             inputmode="decimal"
-            placeholder="0.60"
+            placeholder="0.50"
             fluid
             @keyup.enter="save"
           />

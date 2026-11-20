@@ -14,6 +14,7 @@ internal sealed class LlmModelConfiguration : IEntityTypeConfiguration<LlmModel>
         builder.Property(m => m.Label).HasColumnName("label");
         builder.Property(m => m.ProviderId).HasColumnName("provider_id");
         builder.Property(m => m.ModelName).HasColumnName("model_name");
+        builder.Property(m => m.ReasoningEffort).HasColumnName("reasoning_effort");
         builder.Property(m => m.InputPerMillion).HasColumnName("input_per_million");
         builder.Property(m => m.OutputPerMillion).HasColumnName("output_per_million");
         builder.Property(m => m.CreatedAt).HasColumnName("created_at");

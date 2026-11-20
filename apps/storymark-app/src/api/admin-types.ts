@@ -79,11 +79,14 @@ export interface ProviderUpsertBody {
   readonly apiKey: string | null;
 }
 
+export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
 export interface ModelItem {
   readonly id: string;
   readonly label: string;
   readonly providerId: string;
   readonly modelName: string;
+  readonly reasoningEffort: ReasoningEffort | null;
   readonly inputPerMillion: number | null;
   readonly outputPerMillion: number | null;
 }
@@ -92,6 +95,7 @@ export interface ModelUpsertBody {
   readonly label: string;
   readonly providerId: string;
   readonly modelName: string;
+  readonly reasoningEffort: ReasoningEffort | null;
   readonly inputPerMillion: number | null;
   readonly outputPerMillion: number | null;
 }
