@@ -98,6 +98,7 @@ internal sealed class SettingsService(
             Value = value,
             ValueType = row.ValueType,
             IsSecret = row.IsSecret,
+            IsSeedAuthored = string.Equals(row.UpdatedBy, Setting.SeedAuthor, StringComparison.Ordinal),
         };
     }
 }

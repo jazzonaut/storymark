@@ -13,4 +13,6 @@ internal sealed record SettingSnapshot
     public required SettingValueType ValueType { get; init; }
 
     public required bool IsSecret { get; init; }
+
+    public required bool IsSeedAuthored { get; init; }
 }

@@ -5,6 +5,16 @@ namespace Storymark.Api.Prompts;
 /// Covers the prompt set described in docs/plan.md §19.</summary>
 internal static class PromptDefaults
 {
+    public static readonly IReadOnlyDictionary<string, string> ByKey = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["prompts.qa"] = Qa,
+        ["prompts.sectionExtraction"] = SectionExtraction,
+        ["prompts.entitySummary"] = EntitySummary,
+        ["prompts.selectionHint"] = SelectionHint,
+        ["prompts.bookMemory"] = BookMemory,
+        ["prompts.currentScene"] = CurrentScene,
+    };
+
     public const string Qa =
         """
         You are Storymark, a spoiler-safe reading assistant.

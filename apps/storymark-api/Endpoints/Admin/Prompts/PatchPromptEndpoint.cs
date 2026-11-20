@@ -50,6 +50,6 @@ internal sealed class PatchPromptEndpoint(ISettingsService settings)
             return;
         }
 
-        await Send.OkAsync(new PromptItem { Key = fullKey, Text = req.Text }, ct);
+        await Send.OkAsync(new PromptItem { Key = fullKey, Text = req.Text, FollowsDefault = false }, ct);
     }
 }

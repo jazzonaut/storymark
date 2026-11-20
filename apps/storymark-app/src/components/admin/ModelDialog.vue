@@ -197,8 +197,8 @@ function save(): void {
           fluid
         />
         <p class="mt-1 text-sm text-muted-color">
-          Gemini 2.5 Flash-Lite uses Provider default. Higher reasoning effort can increase time
-          and cost on models that support it.
+          Gemini 2.5 Flash-Lite uses Provider default. Higher reasoning effort can increase time and
+          cost on models that support it.
         </p>
       </div>
       <div class="grid grid-cols-2 gap-3">

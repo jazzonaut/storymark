@@ -14,6 +14,7 @@ export interface SettingItem {
 export interface PromptItem {
   readonly key: string;
   readonly text: string;
+  readonly followsDefault: boolean;
 }
 
 export interface PatchSettingBody {

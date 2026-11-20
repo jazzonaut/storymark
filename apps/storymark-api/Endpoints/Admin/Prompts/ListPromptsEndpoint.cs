@@ -10,6 +10,8 @@ internal sealed record PromptItem
     public required string Key { get; init; }
 
     public required string Text { get; init; }
+
+    public required bool FollowsDefault { get; init; }
 }
 
 /// <summary>Returns the current text of every <c>prompts.*</c> setting. Admin-only.</summary>
@@ -31,6 +33,7 @@ internal sealed class ListPromptsEndpoint(ISettingsService settings)
             {
                 Key = s.Key,
                 Text = JsonSerializer.Deserialize<string>(s.Value) ?? string.Empty,
+                FollowsDefault = s.IsSeedAuthored,
             })
             .ToList();
 

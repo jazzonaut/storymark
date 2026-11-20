@@ -46,7 +46,7 @@ Three setups that make sense:
 ## Settings worth touching
 
 - **Local prompt trimming** (bottom of the AI models panel): the Q&A prompt uses a reduced evidence set on local models to keep CPU inference fast. Hosted models always receive the full set. With a large-context hosted model on Q&A you can raise *Evidence chunks (hosted)* above the default 12 for better recall on sprawling books; expect proportionally higher per-question cost.
-- **Prompts** are editable in **Admin → Prompts**. The defaults have been tested with Gemini 2.5 Flash-Lite. Startup applies revised defaults to prompts that still have their seeded values. Prompts saved by an operator keep their custom wording.
+- **Prompts** are editable in **Admin → Prompts**. The defaults have been tested with Gemini 2.5 Flash-Lite. Prompts marked **Custom** keep the operator's wording on upgrade. Select a custom prompt and click **Restore default** to use the shipped text immediately and follow future default updates.
 - **Restart a book with new models.** Save the routes under **Admin → AI models**, then open **Admin → Books**. Choose **Stop and reprocess** for an active book or **Reprocess** for a finished or failed book. Confirm to rebuild from the original file. Reading progress and bookmarks are retained. Previous extraction results and saved Q&A are cleared. An in-flight provider request may still be billed.
 
 ## Keeping an eye on cost

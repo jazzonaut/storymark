@@ -3,20 +3,22 @@ import Button from "primevue/button";
 import Textarea from "primevue/textarea";
 import { useToast } from "primevue/usetoast";
 import { computed, onMounted, ref } from "vue";
+import AdminDialog from "@/components/admin/AdminDialog.vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { useAdmin } from "@/composables/use-admin";
 import { useAdminError } from "@/composables/use-admin-error";
 
-const { prompts, promptsLoading, loadPrompts, savePrompt } = useAdmin();
+const { prompts, promptsLoading, loadPrompts, savePrompt, resetPrompt } = useAdmin();
 const { report, reportWithValidation } = useAdminError();
 const toast = useToast();
 
 const selectedKey = ref<string | null>(null);
 const draft = ref("");
 const saving = ref(false);
+const confirmingReset = ref(false);
 
 const promptList = computed(() =>
-  prompts.value.map((prompt) => ({ key: prompt.key, label: prompt.key.replace(/^prompts\./, "") })),
+  prompts.value.map((prompt) => ({ ...prompt, label: prompt.key.replace(/^prompts\./, "") })),
 );
 const selected = computed(
   () => prompts.value.find((prompt) => prompt.key === selectedKey.value) ?? null,
@@ -31,6 +33,22 @@ function select(key: string): void {
 function revert(): void {
   if (selected.value !== null) {
     draft.value = selected.value.text;
+  }
+}
+
+async function restoreDefault(): Promise<void> {
+  const key = selectedKey.value;
+  if (key === null || saving.value) return;
+  saving.value = true;
+  try {
+    await resetPrompt(key);
+    revert();
+    confirmingReset.value = false;
+    toast.add({ severity: "success", summary: "Default restored", detail: key, life: 2500 });
+  } catch (error) {
+    report(error);
+  } finally {
+    saving.value = false;
   }
 }
 
@@ -83,25 +101,49 @@ onMounted(() => {
         <li v-for="item in promptList" :key="item.key">
           <button
             type="button"
+            :disabled="saving"
             class="w-full rounded-border px-3 py-2 text-left text-sm hover:bg-emphasis"
             :class="{ 'bg-emphasis font-medium': item.key === selectedKey }"
             @click="select(item.key)"
           >
             {{ item.label }}
+            <span v-if="!item.followsDefault" class="ml-1 text-xs text-muted-color">Custom</span>
           </button>
         </li>
       </ul>
 
       <div class="min-w-0 flex-1">
         <template v-if="selected !== null">
-          <Textarea v-model="draft" class="w-full font-mono text-sm" rows="20" />
-          <div class="mt-3 flex gap-2">
+          <Textarea v-model="draft" :disabled="saving" class="w-full font-mono text-sm" rows="20" />
+          <div class="mt-3 flex flex-wrap gap-2">
             <Button label="Save" :disabled="!isDirty" :loading="saving" @click="save" />
             <Button label="Revert" text :disabled="!isDirty || saving" @click="revert" />
+            <Button
+              label="Restore default"
+              outlined
+              :disabled="selected.followsDefault || saving"
+              @click="confirmingReset = true"
+            />
           </div>
         </template>
         <p v-else class="text-muted-color">Select a prompt to edit.</p>
       </div>
     </div>
+    <AdminDialog
+      :visible="confirmingReset"
+      header="Restore default prompt?"
+      :busy="saving"
+      @close="confirmingReset = false"
+    >
+      <p>
+        Replace the saved <strong>{{ selectedKey?.replace(/^prompts\./, "") }}</strong> prompt with
+        the current default and follow future default updates.
+        <span v-if="isDirty">Your unsaved edits will be discarded.</span>
+      </p>
+      <template #footer>
+        <Button label="Cancel" text :disabled="saving" @click="confirmingReset = false" />
+        <Button label="Restore default" :loading="saving" @click="restoreDefault" />
+      </template>
+    </AdminDialog>
   </section>
 </template>

@@ -54,7 +54,7 @@ internal sealed class SettingsSeeder(
                 ValueType = seed.ValueType,
                 IsSecret = seed.IsSecret,
                 UpdatedAt = now,
-                UpdatedBy = "seed",
+                UpdatedBy = Setting.SeedAuthor,
             });
             added++;
         }
@@ -82,7 +82,7 @@ internal sealed class SettingsSeeder(
     private static bool TryReseed(Setting row, SettingSeed seed, DateTimeOffset now)
     {
         if (seed.IsSecret
-            || !string.Equals(row.UpdatedBy, "seed", StringComparison.Ordinal)
+            || !string.Equals(row.UpdatedBy, Setting.SeedAuthor, StringComparison.Ordinal)
             || string.Equals(row.Value, seed.JsonValue, StringComparison.Ordinal))
         {
             return false;
@@ -106,13 +106,8 @@ internal sealed class SettingsSeeder(
             Scalar("assistant.evidence.maxChunks", options.Assistant.MaxChunks, SettingValueType.Int),
             Scalar("assistant.evidence.maxChunksLocal", options.Assistant.MaxChunksLocal, SettingValueType.Int),
             Scalar("entitySummary.refreshThresholdChars", options.EntitySummary.RefreshThresholdChars, SettingValueType.Int),
-            Text("prompts.qa", PromptDefaults.Qa),
-            Text("prompts.sectionExtraction", PromptDefaults.SectionExtraction),
-            Text("prompts.entitySummary", PromptDefaults.EntitySummary),
-            Text("prompts.selectionHint", PromptDefaults.SelectionHint),
-            Text("prompts.bookMemory", PromptDefaults.BookMemory),
-            Text("prompts.currentScene", PromptDefaults.CurrentScene),
         };
+        seeds.AddRange(PromptDefaults.ByKey.Select(prompt => Text(prompt.Key, prompt.Value)));
 
         // LLM routing (providers, models, task assignments) is seeded by
         // LlmRegistrySeeder, not here — see ADR-0016.

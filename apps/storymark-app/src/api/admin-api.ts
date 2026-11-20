@@ -76,6 +76,9 @@ export const adminApi = {
       body: JSON.stringify({ text }),
     }),
 
+  resetPrompt: (key: string): Promise<PromptItem> =>
+    request(`prompts/${encodeURIComponent(key)}/reset`, { method: "POST" }),
+
   listLlmCalls: (limit: number): Promise<readonly LlmCallItem[]> =>
     request(`llm-calls?limit=${limit}`),
 

@@ -61,6 +61,7 @@ interface UseAdmin {
   ) => Promise<void>;
   loadPrompts: () => Promise<void>;
   savePrompt: (key: string, text: string) => Promise<void>;
+  resetPrompt: (key: string) => Promise<void>;
   loadLlmCalls: () => Promise<void>;
   loadCostSummary: () => Promise<void>;
   previewEmbeddingSwap: () => Promise<EmbeddingImpactPreview>;
@@ -109,10 +110,15 @@ export function useAdmin(): UseAdmin {
   }
 
   async function savePrompt(key: string, text: string): Promise<void> {
-    const prefix = "prompts.";
-    const suffix = key.startsWith(prefix) ? key.slice(prefix.length) : key;
-    await adminApi.patchPrompt(suffix, text);
-    await loadPrompts();
+    replacePrompt(await adminApi.patchPrompt(key.replace(/^prompts\./, ""), text));
+  }
+
+  async function resetPrompt(key: string): Promise<void> {
+    replacePrompt(await adminApi.resetPrompt(key.replace(/^prompts\./, "")));
+  }
+
+  function replacePrompt(updated: PromptItem): void {
+    prompts.value = prompts.value.map((prompt) => (prompt.key === updated.key ? updated : prompt));
   }
 
   async function loadLlmCalls(): Promise<void> {
@@ -210,6 +216,7 @@ export function useAdmin(): UseAdmin {
     saveSetting,
     loadPrompts,
     savePrompt,
+    resetPrompt,
     loadLlmCalls,
     loadCostSummary,
     previewEmbeddingSwap: adminApi.getEmbeddingImpact,
