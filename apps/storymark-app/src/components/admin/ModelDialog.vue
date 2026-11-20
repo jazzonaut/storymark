@@ -96,7 +96,7 @@ watch(
       outputCost.value = "";
       reasoningEffort.value = "";
       if (isOpenRouter.value) {
-        useLunaPreset();
+        useGeminiPreset();
       }
       return;
     }
@@ -109,12 +109,12 @@ watch(
   },
 );
 
-function useLunaPreset(): void {
-  label.value = "GPT-6 Luna";
-  modelName.value = "openai/gpt-6-luna";
+function useGeminiPreset(): void {
+  label.value = "Gemini 2.5 Flash-Lite";
+  modelName.value = "google/gemini-2.5-flash-lite";
   inputCost.value = "0.10";
-  outputCost.value = "0.50";
-  reasoningEffort.value = "none";
+  outputCost.value = "0.40";
+  reasoningEffort.value = "";
 }
 
 function save(): void {
@@ -149,7 +149,7 @@ function save(): void {
         <InputText
           id="model-label"
           v-model="label"
-          placeholder="GPT-6 Luna"
+          placeholder="Gemini 2.5 Flash-Lite"
           fluid
           autofocus
           @keyup.enter="save"
@@ -169,18 +169,18 @@ function save(): void {
       </div>
       <Button
         v-if="isOpenRouter"
-        label="Use GPT-6 Luna defaults"
+        label="Use Gemini 2.5 Flash-Lite defaults"
         size="small"
         text
         :disabled="saving"
-        @click="useLunaPreset"
+        @click="useGeminiPreset"
       />
       <div>
         <label for="model-name" class="mb-1 block text-sm text-muted-color">Model name</label>
         <InputText
           id="model-name"
           v-model="modelName"
-          placeholder="openai/gpt-6-luna"
+          placeholder="google/gemini-2.5-flash-lite"
           class="font-mono"
           fluid
           @keyup.enter="save"
@@ -197,8 +197,8 @@ function save(): void {
           fluid
         />
         <p class="mt-1 text-sm text-muted-color">
-          Off is recommended for Luna's fastest replies. Higher effort can increase time and cost.
-          Other models may support fewer levels; use Provider default if unsure.
+          Gemini 2.5 Flash-Lite uses Provider default. Higher reasoning effort can increase time
+          and cost on models that support it.
         </p>
       </div>
       <div class="grid grid-cols-2 gap-3">
@@ -223,7 +223,7 @@ function save(): void {
             id="model-cost-out"
             v-model="outputCost"
             inputmode="decimal"
-            placeholder="0.50"
+            placeholder="0.40"
             fluid
             @keyup.enter="save"
           />

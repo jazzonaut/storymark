@@ -73,6 +73,7 @@
    <html> (see docs/conventions/02-vue.md), not by Tailwind variants. */
 :root,
 [data-theme="light"] {
+  --sm-character-lightness: 49%;
   --sm-bg: #ffffff;
   --sm-surface: #f5f5f4;
   --sm-fg: #1c1917;
@@ -89,6 +90,7 @@
 }
 
 [data-theme="dark"] {
+  --sm-character-lightness: 77%;
   --sm-bg: #0c0a09;
   --sm-surface: #1c1917;
   --sm-fg: #e7e5e4;

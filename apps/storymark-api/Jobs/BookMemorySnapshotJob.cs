@@ -30,32 +30,32 @@ namespace Storymark.Api.Jobs;
 /// clears the book's snapshots first.</para></summary>
 internal sealed class BookMemorySnapshotJob(
     StorymarkDbContext db,
+    BookProcessingRun run,
     ChatModelRouter router,
     ISettingsService settings,
     IBackgroundJobClient jobs,
     ILogger<BookMemorySnapshotJob> logger)
 {
-    public async Task RunAsync(Guid bookId, CancellationToken ct)
+    public Task RunAsync(Guid bookId, CancellationToken ct) => RunAsync(bookId, Guid.Empty, ct);
+
+    public Task RunAsync(Guid bookId, Guid runId, CancellationToken ct) =>
+        run.ExecuteAsync(bookId, runId, ProcessAsync, ct);
+
+    private async Task ProcessAsync(Book book, CancellationToken ct)
     {
-        var book = await db.Books.FirstOrDefaultAsync(b => b.Id == bookId, ct);
-        if (book is null)
+        var bookId = book.Id;
+        if (book.ProcessingStatus != ProcessingStatus.BuildingMemorySnapshots)
         {
-            logger.LogWarning("BookMemorySnapshotJob skipped: book {BookId} not found", bookId);
             return;
         }
 
         try
         {
-            if (book.ProcessingStatus != ProcessingStatus.BuildingMemorySnapshots)
-            {
-                await SetStatusAsync(book, ProcessingStatus.BuildingMemorySnapshots, ct);
-            }
-
             await db.BookMemorySnapshots.Where(s => s.BookId == bookId).ExecuteDeleteAsync(ct);
             await BuildAllAsync(book, ct);
 
-            await SetStatusAsync(book, ProcessingStatus.Embedding, ct);
-            jobs.Enqueue<EmbeddingJob>(j => j.RunAsync(book.Id, CancellationToken.None));
+            await run.AdvanceAsync(book, ProcessingStatus.Embedding,
+                () => jobs.Enqueue<EmbeddingJob>(j => j.RunAsync(book.Id, book.ProcessingRunId, CancellationToken.None)), ct);
         }
         catch (ModelNotFoundException ex)
         {

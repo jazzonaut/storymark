@@ -30,6 +30,8 @@ internal sealed class Book
 
     public string? CoverPath { get; set; }
 
+    public Guid ProcessingRunId { get; set; }
+
     public ProcessingStatus ProcessingStatus { get; set; }
 
     /// <summary>Operator-readable reason the last processing attempt failed, or

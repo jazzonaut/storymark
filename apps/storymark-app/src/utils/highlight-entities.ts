@@ -1,7 +1,9 @@
+import { characterColor, isCharacter } from "@/utils/character-color";
 import type { SectionEntity } from "@storymark/shared-types";
 import type { EntityHighlightMode } from "@/db/storymark-db";
 
 interface Term {
+  readonly character: boolean;
   readonly term: string;
   readonly entityId: string;
   readonly name: string;
@@ -169,7 +171,12 @@ function buildTerms(entities: readonly SectionEntity[]): Term[] {
     for (const raw of eligible) {
       const term = raw.trim();
       if (term.length >= MIN_TERM_LENGTH) {
-        terms.push({ term, entityId: entity.entityId, name: entity.canonicalName });
+        terms.push({
+          character: isCharacter(entity.entityType),
+          term,
+          entityId: entity.entityId,
+          name: entity.canonicalName,
+        });
       }
     }
   }
@@ -186,6 +193,7 @@ export function highlightEntities(
   html: string,
   entities: readonly SectionEntity[] | undefined,
   mode: EntityHighlightMode,
+  characters: Set<string>,
 ): string {
   // `entities` may be undefined for a section cached before this field existed
   // (Dexie holds the old shape until the book is re-cached) — treat as no entities.
@@ -253,6 +261,11 @@ export function highlightEntities(
       const button = doc.createElement("button");
       button.type = "button";
       button.className = "sm-entity";
+      if (entry.character) {
+        characters.add(entry.entityId);
+        button.style.setProperty("--sm-underline", characterColor(entry.entityId));
+        button.classList.add("sm-character");
+      }
       button.dataset.entityId = entry.entityId;
       button.dataset.entityName = entry.name;
       button.textContent = value.slice(match.index, end);

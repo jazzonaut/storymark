@@ -209,6 +209,7 @@ export interface StoredPanelState {
 // which would force definite-assignment (`!`) fields the no-non-null-assertion
 // rule forbids. The schema string below is the source of truth for indexes.
 type StorymarkDb = Dexie & {
+  characterPalettes: Table<{ bookId: string; hues: Record<string, number> }, string>;
   library: Table<CachedLibrary, string>;
   manifests: Table<CachedManifest, string>;
   sections: Table<CachedSection, [string, number]>;
@@ -288,6 +289,8 @@ function createDb(name: string): StorymarkDb {
         .table<StoredLastLocation, string>("lastLocation")
         .put({ id: "current", bookId: latest.bookId });
     });
+
+  instance.version(6).stores({ characterPalettes: "bookId" });
 
   // A release that adds a db.version() above upgrades the on-device database on
   // first open, and IndexedDB runs that upgrade only once every *other* connection
@@ -429,6 +432,7 @@ function deleteBookSpan<TRow, TKey extends [string, ...unknown[]]>(
  * across the book's whole key span; single-key stores delete by their key. */
 export async function purgeBookData(bookId: string): Promise<void> {
   await Promise.all([
+    db.characterPalettes.delete(bookId),
     db.manifests.delete(bookId),
     db.progress.delete(bookId),
     db.bookOpens.delete(bookId),

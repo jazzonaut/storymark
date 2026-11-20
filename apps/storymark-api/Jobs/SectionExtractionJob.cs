@@ -31,8 +31,8 @@ namespace Storymark.Api.Jobs;
 /// <see cref="BookMemorySnapshotJob"/>, which composes the rolling memory and then
 /// chains to <see cref="EmbeddingJob"/> — the unchanged terminal step that finishes at
 /// <c>Indexed</c> (so an S3.4 reindex, which only re-runs <see cref="EmbeddingJob"/>,
-/// never re-extracts). Idempotent: a re-run clears this book's prior extraction
-/// first.</para>
+/// never re-extracts). A restart resumes from committed section summaries;
+/// explicit reprocessing clears them before starting a new pipeline.</para>
 ///
 /// <para>Tolerant per ADR-0009: an unparseable section retries once with a stricter
 /// prompt, then is skipped (logged) with partial data preserved. A transient call
@@ -41,6 +41,7 @@ namespace Storymark.Api.Jobs;
 /// is a deterministic config error — it fails the book to <c>Failed</c>.</para></summary>
 internal sealed class SectionExtractionJob(
     StorymarkDbContext db,
+    BookProcessingRun run,
     FileStorageService storage,
     ChatModelRouter router,
     ISettingsService settings,
@@ -53,23 +54,21 @@ internal sealed class SectionExtractionJob(
     private static readonly TimeSpan FirstSeenScanTimeout = TimeSpan.FromSeconds(5);
     private static readonly Regex TermSeparators = new(@"[.\s]+", RegexOptions.CultureInvariant, FirstSeenScanTimeout);
 
-    public async Task RunAsync(Guid bookId, CancellationToken ct)
+    public Task RunAsync(Guid bookId, CancellationToken ct) => RunAsync(bookId, Guid.Empty, ct);
+
+    public Task RunAsync(Guid bookId, Guid runId, CancellationToken ct) =>
+        run.ExecuteAsync(bookId, runId, ProcessAsync, ct);
+
+    private async Task ProcessAsync(Book book, CancellationToken ct)
     {
-        var book = await db.Books.FirstOrDefaultAsync(b => b.Id == bookId, ct);
-        if (book is null)
+        var bookId = book.Id;
+        if (book.ProcessingStatus != ProcessingStatus.ExtractingPerSection)
         {
-            logger.LogWarning("SectionExtractionJob skipped: book {BookId} not found", bookId);
             return;
         }
 
         try
         {
-            if (book.ProcessingStatus != ProcessingStatus.ExtractingPerSection)
-            {
-                await SetStatusAsync(book, ProcessingStatus.ExtractingPerSection, ct);
-            }
-
-            await ClearExistingExtractionAsync(bookId, ct);
             await ExtractAllAsync(book, ct);
             await TryBackfillFirstSeenAsync(book, ct);
             await TryReconcileAliasesAsync(book, ct);
@@ -77,8 +76,8 @@ internal sealed class SectionExtractionJob(
             // Hand off to the memory pass (BuildingMemorySnapshots), which then chains
             // to EmbeddingJob → Indexed. Memory needs only the section summaries just
             // written, not vectors, so it runs before embedding (ADR-0018).
-            await SetStatusAsync(book, ProcessingStatus.BuildingMemorySnapshots, ct);
-            jobs.Enqueue<BookMemorySnapshotJob>(j => j.RunAsync(book.Id, CancellationToken.None));
+            await run.AdvanceAsync(book, ProcessingStatus.BuildingMemorySnapshots,
+                () => jobs.Enqueue<BookMemorySnapshotJob>(j => j.RunAsync(book.Id, book.ProcessingRunId, CancellationToken.None)), ct);
         }
         catch (ModelNotFoundException ex)
         {
@@ -107,8 +106,12 @@ internal sealed class SectionExtractionJob(
 
     private async Task ExtractAllAsync(Book book, CancellationToken ct)
     {
+        // PersistSectionAsync commits the summary together with its events, entities
+        // and relationships. A missing summary can occur anywhere after a skipped
+        // section, so a high-water mark would miss work on resume.
         var sections = await db.BookSections
-            .Where(s => s.BookId == book.Id)
+            .Where(s => s.BookId == book.Id && !db.SectionSummaries.Any(
+                summary => summary.BookId == s.BookId && summary.SectionIndex == s.SectionIndex))
             .OrderBy(s => s.SectionIndex)
             .ToListAsync(ct);
 
@@ -695,16 +698,6 @@ internal sealed class SectionExtractionJob(
         }
 
         return count;
-    }
-
-    private async Task ClearExistingExtractionAsync(Guid bookId, CancellationToken ct)
-    {
-        // Deleting entities cascades to mentions and relationships; summaries and
-        // events FK only to the book, so clear them explicitly. Keeps a re-run
-        // (reprocess) idempotent — extraction owns all of these rows.
-        await db.BookEntities.Where(e => e.BookId == bookId).ExecuteDeleteAsync(ct);
-        await db.BookEvents.Where(e => e.BookId == bookId).ExecuteDeleteAsync(ct);
-        await db.SectionSummaries.Where(s => s.BookId == bookId).ExecuteDeleteAsync(ct);
     }
 
     private async Task SetStatusAsync(Book book, ProcessingStatus status, CancellationToken ct)

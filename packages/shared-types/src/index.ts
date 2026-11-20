@@ -3,6 +3,7 @@
 
 export type ProcessingStatus =
   | "Uploaded"
+  | "Restarting"
   | "Parsing"
   | "Parsed"
   | "Chunking"
@@ -14,8 +15,7 @@ export type ProcessingStatus =
   | "Failed";
 
 /** Statuses where the pipeline has stopped and nothing further runs without an
- * explicit action — drives the library's status poll and gates admin reprocessing.
- * Mirrors BookProcessingAdminService.ReprocessableStatuses on the API side. */
+ * explicit action — drives the library's status poll. */
 export const TERMINAL_PROCESSING_STATUSES: ReadonlySet<ProcessingStatus> =
   new Set<ProcessingStatus>(["Indexed", "Failed"]);
 
@@ -34,6 +34,7 @@ export interface ExtractionProgress {
 }
 
 export interface BookSummary {
+  readonly processingRunId: string;
   readonly bookId: string;
   readonly title: string;
   readonly author: string | null;

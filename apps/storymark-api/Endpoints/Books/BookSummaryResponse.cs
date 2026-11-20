@@ -7,6 +7,8 @@ namespace Storymark.Api.Endpoints.Books;
 /// in @storymark/shared-types.</summary>
 internal sealed record BookSummaryResponse
 {
+    public required Guid ProcessingRunId { get; init; }
+
     public required Guid BookId { get; init; }
 
     public required string Title { get; init; }
@@ -69,6 +71,7 @@ internal sealed record BookSummaryResponse
         return new BookSummaryResponse
         {
             BookId = book.Id,
+            ProcessingRunId = book.ProcessingRunId,
             Title = book.Title,
             Author = book.Author,
             Format = book.Format,

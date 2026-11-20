@@ -6,8 +6,8 @@ using Storymark.Api.Infrastructure.Database;
 
 namespace Storymark.Api.Infrastructure.Settings;
 
-/// <summary>Provisions the LLM registry (ADR-0016): on first run it seeds a local
-/// Ollama provider and its default models, then ensures every task/embedding
+/// <summary>Provisions the LLM registry (ADR-0016): on first run it seeds OpenRouter
+/// for chat and local Ollama for embeddings, then ensures every task/embedding
 /// setting points at a real model id — healing any reference that doesn't (e.g. a
 /// legacy <c>provider:model</c> string) to a default. Also clears the retired
 /// <c>llm.openai.*</c> / <c>llm.costRates</c> settings. Existing operator-created
@@ -17,12 +17,16 @@ internal sealed class LlmRegistrySeeder(
     IConfiguration configuration,
     ILogger<LlmRegistrySeeder> logger)
 {
+    private const string GeminiModelName = "google/gemini-2.5-flash-lite";
+
     private static readonly Guid OllamaProviderId = new("a0000000-0000-0000-0000-0000000000aa");
+    private static readonly Guid OpenRouterProviderId = new("a0000000-0000-0000-0000-0000000000ab");
+    private static readonly Guid GeminiId = new("b0000000-0000-0000-0000-0000000000bf");
     private static readonly Guid Llama3bId = new("b0000000-0000-0000-0000-0000000000b3");
     private static readonly Guid Llama1bId = new("b0000000-0000-0000-0000-0000000000b1");
     private static readonly Guid NomicId = new("b0000000-0000-0000-0000-0000000000be");
 
-    private static readonly Dictionary<string, Guid> TaskDefaults = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, Guid> LocalTaskDefaults = new(StringComparer.Ordinal)
     {
         [LlmSettingKeys.TaskKey("qa")] = Llama3bId,
         [LlmSettingKeys.TaskKey("extract")] = Llama1bId,
@@ -48,7 +52,8 @@ internal sealed class LlmRegistrySeeder(
 
     private async Task SeedDefaultsAsync(StorymarkDbContext db, DateTimeOffset now, CancellationToken ct)
     {
-        if (!await db.LlmProviders.AnyAsync(ct))
+        var fresh = !await db.LlmProviders.AnyAsync(ct);
+        if (fresh)
         {
             db.LlmProviders.Add(new LlmProvider
             {
@@ -56,42 +61,67 @@ internal sealed class LlmRegistrySeeder(
                 Name = "Ollama (local)",
                 Kind = LlmProviderKind.Ollama,
                 BaseUrl = configuration["Ollama:Url"] ?? "http://localhost:11434",
-                ApiKeyEncrypted = null,
                 CreatedAt = now,
                 UpdatedAt = now,
             });
-            await db.SaveChangesAsync(ct);
+            db.LlmProviders.Add(new LlmProvider
+            {
+                Id = OpenRouterProviderId,
+                Name = "OpenRouter",
+                Kind = LlmProviderKind.OpenAiCompatible,
+                BaseUrl = "https://openrouter.ai/api/v1",
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            db.LlmModels.Add(new LlmModel
+            {
+                Id = GeminiId,
+                Label = "Gemini 2.5 Flash-Lite",
+                ProviderId = OpenRouterProviderId,
+                ModelName = GeminiModelName,
+                InputPerMillion = 0.10m,
+                OutputPerMillion = 0.40m,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
         }
 
-        var hasOllama = await db.LlmProviders.AnyAsync(p => p.Id == OllamaProviderId, ct);
-        if (hasOllama && !await db.LlmModels.AnyAsync(ct))
+        // Also repair an existing installation whose local model registry was emptied.
+        if (fresh || (await db.LlmProviders.AnyAsync(p => p.Id == OllamaProviderId, ct)
+            && !await db.LlmModels.AnyAsync(ct)))
         {
             db.LlmModels.AddRange(
-                Model(Llama3bId, "Llama 3.2 3B", "llama3.2:3b", now),
-                Model(Llama1bId, "Llama 3.2 1B", "llama3.2:1b", now),
-                Model(NomicId, "nomic-embed-text", "nomic-embed-text", now));
+                LocalModel(Llama3bId, "Llama 3.2 3B", "llama3.2:3b", now),
+                LocalModel(Llama1bId, "Llama 3.2 1B", "llama3.2:1b", now),
+                LocalModel(NomicId, "nomic-embed-text", "nomic-embed-text", now));
             await db.SaveChangesAsync(ct);
         }
     }
 
     private async Task HealTaskAssignmentsAsync(StorymarkDbContext db, DateTimeOffset now, CancellationToken ct)
     {
-        var modelIds = await db.LlmModels
+        var models = await db.LlmModels
             .OrderBy(m => m.CreatedAt).ThenBy(m => m.Id)
-            .Select(m => m.Id)
+            .Select(m => new { m.Id, m.ModelName, m.ReasoningEffort })
             .ToListAsync(ct);
-        if (modelIds.Count == 0)
+        if (models.Count == 0)
         {
             return;
         }
 
-        var valid = modelIds.ToHashSet();
-        var fallback = valid.Contains(Llama3bId) ? Llama3bId : modelIds[0];
+        var valid = models.Select(m => m.Id).ToHashSet();
+        var fallback = valid.Contains(Llama3bId) ? Llama3bId : models[0].Id;
+        var gemini = models.FirstOrDefault(m => string.Equals(m.ModelName, GeminiModelName, StringComparison.Ordinal) && m.ReasoningEffort is null);
         var healed = 0;
 
-        foreach (var (key, defaultId) in TaskDefaults)
+        foreach (var (key, localDefault) in LocalTaskDefaults)
         {
-            var desired = valid.Contains(defaultId) ? defaultId : fallback;
+            var desired = valid.Contains(localDefault) ? localDefault : fallback;
+            if (gemini is not null && !string.Equals(key, LlmSettingKeys.EmbeddingModelId, StringComparison.Ordinal))
+            {
+                desired = gemini.Id;
+            }
+
             var setting = await db.Settings.FirstOrDefaultAsync(s => s.Key == key, ct);
 
             if (setting is null)
@@ -141,7 +171,7 @@ internal sealed class LlmRegistrySeeder(
         }
     }
 
-    private static LlmModel Model(Guid id, string label, string modelName, DateTimeOffset now) => new()
+    private static LlmModel LocalModel(Guid id, string label, string modelName, DateTimeOffset now) => new()
     {
         Id = id,
         Label = label,

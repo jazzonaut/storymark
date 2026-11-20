@@ -13,6 +13,7 @@ import ReaderSettingsDrawer from "@/components/reader/ReaderSettingsDrawer.vue";
 import ReaderToolbar from "@/components/reader/ReaderToolbar.vue";
 import SectionRecapCard from "@/components/reader/SectionRecapCard.vue";
 import SelectionPopover from "@/components/reader/SelectionPopover.vue";
+import { provideCharacterPalette } from "@/composables/use-character-palette";
 import { useAssistant } from "@/composables/use-assistant";
 import { useEntityMerge } from "@/composables/use-entity-merge";
 import { useEntitySummary } from "@/composables/use-entity-summary";
@@ -33,6 +34,7 @@ const CHROME_IDLE_MS = 3500;
 
 const route = useRoute();
 const bookId = String(route.params.id);
+const characterVars = provideCharacterPalette(bookId);
 
 const { books, loadBooks } = useBooks();
 const { isOnline } = useOfflineSync();
@@ -518,7 +520,7 @@ onBeforeUnmount(() => {
 <template>
   <main
     class="relative h-dvh w-screen overflow-hidden bg-[var(--sm-bg)] text-[var(--sm-fg)]"
-    :style="cssVars"
+    :style="[cssVars, characterVars]"
   >
     <div
       v-if="phase === 'loading'"
@@ -686,7 +688,7 @@ onBeforeUnmount(() => {
         @close="selection = null"
       />
 
-      <EntityPopup />
+      <EntityPopup :entities="currentSection?.entities ?? []" />
 
       <EntityMergePicker
         :book-id="bookId"

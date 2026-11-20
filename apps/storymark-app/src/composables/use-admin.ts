@@ -67,7 +67,7 @@ interface UseAdmin {
   applyEmbeddingSwap: (modelId: string) => Promise<ApplySwapResult>;
   backfillSectionTitles: () => Promise<BackfillSectionTitlesResult>;
   recoverStuckBooks: (staleMinutes: number) => Promise<RecoverStuckBooksResult>;
-  reprocessBook: (bookId: string) => Promise<ReprocessBookResult>;
+  reprocessBook: (bookId: string, expectedRunId: string) => Promise<ReprocessBookResult>;
   loadProviders: () => Promise<void>;
   saveProvider: (id: string | null, body: ProviderUpsertBody) => Promise<void>;
   deleteProvider: (id: string) => Promise<void>;

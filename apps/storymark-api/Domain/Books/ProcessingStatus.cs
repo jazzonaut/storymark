@@ -15,4 +15,5 @@ internal enum ProcessingStatus
     BuildingMemorySnapshots,
     Indexed,
     Failed,
+    Restarting,
 }

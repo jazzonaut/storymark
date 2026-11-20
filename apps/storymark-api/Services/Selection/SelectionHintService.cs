@@ -14,8 +14,8 @@ namespace Storymark.Api.Services.Selection;
 
 /// <summary>The tiered selection path (docs/plan.md §5.5): a known entity
 /// (canonical name or alias, visible at the reading position) short-circuits to
-/// a cached card with no LLM call; anything else falls back to a fast 1B hint
-/// built from spoiler-safe evidence. Like <see cref="Assistant.AssistantService"/>
+/// a cached card with no LLM call; other selections use a hint built from
+/// spoiler-safe evidence. Like <see cref="Assistant.AssistantService"/>
 /// it composes the existing chokepoints (<see cref="SpoilerSafeRetrievalService"/>,
 /// <see cref="ChatModelRouter"/>) and adds no new evidence or call path.</summary>
 internal sealed class SelectionHintService(
@@ -85,6 +85,13 @@ internal sealed class SelectionHintService(
         CancellationToken ct)
     {
         var evidence = await retrieval.SearchAsync(bookId, selectedText, currentSection, currentLocation, HintK, ct);
+        // The default defines a fixed empty-context reply. A custom prompt can
+        // specify its own wording or language and still uses the normal renderer.
+        if (evidence.Count == 0
+            && string.Equals(settings.GetString("prompts.selectionHint"), PromptDefaults.SelectionHint, StringComparison.Ordinal))
+        {
+            return SelectionHintResult.ForHint("Nothing on this yet.", []);
+        }
 
         // Always false because the retrieval SQL already excluded future content;
         // derived (not hardcoded) so the audit flag fires on a filter regression.

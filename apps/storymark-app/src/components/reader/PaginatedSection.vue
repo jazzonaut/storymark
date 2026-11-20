@@ -10,6 +10,7 @@ import {
 import type { UseRafFnCallbackArguments } from "@vueuse/core";
 import type { Section } from "@storymark/shared-types";
 import { useReaderSettings } from "@/composables/use-reader-settings";
+import { useCharacterPalette } from "@/composables/use-character-palette";
 import { highlightEntities } from "@/utils/highlight-entities";
 
 // A request to briefly flash a paragraph (e.g. after jumping to a Q&A source).
@@ -61,19 +62,32 @@ const { settings } = useReaderSettings();
 
 // Pre-highlight each paragraph's HTML with tappable entity buttons (keyed by
 // paragraph index). Recomputed only when the section or highlight mode changes.
-const highlightedHtml = computed<Map<number, string>>(() => {
+const palette = useCharacterPalette();
+const highlighted = computed(() => {
+  const groups: string[][] = [];
   const map = new Map<number, string>();
   const mode = settings.entityHighlight;
   for (const paragraph of props.section.paragraphs) {
     if (paragraph.html !== null) {
+      const characters = new Set<string>();
       map.set(
         paragraph.paragraphIndex,
-        highlightEntities(paragraph.html, props.section.entities, mode),
+        highlightEntities(paragraph.html, props.section.entities, mode, characters),
       );
+      groups.push([...characters]);
     }
   }
-  return map;
+  return { map, groups };
 });
+
+const highlightedHtml = computed(() => highlighted.value.map);
+watch(
+  () => highlighted.value.groups,
+  (groups) => {
+    void palette.register("text", groups);
+  },
+  { immediate: true },
+);
 
 const SETTLE_MS = 120;
 const TAP_EDGE_FRACTION = 0.28;
@@ -1254,6 +1268,17 @@ onBeforeUnmount(() => {
 
 .reader-content--hl-subtle :deep(.sm-entity) {
   text-decoration-color: color-mix(in srgb, var(--sm-accent) 22%, transparent);
+}
+.reader-content--hl-default :deep(.sm-character),
+.reader-content--hl-subtle :deep(.sm-character) {
+  text-decoration-color: var(--sm-underline);
+}
+.reader-content--hl-default :deep(.sm-character) {
+  text-decoration-style: solid;
+  text-decoration-thickness: 0.1em;
+}
+.reader-content--hl-subtle :deep(.sm-character) {
+  text-decoration-thickness: 1px;
 }
 </style>
 

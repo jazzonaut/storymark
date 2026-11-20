@@ -87,15 +87,13 @@ echo "STORYMARK_API_IMAGE=ghcr.io/jazzonaut/storymark-api" >> infra/compose/.env
 # Start it
 docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env up -d
 
-# Pull the default local models
-docker exec storymark-ollama ollama pull llama3.2:3b
-docker exec storymark-ollama ollama pull llama3.2:1b
+# Pull the local embedding model
 docker exec storymark-ollama ollama pull nomic-embed-text
 ```
 
 Prefer building from source? Skip the `STORYMARK_API_IMAGE` line and run `docker compose up -d --build` from `infra/compose/` instead — the local override builds the image from the repo.
 
-Open the published port (default `127.0.0.1:8088`), upload an EPUB, and let the background pipeline index it. Models, prompts, and per-task routing are all configurable from the admin panel at `/admin`. You can also point any task at an OpenAI-compatible hosted provider instead of (or alongside) Ollama — see [`docs/deployment/06-hosted-models.md`](docs/deployment/06-hosted-models.md) for suggested settings.
+Open the published port (default `127.0.0.1:8088`). Before uploading an EPUB, open **Admin → AI models**, edit the **OpenRouter** provider, and enter your API key. All six chat tasks default to Gemini 2.5 Flash-Lite. Ollama runs embeddings locally with `nomic-embed-text`. To run entirely locally, pull a local chat model and select it for each chat task. [Model setup and routing](docs/deployment/06-hosted-models.md).
 
 A CPU-only homelab box is a first-class target: background extraction takes its time, and reader-time AI features use a small fast model with aggressive caching.
 

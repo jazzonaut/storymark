@@ -54,17 +54,17 @@ internal sealed class ApplySwapEndpoint(
         // book to Indexed when its chunks are embedded, so enqueuing it for a Failed or
         // still-extracting book would falsely mark it Indexed and skip the rest of the
         // pipeline — those books reindex naturally once they next reach Indexed.
-        var bookIds = await db.Books
+        var books = await db.Books
             .Where(b => (b.ProcessingStatus == ProcessingStatus.Indexed
                     || b.ProcessingStatus == ProcessingStatus.Embedding)
                 && db.BookChunks.Any(c => c.BookId == b.Id))
-            .Select(b => b.Id)
+            .Select(b => new { b.Id, b.ProcessingRunId })
             .ToListAsync(ct);
-        foreach (var bookId in bookIds)
+        foreach (var book in books)
         {
-            jobs.Enqueue<EmbeddingJob>(j => j.RunAsync(bookId, CancellationToken.None));
+            jobs.Enqueue<EmbeddingJob>(j => j.RunAsync(book.Id, book.ProcessingRunId, CancellationToken.None));
         }
 
-        await Send.OkAsync(new ApplySwapResponse { ModelId = modelId, BooksQueued = bookIds.Count }, ct);
+        await Send.OkAsync(new ApplySwapResponse { ModelId = modelId, BooksQueued = books.Count }, ct);
     }
 }

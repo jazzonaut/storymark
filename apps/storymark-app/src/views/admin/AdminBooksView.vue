@@ -47,27 +47,10 @@ function statusSeverity(status: ProcessingStatus): "success" | "danger" | "warn"
   return "secondary";
 }
 
-function canReprocess(book: BookSummary): boolean {
-  return TERMINAL_PROCESSING_STATUSES.has(book.processingStatus);
-}
-
-/** The mid-pipeline status carried by a reprocess 409, or null for any other
- * error. The endpoint rejects a non-terminal book with its current status in the
- * body so the operator learns *why*, not just that it failed. */
-function reprocessRejectionStatus(error: unknown): string | null {
-  if (!(error instanceof AdminApiError) || error.status !== 409) {
-    return null;
-  }
-  const body = error.body;
-  if (
-    typeof body === "object" &&
-    body !== null &&
-    "status" in body &&
-    typeof body.status === "string"
-  ) {
-    return body.status;
-  }
-  return null;
+function reprocessLabel(book: BookSummary): string {
+  return TERMINAL_PROCESSING_STATUSES.has(book.processingStatus)
+    ? "Reprocess"
+    : "Stop and reprocess";
 }
 
 async function loadBooks(): Promise<void> {
@@ -111,7 +94,7 @@ async function confirmReprocess(): Promise<void> {
 
   reprocessingId.value = book.bookId;
   try {
-    await reprocessBook(book.bookId);
+    await reprocessBook(book.bookId, book.processingRunId);
     toast.add({
       severity: "success",
       summary: "Reprocess queued",
@@ -121,12 +104,11 @@ async function confirmReprocess(): Promise<void> {
     pendingReprocess.value = null;
     await loadBooks();
   } catch (error) {
-    const rejectedStatus = reprocessRejectionStatus(error);
-    if (rejectedStatus !== null) {
+    if (error instanceof AdminApiError && error.status === 409) {
       toast.add({
         severity: "warn",
-        summary: "Book is mid-pipeline",
-        detail: `${book.title} is ${rejectedStatus}; wait for it to finish or fail.`,
+        summary: "Book already restarted",
+        detail: book.title,
         life: 5000,
       });
       pendingReprocess.value = null;
@@ -215,13 +197,16 @@ onMounted(() => {
           </template>
         </Column>
 
-        <Column header="" style="width: 9rem">
+        <Column header="" style="width: 12rem">
           <template #body="{ data }">
             <Button
-              label="Reprocess"
+              :label="reprocessLabel(data as BookSummary)"
               size="small"
               text
-              :disabled="!canReprocess(data as BookSummary)"
+              :disabled="
+                (data as BookSummary).processingStatus === 'Restarting' ||
+                !(data as BookSummary).processingRunId
+              "
               :loading="reprocessingId === (data as BookSummary).bookId"
               @click="pendingReprocess = data as BookSummary"
             />
@@ -232,15 +217,23 @@ onMounted(() => {
 
     <AdminDialog
       :visible="pendingReprocess !== null"
-      header="Reprocess book"
+      :header="pendingReprocess ? reprocessLabel(pendingReprocess) : 'Reprocess'"
       :busy="reprocessingId !== null"
       wide
       @close="pendingReprocess = null"
     >
       <p v-if="pendingReprocess" class="mb-3">
-        Re-run parsing, extraction, memory, and embeddings for
-        <strong>{{ pendingReprocess.title }}</strong
-        >. Cached reader surfaces refresh after the book version changes.
+        Rebuild <strong>{{ pendingReprocess.title }}</strong> from the original file using the
+        currently selected models. This clears previous extraction results and saved Q&amp;A.
+      </p>
+      <p
+        v-if="
+          pendingReprocess && !TERMINAL_PROCESSING_STATUSES.has(pendingReprocess.processingStatus)
+        "
+        class="mb-3"
+      >
+        The current run will stop. A model request already sent may still be billed. Extraction
+        starts again at the first section.
       </p>
       <p class="text-sm text-muted-color">
         Reading progress and bookmarks are kept — exact positions can shift if the parser itself
@@ -255,7 +248,11 @@ onMounted(() => {
           :disabled="reprocessingId !== null"
           @click="pendingReprocess = null"
         />
-        <Button label="Reprocess" :loading="reprocessingId !== null" @click="confirmReprocess" />
+        <Button
+          :label="pendingReprocess ? reprocessLabel(pendingReprocess) : 'Reprocess'"
+          :loading="reprocessingId !== null"
+          @click="confirmReprocess"
+        />
       </template>
     </AdminDialog>
   </section>

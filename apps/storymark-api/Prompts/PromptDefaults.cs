@@ -1,7 +1,7 @@
 namespace Storymark.Api.Prompts;
 
-/// <summary>Seeded defaults for the <c>prompts.*</c> settings. Once seeded, the
-/// live values are edited from the admin panel; these are only the first-run text.
+/// <summary>Seeded defaults for the <c>prompts.*</c> settings. Startup updates defaults that are
+/// still seed-authored. Operator edits take precedence.
 /// Covers the prompt set described in docs/plan.md §19.</summary>
 internal static class PromptDefaults
 {
@@ -75,34 +75,18 @@ internal static class PromptDefaults
           "openThreads": ["..."]
         }
 
-        Use only this section.
-        Do not infer future events.
-        Be thorough: include every named person, place, organization, important object,
-        title, role, faction, mystery, promise, conflict, discovery, arrival, departure,
-        alliance, threat, and relationship change that this section makes visible. Prefer
-        several precise events over one broad summary event. Do not skip a relationship
-        just because it is implied by dialogue or action; if the section shows trust,
-        hostility, authority, debt, family, service, pursuit, rivalry, secrecy, or
-        cooperation between two named entities, add a relationshipDelta with evidence.
-        Allowed eventType values: arrival, departure, death, betrayal, reveal,
-        conflict, reconciliation, discovery, promise, other.
-        Allowed entityType values: Person, Place, Organization, Object, Event,
-        Concept, Creature, Title, Unknown.
-        Allowed relationship type values: parent, sibling, friend, enemy, lover,
-        ally, rival, mentor, servant, other.
-        Allowed polarity values: positive, negative, neutral, complex.
-        For each entity, set canonicalName to the fullest form of its name that appears
-        in this section — prefer a character's full name over a bare surname or an
-        honorific form. List every other form this section uses for that same entity —
-        shorter names, surnames, honorific forms ("Mr. Kovacs"), nicknames, and epithets
-        — in aliases, so one person, place, or thing is never split across several
-        entries. Include only forms that actually appear in this section; do not invent
-        names or draw on knowledge from outside the section.
-        Each event's evidence must be a short verbatim quote copied exactly from SECTION
-        TEXT at the point the event occurs — it is used to locate the event in the text.
-        Do not paraphrase, summarise, or invent the quote; copy it character for character.
-        Each relationshipDelta also needs a short verbatim evidence quote from SECTION
-        TEXT. Keep entity names consistent with entitiesIntroduced whenever possible.
+        Use SECTION TEXT as your only source. The result feeds a timeline, an entity index, and a relationship graph. Check all three independently, from the beginning through the end of the section.
+
+        Timeline: one short sentence per distinct consequential action, choice, discovery, promise, arrival, departure, or change in stakes. Group the movements leading to one outcome; keep distinct outcomes even when close together. Attribute memories, suspicions and reported events to the person remembering, suspecting or reporting. Use "the narrator" when their name is not given. Do not guess anyone's gender.
+        Entity index: cover every named person, place, organization, creature, and other named referent, including those only mentioned. Include distinctive unnamed objects and roles relevant to the story. One entry per referent. Keep the fullest attested name and only other attested names, nicknames or distinctive titles as aliases. A pronoun or generic noun is not an alias.
+        Relationships: look for family, authority, trust, allegiance, hostility, debt, service, rivalry, secrecy, or cooperation, including what dialogue and actions show. A link can matter even if already covered by an event. Record each supported link once per change. A shared location alone is insufficient. Use consistent names across arrays.
+        Evidence (events, entities and relationships): select 3–8 adjacent words from inside one source sentence. Pick words that identify the specific event, first mention, or link. Copy the exact characters, preserving case and punctuation. Omit surrounding dialogue quotation marks; never reconstruct a sentence, add an ellipsis, or join fragments. Example: for She said, “I left the key under the loose stone,” copy "key under the loose stone". Use a shorter quote for a short utterance.
+        Use a brief shortSummary and only unresolved threads raised in the text. Empty arrays are valid.
+
+        Allowed eventType: arrival, departure, death, betrayal, reveal, conflict, reconciliation, discovery, promise, other.
+        Allowed entityType: Person, Place, Organization, Object, Event, Concept, Creature, Title, Unknown.
+        Allowed relationship type: parent, sibling, friend, enemy, lover, ally, rival, mentor, servant, other.
+        Allowed polarity: positive, negative, neutral, complex.
         """;
 
     public const string EntitySummary =
@@ -121,22 +105,17 @@ internal static class PromptDefaults
 
         Do not mention or imply anything beyond the supplied context.
         Do not foreshadow or reveal future events.
-        If very little is known, say that briefly in shortSummary and leave the lists empty.
+        Use the text's degree of certainty. Do not turn a general duty into something the entity has personally done to a particular character. Each list item must be about ENTITY. Cover the connections the text shows between ENTITY and other named characters. In each relationship item name both parties and what connects them; a title, a greeting by itself, or a fact about a third party is not a relationship. Being mentioned near someone is insufficient. Include openQuestions only for an uncertainty about ENTITY raised by the text. If the only evidence is a passing mention, give that observation in shortSummary and return [] for all three lists.
         """;
 
     public const string SelectionHint =
         """
-        The reader has selected: "{selectedText}"
+        Explain the selected phrase in one or two sentences for a reader at section {currentSection}, location {currentLocation}. Use only the Context passages. If they contain no passage that explains the selection, reply exactly: Nothing on this yet.
 
-        They are at section {currentSection}, location {currentLocation}.
+        Example: selection "missing bell", context about a bakery with no bell mentioned → Nothing on this yet.
+        When evidence exists, describe what the phrase means for the character in that passage. Do not speculate or foreshadow.
 
-        Using only the supplied context (which is filtered to content the reader has already seen),
-        write 1-2 sentences that help the reader understand what they just selected.
-
-        If the context is empty or unrelated, reply with exactly: "Nothing on this yet."
-
-        Do not foreshadow. Do not reveal future events.
-
+        Selected phrase: "{selectedText}"
         Context:
         {context}
         """;
@@ -149,13 +128,13 @@ internal static class PromptDefaults
 
         Return one JSON object only, with this shape:
         {
-          "summarySoFar": "a concise cumulative summary of the story so far",
+          "summarySoFar": "a concise cumulative account distinguishing what happened from what was remembered",
           "timeline": ["major events in reading order"],
           "openThreads": ["unresolved questions, mysteries, promises, or tensions"]
         }
 
         Preserve important prior facts from the existing memory.
-        Add only information supported by the latest section summary.
+        Follow the section summary's narrative frame. When the summary moves from a memory to current action, use separate clauses: what the character recalls, then what they do now. The Events list gives supporting details, not a new frame. Preserve the distinction in both summarySoFar and timeline. Carry forward only unresolved threads already raised in the inputs. Remove resolved threads. If no unresolved thread is stated, return an empty openThreads array; do not invent reader questions.
         Do not include anything beyond the supplied summaries.
         Do not use markdown fences, commentary, or bullet lists outside the JSON.
         """;
@@ -176,7 +155,7 @@ internal static class PromptDefaults
           ],
           "place": "where the scene appears to be happening, or null",
           "immediateTension": "the immediate question, risk, or conflict, or null",
-          "relevantThreads": ["only unresolved threads that matter to this scene"],
+          "relevantThreads": ["a supplied thread actively pursued in the last scene"],
           "recentChange": "what just changed in the recent passage, or null",
           "suggestedQuestions": ["Who is ...?", "Why are they ...?", "What did I miss?"]
         }
@@ -185,9 +164,14 @@ internal static class PromptDefaults
         - Use only the supplied context.
         - Do not use outside knowledge of the book.
         - Do not reveal, imply, foreshadow, or hint at future events.
-        - Focus on the current scene, not a full chapter summary.
+        - Anchor the card at the end of Recent passage. A memory, a story someone tells, or an earlier location is background.
+        - In presentEntities list only participants physically present in the current scene. Exclude people who are merely remembered, mentioned or expected.
+        - Include a thread only if the recent passage connects it to the current action. A thread appearing in memory alone is insufficient.
+        - For recentChange give the latest supported change in this scene. Avoid guesses about identities, motives or unnamed objects.
         - Prefer concrete character goals, location, conflict, and recent changes.
         - If a field is unknown from the context, use null or an empty array.
+        - Test each relevantThreads item against the last scene: is someone there pursuing or discussing it now? If not, omit it. A possible thematic connection is insufficient.
+        - Use null for recentChange when the passage only describes a state; waiting alone is a state, someone arriving is a change.
         - Keep suggested questions short and useful for a reader who lost focus.
 
         Recent passage:
@@ -199,7 +183,9 @@ internal static class PromptDefaults
         Story-so-far memory:
         {memory}
 
-        Open threads:
+        Earlier open threads (background):
         {openThreads}
+
+        Before answering, check each field against the END of Recent passage. Copy a thread into relevantThreads only if a specific current action or line of dialogue addresses that thread. Otherwise return []. For example, a character searching a drawer for missing letters can connect to a thread about those letters; packing a bag with no mention of the letters cannot.
         """;
 }

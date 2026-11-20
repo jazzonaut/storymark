@@ -21,6 +21,7 @@ internal sealed class BookConfiguration : IEntityTypeConfiguration<Book>
         builder.Property(b => b.Format).HasColumnName("format");
         builder.Property(b => b.FilePath).HasColumnName("file_path");
         builder.Property(b => b.CoverPath).HasColumnName("cover_path");
+        builder.Property(b => b.ProcessingRunId).HasColumnName("processing_run_id").IsConcurrencyToken();
         builder.Property(b => b.ProcessingStatus)
             .HasColumnName("processing_status")
             .HasConversion<string>();

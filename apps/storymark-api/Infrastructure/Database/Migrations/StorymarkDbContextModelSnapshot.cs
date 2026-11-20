@@ -74,6 +74,11 @@ namespace Storymark.Api.Infrastructure.Database.Migrations
                         .HasColumnType("text")
                         .HasColumnName("processing_error");
 
+                    b.Property<Guid>("ProcessingRunId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("processing_run_id");
+
                     b.Property<string>("ProcessingStatus")
                         .IsRequired()
                         .HasColumnType("text")

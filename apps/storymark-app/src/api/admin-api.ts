@@ -98,8 +98,11 @@ export const adminApi = {
       body: JSON.stringify({ staleMinutes }),
     }),
 
-  reprocessBook: (bookId: string): Promise<ReprocessBookResult> =>
-    request(`books/reprocess/${encodeURIComponent(bookId)}`, { method: "POST" }),
+  reprocessBook: (bookId: string, expectedRunId: string): Promise<ReprocessBookResult> =>
+    request(
+      `books/reprocess/${encodeURIComponent(bookId)}?expectedRunId=${encodeURIComponent(expectedRunId)}`,
+      { method: "POST" },
+    ),
 
   listProviders: (): Promise<readonly ProviderItem[]> => request("models/providers"),
 

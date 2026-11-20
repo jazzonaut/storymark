@@ -149,7 +149,7 @@ const HIGHLIGHTS: readonly { value: EntityHighlightMode; label: string }[] = [
         />
 
         <div>
-          <p class="mb-1 text-sm font-medium">Entity highlight</p>
+          <p class="mb-1 text-sm font-medium">Entity underlines</p>
           <SegmentedControl
             :model-value="settings.entityHighlight"
             :options="HIGHLIGHTS"

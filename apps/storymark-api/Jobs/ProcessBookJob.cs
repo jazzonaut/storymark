@@ -21,13 +21,11 @@ namespace Storymark.Api.Jobs;
 /// existing sections are cleared first, which cascade-deletes their paragraphs and
 /// chunks.</para>
 ///
-/// <para>The job starts by atomically claiming the book (<c>Uploaded → Parsing</c>
-/// via a conditional update). A book sits on <c>Uploaded</c> between enqueue and
-/// pickup, so a stale-upload recovery sweep can't tell "never enqueued" from
-/// "queued behind a backlog" and may enqueue a duplicate — the claim makes the
-/// duplicate a no-op instead of two pipelines racing over the same rows.</para></summary>
+/// <para>Per-book serialization makes duplicate enqueues safe. An interrupted
+/// parse can resume by rebuilding its sections.</para></summary>
 internal sealed class ProcessBookJob(
     StorymarkDbContext db,
+    BookProcessingRun run,
     FileStorageService storage,
     IEnumerable<IBookImportHandler> handlers,
     ContentSanitizationService sanitizer,
@@ -35,28 +33,38 @@ internal sealed class ProcessBookJob(
     ILogger<ProcessBookJob> logger)
 {
     [AutomaticRetry(Attempts = 0)]
-    public async Task RunAsync(Guid bookId, CancellationToken ct)
+    public Task RunAsync(Guid bookId, CancellationToken ct) => RunAsync(bookId, Guid.Empty, ct);
+
+    [AutomaticRetry(Attempts = 0)]
+    public Task RunAsync(Guid bookId, Guid runId, CancellationToken ct) =>
+        run.ExecuteAsync(bookId, runId, ProcessAsync, ct);
+
+    private async Task ProcessAsync(Book book, CancellationToken ct)
     {
-        var claimed = await db.Books
-            .Where(b => b.Id == bookId && b.ProcessingStatus == ProcessingStatus.Uploaded)
-            .ExecuteUpdateAsync(
-                setters => setters
-                    .SetProperty(b => b.ProcessingStatus, ProcessingStatus.Parsing)
-                    .SetProperty(b => b.ProcessingError, (string?)null)
-                    .SetProperty(b => b.UpdatedAt, DateTimeOffset.UtcNow),
-                ct);
-        if (claimed == 0)
+        var bookId = book.Id;
+        if (book.ProcessingStatus is not (ProcessingStatus.Uploaded or ProcessingStatus.Restarting
+            or ProcessingStatus.Parsing or ProcessingStatus.Parsed or ProcessingStatus.Chunking))
         {
-            logger.LogWarning(
-                "ProcessBookJob skipped: book {BookId} is missing or not Uploaded (duplicate enqueue?)",
-                bookId);
             return;
         }
 
-        var book = await db.Books.FirstAsync(b => b.Id == bookId, ct);
         try
         {
-            await ClearExistingSectionsAsync(bookId, ct);
+            await using (var transaction = await db.Database.BeginTransactionAsync(ct))
+            {
+                if (book.ProcessingStatus == ProcessingStatus.Restarting)
+                {
+                    await ClearDerivedDataAsync(bookId, ct);
+                }
+                else
+                {
+                    await db.BookSections.Where(s => s.BookId == bookId).ExecuteDeleteAsync(ct);
+                }
+
+                book.ProcessingError = null;
+                await SetStatusAsync(book, ProcessingStatus.Parsing, ct);
+                await transaction.CommitAsync(ct);
+            }
 
             var handler = handlers.First(h => h.CanHandle(book.Format));
             var content = await handler.ParseAsync(book.FilePath, ct);
@@ -72,6 +80,10 @@ internal sealed class ProcessBookJob(
                 "Parsed book {BookId}: {SectionCount} sections", bookId, content.Sections.Count);
 
             await ChunkBookAsync(book, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -132,14 +144,14 @@ internal sealed class ProcessBookJob(
 
         await db.SaveChangesAsync(ct);
 
-        await SetStatusAsync(book, ProcessingStatus.ExtractingPerSection, ct);
         logger.LogInformation("Chunked book {BookId}: {ChunkCount} chunks", book.Id, chunkCount);
 
         // SectionExtractionJob runs first (it needs only section text, not vectors),
         // then chains to EmbeddingJob → Indexed. Keeping EmbeddingJob as the terminal
         // step means an S3.4 reindex (which only re-enqueues EmbeddingJob) never
         // re-extracts. Both run in the background so chunking stays fast.
-        jobs.Enqueue<SectionExtractionJob>(j => j.RunAsync(book.Id, CancellationToken.None));
+        await run.AdvanceAsync(book, ProcessingStatus.ExtractingPerSection,
+            () => jobs.Enqueue<SectionExtractionJob>(j => j.RunAsync(book.Id, book.ProcessingRunId, CancellationToken.None)), ct);
     }
 
     private async Task PersistSectionsAsync(Book book, BookContent content, CancellationToken ct)
@@ -215,10 +227,20 @@ internal sealed class ProcessBookJob(
         }
     }
 
-    private async Task ClearExistingSectionsAsync(Guid bookId, CancellationToken ct)
+    /// <summary>Only these six tables need explicit deletes: paragraphs and chunks
+    /// cascade from sections, and mentions, relationships, and entity summaries cascade
+    /// from entities — DB-level FKs, so they fire under <c>ExecuteDelete</c> too.
+    /// Reading progress, bookmarks, and <c>llm_calls</c> are intentionally kept:
+    /// progress and bookmarks survive a reprocess, and the call log is the audit
+    /// trail that outlives derived data (same reasoning as BookDeletionService).</summary>
+    private async Task ClearDerivedDataAsync(Guid bookId, CancellationToken ct)
     {
-        // Cascades to book_paragraphs; keeps a re-run idempotent.
         await db.BookSections.Where(s => s.BookId == bookId).ExecuteDeleteAsync(ct);
+        await db.BookEntities.Where(e => e.BookId == bookId).ExecuteDeleteAsync(ct);
+        await db.BookEvents.Where(e => e.BookId == bookId).ExecuteDeleteAsync(ct);
+        await db.SectionSummaries.Where(s => s.BookId == bookId).ExecuteDeleteAsync(ct);
+        await db.BookMemorySnapshots.Where(s => s.BookId == bookId).ExecuteDeleteAsync(ct);
+        await db.QuestionAnswers.Where(q => q.BookId == bookId).ExecuteDeleteAsync(ct);
     }
 
     private async Task SetStatusAsync(Book book, ProcessingStatus status, CancellationToken ct)

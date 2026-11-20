@@ -37,6 +37,7 @@ const isReadable = computed<boolean>(() => READABLE.has(props.book.processingSta
 
 const STATUS_STYLES: Record<ProcessingStatus, string> = {
   Uploaded: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  Restarting: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   Parsing: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   Parsed: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   Chunking: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",

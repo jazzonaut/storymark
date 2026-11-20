@@ -12,9 +12,7 @@ internal sealed record ReprocessBookResult
 
     public required bool Queued { get; init; }
 
-    /// <summary>The status the book had when the request was handled — the terminal
-    /// status that was reprocessed, or the mid-pipeline status that caused a
-    /// rejection. Never the transient post-reset value.</summary>
+    /// <summary>The status observed when the request was handled.</summary>
     public required ProcessingStatus? Status { get; init; }
 }
 
@@ -27,17 +25,11 @@ internal sealed record RecoverStuckBooksResult
 
 /// <summary>Admin-only maintenance actions for the processing pipeline: recover
 /// uploaded books that missed their initial Hangfire enqueue, and explicitly
-/// reprocess terminal books after prompt/model/parser changes.</summary>
+/// reprocess books after prompt/model/parser changes.</summary>
 internal sealed class BookProcessingAdminService(
     StorymarkDbContext db,
     IBackgroundJobClient jobs)
 {
-    private static readonly HashSet<ProcessingStatus> ReprocessableStatuses =
-    [
-        ProcessingStatus.Indexed,
-        ProcessingStatus.Failed,
-    ];
-
     public async Task<RecoverStuckBooksResult> RecoverStuckUploadsAsync(
         TimeSpan staleAfter,
         CancellationToken ct)
@@ -56,11 +48,11 @@ internal sealed class BookProcessingAdminService(
 
         await db.SaveChangesAsync(ct);
 
-        // Commit before enqueue (the BookImportService/ReprocessAsync ordering) so a
+        // Commit before enqueue (the BookImportService ordering) so a
         // failed save cannot leave orphaned queued jobs.
         foreach (var book in books)
         {
-            jobs.Enqueue<ProcessBookJob>(j => j.RunAsync(book.Id, CancellationToken.None));
+            jobs.Enqueue<ProcessBookJob>(j => j.RunAsync(book.Id, book.ProcessingRunId, CancellationToken.None));
         }
         return new RecoverStuckBooksResult
         {
@@ -69,15 +61,19 @@ internal sealed class BookProcessingAdminService(
         };
     }
 
-    public async Task<ReprocessBookResult> ReprocessAsync(Guid bookId, CancellationToken ct)
+    public async Task<ReprocessBookResult> ReprocessAsync(Guid bookId, Guid? expectedRunId, CancellationToken ct)
     {
-        var book = await db.Books.FirstOrDefaultAsync(b => b.Id == bookId, ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var book = await db.Books.FromSql($"SELECT * FROM books WHERE id = {bookId} FOR UPDATE")
+            .SingleOrDefaultAsync(ct);
         if (book is null)
         {
             return new ReprocessBookResult { Found = false, Queued = false, Status = null };
         }
 
-        if (!ReprocessableStatuses.Contains(book.ProcessingStatus))
+        if (book.ProcessingStatus == ProcessingStatus.Restarting
+            || (expectedRunId.HasValue && expectedRunId != book.ProcessingRunId)
+            || (!expectedRunId.HasValue && book.ProcessingStatus is not (ProcessingStatus.Indexed or ProcessingStatus.Failed)))
         {
             return new ReprocessBookResult
             {
@@ -89,42 +85,22 @@ internal sealed class BookProcessingAdminService(
 
         var previousStatus = book.ProcessingStatus;
 
-        // One transaction around the clears and the status reset: ExecuteDelete
-        // auto-commits per statement outside of one, and a crash after the deletes
-        // but before the reset would leave a book that reads Indexed with no
-        // derived data behind it.
-        await using (var transaction = await db.Database.BeginTransactionAsync(ct))
-        {
-            await ClearDerivedDataAsync(bookId, ct);
-            book.ProcessingStatus = ProcessingStatus.Uploaded;
-            book.ProcessingError = null;
-            book.UpdatedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
-        }
+        var runId = Guid.NewGuid();
+        book.ProcessingRunId = runId;
+        book.ProcessingStatus = ProcessingStatus.Restarting;
+        book.ProcessingError = null;
+        book.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
 
-        jobs.Enqueue<ProcessBookJob>(j => j.RunAsync(book.Id, CancellationToken.None));
+        // Queue before commit. The worker locks the book row before checking runId.
+        // An enqueue failure rolls back and a lost commit makes that job a no-op.
+        jobs.Enqueue<ProcessBookJob>(j => j.RunAsync(bookId, runId, CancellationToken.None));
+        await transaction.CommitAsync(ct);
         return new ReprocessBookResult
         {
             Found = true,
             Queued = true,
             Status = previousStatus,
         };
-    }
-
-    /// <summary>Only these six tables need explicit deletes: paragraphs and chunks
-    /// cascade from sections, and mentions, relationships, and entity summaries cascade
-    /// from entities — DB-level FKs, so they fire under <c>ExecuteDelete</c> too.
-    /// Reading progress, bookmarks, and <c>llm_calls</c> are intentionally kept:
-    /// progress and bookmarks survive a reprocess, and the call log is the audit
-    /// trail that outlives derived data (same reasoning as BookDeletionService).</summary>
-    private async Task ClearDerivedDataAsync(Guid bookId, CancellationToken ct)
-    {
-        await db.BookSections.Where(s => s.BookId == bookId).ExecuteDeleteAsync(ct);
-        await db.BookEntities.Where(e => e.BookId == bookId).ExecuteDeleteAsync(ct);
-        await db.BookEvents.Where(e => e.BookId == bookId).ExecuteDeleteAsync(ct);
-        await db.SectionSummaries.Where(s => s.BookId == bookId).ExecuteDeleteAsync(ct);
-        await db.BookMemorySnapshots.Where(s => s.BookId == bookId).ExecuteDeleteAsync(ct);
-        await db.QuestionAnswers.Where(q => q.BookId == bookId).ExecuteDeleteAsync(ct);
     }
 }

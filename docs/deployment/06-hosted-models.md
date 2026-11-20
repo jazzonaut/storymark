@@ -1,6 +1,6 @@
 # Hosted (non-local) models
 
-Storymark runs fully local by default: Ollama on the same box, `llama3.2:3b` and `llama3.2:1b` for chat tasks, `nomic-embed-text` for embeddings. That works everywhere, but small models extract sparser timelines, graphs, and entities than larger ones. Pointing some (or all) tasks at a hosted provider is the single biggest quality lever you have, and it needs no redeploy.
+New installations use **Gemini 2.5 Flash-Lite** through OpenRouter for extraction, memory, Q&A, entity summaries, selection hints, and current scene. Embeddings use **nomic-embed-text** on local Ollama.
 
 Any **OpenAI-compatible** endpoint works: OpenAI itself, OpenRouter, Groq, Together, Mistral, or a vLLM/llama.cpp server on a beefier box in your network.
 
@@ -13,21 +13,15 @@ Be aware of what leaves your server. Every task routed to a hosted model sends t
 - The spoiler boundary is enforced before the call: evidence is filtered to the reader's position server-side, so a hosted model never sees further into the book than you have read.
 - Every call lands in the LLM call log (admin → LLM Calls) with the evidence it saw, token counts, and cost, so you can audit exactly what was sent where.
 
-If "book text goes to a third party" is unacceptable, stop here: the all-local default is the private option, and a self-hosted vLLM box gives you hosted-class quality without leaving your network.
+For an entirely local setup, pull an Ollama chat model and select it for all six chat tasks before uploading a book.
 
 ## Setting it up
 
-Everything happens in the admin panel under **AI models**. Changes take effect on the next call; nothing restarts.
+1. Open **Admin → AI models**, edit the seeded **OpenRouter** provider, and enter your API key. Storymark encrypts the key at rest.
+2. The seeded model is `google/gemini-2.5-flash-lite` with **Provider default** reasoning. Its cost estimates use **$0.10 per million input tokens** and **$0.40 per million output tokens**. You can edit these rates in the model dialog. [OpenRouter model and pricing](https://openrouter.ai/google/gemini-2.5-flash-lite).
+3. Pull `nomic-embed-text` in Ollama before uploading a book. To change a chat model later, use **Task routing**. Each selection takes effect on the next call.
 
-1. **Add provider** — pick *OpenAI-compatible*, set the base URL (e.g. `https://openrouter.ai/api/v1`) and the API key. The key is encrypted at rest and write-only: the UI shows only that a key is stored, never the key itself.
-2. **Add model** — for OpenRouter, the form starts with **GPT-6 Luna** (`openai/gpt-6-luna`), **Reasoning: Off**, and input/output rates of **$0.10 / $0.50 per 1M tokens**. The **Use GPT-6 Luna defaults** button restores this preset. On OpenAI directly the model id is `gpt-6-luna`. Check the provider's current pricing; the cost meter and call log use the rates you enter.
-3. **Task routing** — assign tasks to the new model. Each dropdown saves on change.
-
-**Reasoning** is saved per model for OpenAI-compatible providers. **Provider default** omits the setting; **Off** explicitly disables reasoning. Luna defaults to medium reasoning at the provider, so use Off for the initial low-latency setup. Higher effort can increase response time and billed tokens. Supported levels vary by model; consult the provider before choosing a non-default value. To use different effort levels for different tasks, add separate model entries and route each task to the appropriate entry.
-
-On the first startup after this upgrade, the database migration replaces existing OpenRouter `openai/gpt-4o-mini` entries with Luna, updates their prices, and sets reasoning to Off. It also sets existing OpenRouter Luna entries to this configuration. Model IDs and task assignments are preserved; other providers and the local first-run setup are unchanged. Later edits are not reset on startup. Reverting the schema migration does not revert model selections.
-
-Preset prices and reasoning support were checked on 20 November 2026: [OpenRouter Luna](https://openrouter.ai/openai/gpt-6-luna), [OpenAI Luna documentation](https://developers.openai.com/api/docs/models/gpt-6-luna).
+On upgrade, an installation already routing chat through OpenRouter Luna switches all six chat tasks to Gemini once, reusing its stored provider key. If multiple Luna accounts are active, Storymark prefers the extraction account, then the account with the most Luna routes. Existing local-only installations keep their routing. The migration only changes chat routing, so existing embeddings remain usable.
 
 ## Suggested routing
 
@@ -45,15 +39,15 @@ Not all tasks gain equally from a stronger model. Roughly in order of payoff:
 
 Three setups that make sense:
 
-- **All local** (the default). Free, private, slower extraction, sparser memory. Fine for trying Storymark out.
+- **All local**. Free, private, slower extraction, sparser memory. Fine for trying Storymark out.
 - **Hybrid**: hosted Extraction + Memory + Q&A, everything else local. Most of the quality for the least exposure; the latency-sensitive reader-time tasks never leave your box.
-- **All hosted (except embedding)**: a cheap small hosted model on every chat task, as in the screenshot. Consistent quality everywhere; reader-time features get noticeably sharper.
+- **All hosted (except embedding)** (the default): a cheap small hosted model on every chat task, as in the screenshot. Consistent quality everywhere; reader-time features get noticeably sharper.
 
 ## Settings worth touching
 
 - **Local prompt trimming** (bottom of the AI models panel): the Q&A prompt uses a reduced evidence set on local models to keep CPU inference fast. Hosted models always receive the full set. With a large-context hosted model on Q&A you can raise *Evidence chunks (hosted)* above the default 12 for better recall on sprawling books; expect proportionally higher per-question cost.
-- **Prompts** (admin → Prompts): the default prompts are written defensively for small local models. Hosted models handle them fine as-is, so only start editing if you're chasing a specific behaviour.
-- **Reprocess after upgrading extraction**: changing the Extraction model affects future processing only. For books you've already indexed, admin → Books → *Reprocess* rebuilds their memory with the new model (progress and bookmarks are kept).
+- **Prompts** are editable in **Admin → Prompts**. The defaults have been tested with Gemini 2.5 Flash-Lite. Startup applies revised defaults to prompts that still have their seeded values. Prompts saved by an operator keep their custom wording.
+- **Restart a book with new models.** Save the routes under **Admin → AI models**, then open **Admin → Books**. Choose **Stop and reprocess** for an active book or **Reprocess** for a finished or failed book. Confirm to rebuild from the original file. Reading progress and bookmarks are retained. Previous extraction results and saved Q&A are cleared. An in-flight provider request may still be billed.
 
 ## Keeping an eye on cost
 

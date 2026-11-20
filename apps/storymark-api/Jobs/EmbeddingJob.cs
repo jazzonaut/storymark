@@ -30,18 +30,23 @@ namespace Storymark.Api.Jobs;
 /// book to <c>Failed</c> with that reason and does not retry.</para></summary>
 internal sealed class EmbeddingJob(
     StorymarkDbContext db,
+    BookProcessingRun run,
     ChatModelRouter router,
     LlmRegistryService registry,
     ILogger<EmbeddingJob> logger)
 {
     private const int BatchSize = 32;
 
-    public async Task RunAsync(Guid bookId, CancellationToken ct)
+    public Task RunAsync(Guid bookId, CancellationToken ct) => RunAsync(bookId, Guid.Empty, ct);
+
+    public Task RunAsync(Guid bookId, Guid runId, CancellationToken ct) =>
+        run.ExecuteAsync(bookId, runId, ProcessAsync, ct);
+
+    private async Task ProcessAsync(Book book, CancellationToken ct)
     {
-        var book = await db.Books.FirstOrDefaultAsync(b => b.Id == bookId, ct);
-        if (book is null)
+        var bookId = book.Id;
+        if (book.ProcessingStatus is not (ProcessingStatus.Embedding or ProcessingStatus.Indexed))
         {
-            logger.LogWarning("EmbeddingJob skipped: book {BookId} not found", bookId);
             return;
         }
 

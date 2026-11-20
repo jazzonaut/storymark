@@ -7,9 +7,21 @@ import { useEntitySummary } from "@/composables/use-entity-summary";
 import { useEntityMerge } from "@/composables/use-entity-merge";
 import { useFocusTrap } from "@/composables/use-focus-trap";
 
+import type { SectionEntity } from "@storymark/shared-types";
+import { characterColor, isCharacter } from "@/utils/character-color";
+import { useCharacterPalette } from "@/composables/use-character-palette";
+const props = defineProps<{ entities: readonly SectionEntity[] }>();
+const palette = useCharacterPalette();
 const { openEntity, isLoading, isRefreshing, summary, error, fallback, close } = useEntitySummary();
 const { requestMerge } = useEntityMerge();
 
+const character = computed(() =>
+  isCharacter(
+    summary.value?.entityType ??
+      props.entities.find((entity) => entity.entityId === openEntity.value?.entityId)?.entityType ??
+      "",
+  ),
+);
 const panel = ref<HTMLElement | null>(null);
 const isOpen = computed<boolean>(() => openEntity.value !== null);
 useFocusTrap(isOpen, panel, close);
@@ -68,6 +80,19 @@ function startMerge(): void {
       </header>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <button
+          v-if="character"
+          type="button"
+          class="mb-4 inline-flex items-center gap-2 rounded-md border border-[var(--sm-muted)]/30 px-3 py-1.5 text-sm"
+          @click="palette.regenerate(openEntity.entityId)"
+        >
+          <span
+            aria-hidden="true"
+            class="h-1 w-5 rounded"
+            :style="{ background: characterColor(openEntity.entityId) }"
+          ></span
+          >Regenerate colour
+        </button>
         <RefreshStatusIndicator
           v-if="summary"
           :refreshing="isRefreshing"

@@ -15,9 +15,8 @@ internal sealed record ReprocessBookResponse
     public required ProcessingStatus? Status { get; init; }
 }
 
-/// <summary>Explicitly re-runs the full processing pipeline for a terminal book.
-/// Mid-pipeline books are rejected so a manual action cannot race the existing
-/// Hangfire chain. Admin-only.</summary>
+/// <summary>Restarts the full pipeline. An active run requires its ID so a
+/// stale page or a retried request cannot cancel a newer run. Admin-only.</summary>
 internal sealed class ReprocessBookEndpoint(BookProcessingAdminService processing)
     : EndpointWithoutRequest<ReprocessBookResponse>
 {
@@ -30,7 +29,7 @@ internal sealed class ReprocessBookEndpoint(BookProcessingAdminService processin
     public override async Task HandleAsync(CancellationToken ct)
     {
         var bookId = Route<Guid>("id");
-        var result = await processing.ReprocessAsync(bookId, ct);
+        var result = await processing.ReprocessAsync(bookId, Query<Guid?>("expectedRunId", isRequired: false), ct);
         if (!result.Found)
         {
             await Send.NotFoundAsync(ct);

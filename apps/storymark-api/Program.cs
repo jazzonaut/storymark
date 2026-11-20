@@ -88,6 +88,7 @@ try
     builder.Services.AddScoped<BookmarkService>();
     builder.Services.AddScoped<BookDeletionService>();
     builder.Services.AddScoped<BookProcessingAdminService>();
+    builder.Services.AddScoped<BookProcessingRun>();
     builder.Services.AddScoped<ProcessBookJob>();
     builder.Services.AddScoped<EmbeddingJob>();
     builder.Services.AddScoped<SectionExtractionJob>();
@@ -102,7 +103,10 @@ try
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
         .UseSimpleAssemblyNameTypeSerializer()
         .UseRecommendedSerializerSettings()
-        .UsePostgreSqlStorage(o => o.UseNpgsqlConnection(connectionString)));
+        .UsePostgreSqlStorage(
+            o => o.UseNpgsqlConnection(connectionString),
+            // A whole-book job can outlive the queue's 30-minute invisibility timeout.
+            new PostgreSqlStorageOptions { UseSlidingInvisibilityTimeout = true }));
     builder.Services.AddHangfireServer();
 
     // Ceiling for the upload endpoint; the precise per-request cap is the live
